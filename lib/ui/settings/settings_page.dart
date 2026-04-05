@@ -188,8 +188,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                           onSelected: (_) {
                             setDialogState(() { dialogProvider = 'zhipu'; controller.clear(); });
                           },
-                          selectedColor: AppColors.primary,
-                          labelStyle: TextStyle(color: isZhipu ? Colors.white : null, fontSize: 12),
+                          labelStyle: TextStyle(color: isZhipu ? Colors.white : AppColors.textPrimary, fontSize: 12),
                         ),
                       ),
                       const SizedBox(width: 8),
@@ -200,8 +199,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                           onSelected: (_) {
                             setDialogState(() { dialogProvider = 'gemini'; controller.clear(); });
                           },
-                          selectedColor: AppColors.primary,
-                          labelStyle: TextStyle(color: !isZhipu ? Colors.white : null, fontSize: 12),
+                          labelStyle: TextStyle(color: !isZhipu ? Colors.white : AppColors.textPrimary, fontSize: 12),
                         ),
                       ),
                     ],

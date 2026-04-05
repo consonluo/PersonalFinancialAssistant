@@ -163,13 +163,12 @@ class _OcrImportPageState extends ConsumerState<OcrImportPage> {
               children: ['富途证券', '微众银行', '东方财富', '天天基金', '招商银行'].map((inst) {
                 final selected = _selectedInstitution == inst;
                 return ChoiceChip(
-                  label: Text(inst, style: TextStyle(fontSize: 12, color: selected ? Colors.white : null)),
+                  label: Text(inst, style: TextStyle(fontSize: 12, color: selected ? Colors.white : AppColors.textPrimary)),
                   selected: selected,
                   onSelected: (v) => setState(() {
                     _selectedInstitution = inst;
                     _institutionController.text = inst;
                   }),
-                  selectedColor: AppColors.primary,
                   visualDensity: VisualDensity.compact,
                 );
               }).toList(),

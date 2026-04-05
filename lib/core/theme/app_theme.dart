@@ -26,7 +26,8 @@ class AppTheme {
       ),
       cardTheme: CardThemeData(
         color: AppColors.backgroundWhite,
-        elevation: 0,
+        elevation: 0.5,
+        shadowColor: Colors.black.withValues(alpha: 0.08),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
         ),
@@ -97,11 +98,17 @@ class AppTheme {
         ),
       ),
       chipTheme: ChipThemeData(
-        backgroundColor: AppColors.backgroundCard,
-        selectedColor: AppColors.primarySurface,
-        labelStyle: const TextStyle(fontSize: 13),
+        color: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) {
+            return AppColors.primary;
+          }
+          return AppColors.backgroundWhite;
+        }),
+        labelStyle: const TextStyle(fontSize: 13, color: AppColors.textPrimary),
+        secondaryLabelStyle: const TextStyle(fontSize: 13, color: Colors.white, fontWeight: FontWeight.w600),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(20),
+          side: const BorderSide(color: AppColors.backgroundCard, width: 1),
         ),
         side: BorderSide.none,
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),

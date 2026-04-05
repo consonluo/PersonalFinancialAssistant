@@ -94,9 +94,8 @@ class _AssetTrendPageState extends ConsumerState<AssetTrendPage> {
                         label: Text(opt['label'] as String),
                         selected: selected,
                         onSelected: (_) => setState(() => _selectedRange = days),
-                        selectedColor: AppColors.primary,
                         labelStyle: TextStyle(
-                          color: selected ? Colors.white : null,
+                          color: selected ? Colors.white : AppColors.textPrimary,
                           fontSize: 13,
                           fontWeight: FontWeight.w600,
                         ),

@@ -125,9 +125,8 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                           label: const Text('全部'),
                           selected: selectedMemberId == null,
                           onSelected: (_) => ref.read(_selectedMemberFilter.notifier).state = null,
-                          selectedColor: AppColors.primary,
                           labelStyle: TextStyle(
-                            color: selectedMemberId == null ? Colors.white : null,
+                            color: selectedMemberId == null ? Colors.white : AppColors.textPrimary,
                             fontWeight: FontWeight.w600,
                           ),
                         ),
@@ -147,9 +146,8 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                             label: Text(m.name),
                             selected: selected,
                             onSelected: (_) => ref.read(_selectedMemberFilter.notifier).state = selected ? null : m.id,
-                            selectedColor: AppColors.primary,
                             labelStyle: TextStyle(
-                              color: selected ? Colors.white : null,
+                              color: selected ? Colors.white : AppColors.textPrimary,
                               fontWeight: FontWeight.w600,
                             ),
                           ),
@@ -515,15 +513,16 @@ class _QuickStatCard extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: color.withValues(alpha: 0.08),
+            color: Colors.white,
             borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: color.withValues(alpha: 0.2)),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
                 children: [
-                  Expanded(child: Text(label, style: TextStyle(color: color, fontSize: 13))),
+                  Expanded(child: Text(label, style: TextStyle(color: AppColors.textSecondary, fontSize: 13))),
                   if (onTap != null)
                     Icon(Icons.chevron_right, size: 16, color: color.withValues(alpha: 0.5)),
                 ],
@@ -553,14 +552,15 @@ class _QuickActionCard extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
         decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.08),
+          color: Colors.white,
           borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: color.withValues(alpha: 0.2)),
         ),
         child: Column(
           children: [
             Icon(icon, color: color, size: 28),
             const SizedBox(height: 6),
-            Text(label, style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w600)),
+            Text(label, style: TextStyle(color: AppColors.textPrimary, fontSize: 12, fontWeight: FontWeight.w600)),
           ],
         ),
       ),
