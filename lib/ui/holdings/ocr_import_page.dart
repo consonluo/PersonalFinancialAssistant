@@ -1,0 +1,602 @@
+import 'dart:typed_data';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:uuid/uuid.dart';
+import 'package:drift/drift.dart' hide Column;
+import 'package:flutter/foundation.dart' show kIsWeb;
+import '../../core/theme/app_colors.dart';
+import '../../core/constants/app_constants.dart';
+import '../../core/utils/ocr_service.dart';
+import '../../core/utils/ocr_parser.dart';
+import '../../core/utils/asset_classifier.dart';
+import '../../providers/database_provider.dart';
+import '../../providers/ocr_provider.dart';
+import '../../providers/sync_provider.dart';
+import '../../providers/family_provider.dart';
+import '../../data/database/app_database.dart';
+
+/// 常用机构列表
+const _commonInstitutions = [
+  '富途证券', '华泰证券', '中信证券', '中银证券', '国泰君安', '招商证券',
+  '东方财富', '同花顺', '雪球', '老虎证券', '长桥证券', '盈透证券',
+  '微众银行', '招商银行', '工商银行', '建设银行', '中国银行', '农业银行',
+  '天天基金', '蚂蚁财富', '理财通', '京东金融',
+];
+
+class OcrImportPage extends ConsumerStatefulWidget {
+  final String accountId;
+  const OcrImportPage({super.key, required this.accountId});
+
+  @override
+  ConsumerState<OcrImportPage> createState() => _OcrImportPageState();
+}
+
+class _OcrImportPageState extends ConsumerState<OcrImportPage> {
+  final _picker = ImagePicker();
+  final _institutionController = TextEditingController();
+  Uint8List? _selectedImageBytes;
+  String _selectedInstitution = '';
+  String? _selectedMemberId;
+  bool _hasAccount = false; // 是否已有账户（不需要选机构/成员）
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.accountId.isNotEmpty) {
+      _hasAccount = true;
+      _loadAccountInfo();
+    }
+  }
+
+  /// 从已有账户加载机构名称
+  Future<void> _loadAccountInfo() async {
+    final db = ref.read(databaseProvider);
+    final account = await db.getAccountById(widget.accountId);
+    if (account != null && mounted) {
+      setState(() {
+        _selectedInstitution = account.institution;
+        _institutionController.text = account.institution;
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _institutionController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ocrState = ref.watch(ocrResultProvider);
+    final isDesktopOrWeb = kIsWeb || _isDesktop;
+    final membersAsync = ref.watch(familyMembersProvider);
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('录入持仓'),
+        actions: [
+          if (ocrState.results.isNotEmpty)
+            TextButton(
+              onPressed: _confirmImport,
+              child: Text('导入(${ocrState.results.length})'),
+            ),
+        ],
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // 已有账户时显示机构名称
+            if (_hasAccount && _selectedInstitution.isNotEmpty) ...[
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withValues(alpha: 0.06),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.business, size: 20, color: AppColors.primary),
+                    const SizedBox(width: 8),
+                    Text(_selectedInstitution, style: const TextStyle(fontWeight: FontWeight.w600)),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
+
+            // 没有 accountId 时才需要选成员和机构
+            if (!_hasAccount) ...[
+              // Step 1: 选择所属成员
+              const Text('所属成员', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+              const SizedBox(height: 8),
+              membersAsync.when(
+                data: (members) => DropdownButtonFormField<String>(
+                  value: _selectedMemberId,
+                  decoration: const InputDecoration(hintText: '选择成员', isDense: true),
+                  items: members.map((m) => DropdownMenuItem(value: m.id, child: Text(m.name))).toList(),
+                  onChanged: (v) => setState(() => _selectedMemberId = v),
+                ),
+                loading: () => const LinearProgressIndicator(),
+                error: (_, __) => const Text('加载失败'),
+              ),
+              const SizedBox(height: 20),
+
+              // Step 2: 选择/输入机构
+            const Text('金融机构', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+            const SizedBox(height: 4),
+            Text('选择或输入券商/银行名称', style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+            const SizedBox(height: 8),
+            Autocomplete<String>(
+              optionsBuilder: (textEditingValue) {
+                if (textEditingValue.text.isEmpty) return _commonInstitutions;
+                return _commonInstitutions.where((i) =>
+                    i.contains(textEditingValue.text));
+              },
+              fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+                _institutionController.text = controller.text;
+                return TextField(
+                  controller: controller,
+                  focusNode: focusNode,
+                  decoration: const InputDecoration(
+                    hintText: '例如：富途证券、微众银行',
+                    prefixIcon: Icon(Icons.business, size: 20),
+                  ),
+                  onChanged: (v) => setState(() => _selectedInstitution = v),
+                );
+              },
+              onSelected: (v) => setState(() {
+                _selectedInstitution = v;
+                _institutionController.text = v;
+              }),
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 6,
+              children: ['富途证券', '微众银行', '东方财富', '天天基金', '招商银行'].map((inst) {
+                final selected = _selectedInstitution == inst;
+                return ChoiceChip(
+                  label: Text(inst, style: TextStyle(fontSize: 12, color: selected ? Colors.white : null)),
+                  selected: selected,
+                  onSelected: (v) => setState(() {
+                    _selectedInstitution = inst;
+                    _institutionController.text = inst;
+                  }),
+                  selectedColor: AppColors.primary,
+                  visualDensity: VisualDensity.compact,
+                );
+              }).toList(),
+            ),
+              const SizedBox(height: 24),
+            ], // end if (!_hasAccount)
+
+            // Step 3: 选择图片
+            const Text('持仓截图', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+            const SizedBox(height: 4),
+            Text('上传该机构的持仓截图，AI 自动解析账户和持仓', style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+            const SizedBox(height: 12),
+            if (isDesktopOrWeb) ...[
+              _buildDesktopImagePicker(),
+            ] else ...[
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: ocrState.isProcessing ? null : () => _pickImageMobile(ImageSource.camera),
+                      icon: const Icon(Icons.camera_alt),
+                      label: const Text('拍照'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: ocrState.isProcessing ? null : () => _pickImageMobile(ImageSource.gallery),
+                      icon: const Icon(Icons.photo_library),
+                      label: const Text('相册'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+
+            // 图片预览
+            if (_selectedImageBytes != null) ...[
+              const SizedBox(height: 16),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 200),
+                  child: Image.memory(_selectedImageBytes!, fit: BoxFit.contain, width: double.infinity),
+                ),
+              ),
+            ],
+
+            const SizedBox(height: 16),
+
+            // 处理状态
+            if (ocrState.isProcessing) ...[
+              const Center(
+                child: Padding(
+                  padding: EdgeInsets.all(32),
+                  child: Column(
+                    children: [
+                      CircularProgressIndicator(),
+                      SizedBox(height: 16),
+                      Text('AI 正在分析截图...', style: TextStyle(color: AppColors.textSecondary)),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+
+            if (ocrState.errorMessage != null) ...[
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppColors.error.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(Icons.error_outline, color: AppColors.error, size: 20),
+                    const SizedBox(width: 8),
+                    Expanded(child: Text(ocrState.errorMessage!, style: const TextStyle(color: AppColors.error, fontSize: 13))),
+                  ],
+                ),
+              ),
+            ],
+
+            // 识别结果
+            if (ocrState.results.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  const Text('识别结果', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                  const Spacer(),
+                  Text('共 ${ocrState.results.length} 条', style: const TextStyle(color: AppColors.textSecondary, fontSize: 13)),
+                ],
+              ),
+              const SizedBox(height: 4),
+              const Text('点击可编辑，左滑可删除', style: TextStyle(fontSize: 12, color: AppColors.textHint)),
+              const SizedBox(height: 12),
+              ...List.generate(ocrState.results.length, (index) {
+                final r = ocrState.results[index];
+                final typeLabel = _assetTypeLabel(r.assetType);
+                return Dismissible(
+                  key: ValueKey('${r.code}_$index'),
+                  direction: DismissDirection.endToStart,
+                  onDismissed: (_) => ref.read(ocrResultProvider.notifier).removeResult(index),
+                  background: Container(
+                    alignment: Alignment.centerRight,
+                    padding: const EdgeInsets.only(right: 20),
+                    color: AppColors.error,
+                    child: const Icon(Icons.delete, color: Colors.white),
+                  ),
+                  child: Card(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    child: InkWell(
+                      onTap: () => _editResult(index, r),
+                      borderRadius: BorderRadius.circular(12),
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Row(
+                          children: [
+                            // 类型标签
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: AppColors.primary.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(typeLabel, style: const TextStyle(fontSize: 10, color: AppColors.primary, fontWeight: FontWeight.w600)),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(r.name, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    '${r.code != "unknown" ? "${r.code} · " : ""}数量:${r.quantity} · 现价:${r.currentPrice}',
+                                    style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                Text('¥${r.marketValue.toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+                                const Icon(Icons.edit, size: 14, color: AppColors.textHint),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              }),
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: _confirmImport,
+                  icon: const Icon(Icons.check),
+                  label: Text('确认导入 ${ocrState.results.length} 条资产'),
+                ),
+              ),
+            ],
+
+            if (!ocrState.isProcessing && ocrState.results.isEmpty && ocrState.errorMessage == null && _selectedImageBytes == null)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 40),
+                child: Center(
+                  child: Column(
+                    children: [
+                      Icon(Icons.auto_awesome, size: 48, color: AppColors.textHint),
+                      SizedBox(height: 12),
+                      Text('选择机构后上传持仓截图', style: TextStyle(color: AppColors.textHint)),
+                      SizedBox(height: 4),
+                      Text('AI 自动解析账户和持仓数据', style: TextStyle(color: AppColors.textHint, fontSize: 12)),
+                    ],
+                  ),
+                ),
+              ),
+
+            // 手动录入入口
+            const SizedBox(height: 20),
+            Center(
+              child: TextButton.icon(
+                onPressed: () {
+                  if (widget.accountId.isNotEmpty) {
+                    context.push('/holding-form?accountId=${widget.accountId}');
+                  } else {
+                    context.push('/account-form${_selectedMemberId != null ? '?memberId=$_selectedMemberId' : ''}');
+                  }
+                },
+                icon: const Icon(Icons.edit, size: 18),
+                label: const Text('手动录入'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  bool get _isDesktop {
+    return const [TargetPlatform.macOS, TargetPlatform.windows, TargetPlatform.linux]
+        .contains(Theme.of(context).platform);
+  }
+
+  Widget _buildDesktopImagePicker() {
+    return InkWell(
+      onTap: ref.read(ocrResultProvider).isProcessing ? null : _pickImageDesktop,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(vertical: 24),
+        decoration: BoxDecoration(
+          border: Border.all(color: AppColors.primary.withValues(alpha: 0.3), width: 2),
+          borderRadius: BorderRadius.circular(12),
+          color: AppColors.primary.withValues(alpha: 0.03),
+        ),
+        child: Column(
+          children: [
+            Icon(Icons.upload_file, size: 40, color: AppColors.primary.withValues(alpha: 0.6)),
+            const SizedBox(height: 8),
+            const Text('点击选择持仓截图', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _pickImageDesktop() async {
+    final result = await FilePicker.platform.pickFiles(type: FileType.image, withData: true);
+    if (result == null || result.files.single.bytes == null) return;
+    final bytes = result.files.single.bytes!;
+    setState(() => _selectedImageBytes = bytes);
+    _processImage(bytes);
+  }
+
+  Future<void> _pickImageMobile(ImageSource source) async {
+    final image = await _picker.pickImage(source: source, imageQuality: 90);
+    if (image == null) return;
+    final bytes = await image.readAsBytes();
+    setState(() => _selectedImageBytes = bytes);
+    _processImage(bytes);
+  }
+
+  Future<void> _processImage(Uint8List bytes) async {
+    ref.read(ocrResultProvider.notifier).setProcessing();
+
+    try {
+      final institution = _selectedInstitution.isNotEmpty ? _selectedInstitution : '未知机构';
+      final text = await OcrService.recognizeFromBytes(bytes, institution: institution);
+      final holdings = OcrParser.parseHoldingText(text);
+
+      if (holdings.isEmpty) {
+        ref.read(ocrResultProvider.notifier).setError(
+          '未能从截图中识别出持仓数据\n\n'
+          '请确保截图包含持仓信息，建议截取"$institution"的持仓页面。',
+        );
+      } else {
+        ref.read(ocrResultProvider.notifier).setResults(holdings);
+      }
+    } on OcrException catch (e) {
+      ref.read(ocrResultProvider.notifier).setError(
+        '${e.message}\n\n建议：\n• 确保截图清晰、完整\n• 如持续失败，可尝试裁剪只保留持仓数据区域',
+      );
+    } catch (e) {
+      ref.read(ocrResultProvider.notifier).setError('处理失败: $e');
+    }
+  }
+
+  Future<void> _confirmImport() async {
+    final results = ref.read(ocrResultProvider).results;
+    if (results.isEmpty) return;
+
+    final db = ref.read(databaseProvider);
+    final now = DateTime.now();
+    final uuid = const Uuid();
+    final institution = _selectedInstitution.isNotEmpty ? _selectedInstitution : '未知机构';
+
+    // 确定目标 accountId
+    String targetAccountId = widget.accountId;
+
+    if (targetAccountId.isEmpty) {
+      // 需要自动创建账户（基于机构名）
+      final memberId = _selectedMemberId;
+      if (memberId == null) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('请选择所属成员')));
+        return;
+      }
+      // 创建一个以机构命名的账户
+      targetAccountId = uuid.v4();
+      await db.insertAccount(AccountsCompanion(
+        id: Value(targetAccountId),
+        memberId: Value(memberId),
+        name: Value('$institution 账户'),
+        type: Value('securities'),
+        institution: Value(institution),
+        createdAt: Value(now),
+        updatedAt: Value(now),
+      ));
+    }
+
+    for (final r in results) {
+      // 优先使用 AI 识别的类型，fallback 到规则分类
+      final aiType = AssetType.values.where((e) => e.name == r.assetType).firstOrNull;
+      final type = aiType ?? AssetClassifier.classify(r.code, r.name);
+      await db.insertHolding(HoldingsCompanion(
+        id: Value(uuid.v4()),
+        accountId: Value(targetAccountId),
+        assetCode: Value(r.code),
+        assetName: Value(r.name),
+        assetType: Value(type.name),
+        quantity: Value(r.quantity),
+        costPrice: Value(r.costPrice),
+        currentPrice: Value(r.currentPrice),
+        createdAt: Value(now),
+        updatedAt: Value(now),
+      ));
+    }
+
+    // 触发自动同步
+    ref.read(autoSyncProvider).triggerAutoSync();
+
+    ref.read(ocrResultProvider.notifier).clear();
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('成功导入 ${results.length} 条资产到「$institution」')));
+      context.pop();
+    }
+  }
+
+  String _assetTypeLabel(String type) {
+    const labels = {
+      'aStock': 'A股', 'hkStock': '港股', 'usStock': '美股',
+      'indexETF': 'ETF', 'qdii': 'QDII', 'dividendFund': '红利',
+      'nasdaqETF': '纳指', 'bondFund': '债基', 'moneyFund': '货基',
+      'mixedFund': '基金', 'wealth': '理财', 'deposit': '存款', 'other': '其他',
+    };
+    return labels[type] ?? '资产';
+  }
+
+  Future<void> _editResult(int index, ParsedHolding r) async {
+    final nameC = TextEditingController(text: r.name);
+    final codeC = TextEditingController(text: r.code == 'unknown' ? '' : r.code);
+    final qtyC = TextEditingController(text: r.quantity.toString());
+    final costC = TextEditingController(text: r.costPrice.toString());
+    final priceC = TextEditingController(text: r.currentPrice.toString());
+    final mvC = TextEditingController(text: r.marketValue.toString());
+    String selectedType = r.assetType.isNotEmpty ? r.assetType : 'other';
+
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: const Text('编辑资产'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(controller: nameC, decoration: const InputDecoration(labelText: '名称', isDense: true)),
+                const SizedBox(height: 10),
+                TextField(controller: codeC, decoration: const InputDecoration(labelText: '代码', isDense: true, hintText: '如 600519、AAPL')),
+                const SizedBox(height: 10),
+                DropdownButtonFormField<String>(
+                  value: selectedType,
+                  decoration: const InputDecoration(labelText: '资产类型', isDense: true),
+                  items: const [
+                    DropdownMenuItem(value: 'aStock', child: Text('A股')),
+                    DropdownMenuItem(value: 'hkStock', child: Text('港股')),
+                    DropdownMenuItem(value: 'usStock', child: Text('美股')),
+                    DropdownMenuItem(value: 'indexETF', child: Text('指数ETF')),
+                    DropdownMenuItem(value: 'nasdaqETF', child: Text('纳指ETF')),
+                    DropdownMenuItem(value: 'qdii', child: Text('QDII')),
+                    DropdownMenuItem(value: 'dividendFund', child: Text('红利基金')),
+                    DropdownMenuItem(value: 'bondFund', child: Text('债券基金')),
+                    DropdownMenuItem(value: 'moneyFund', child: Text('货币基金')),
+                    DropdownMenuItem(value: 'mixedFund', child: Text('混合基金')),
+                    DropdownMenuItem(value: 'wealth', child: Text('银行理财')),
+                    DropdownMenuItem(value: 'deposit', child: Text('存款')),
+                    DropdownMenuItem(value: 'other', child: Text('其他')),
+                  ],
+                  onChanged: (v) => setDialogState(() => selectedType = v ?? 'other'),
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(child: TextField(controller: qtyC, decoration: const InputDecoration(labelText: '数量', isDense: true), keyboardType: TextInputType.number)),
+                    const SizedBox(width: 8),
+                    Expanded(child: TextField(controller: costC, decoration: const InputDecoration(labelText: '成本价', isDense: true), keyboardType: TextInputType.number)),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(child: TextField(controller: priceC, decoration: const InputDecoration(labelText: '现价', isDense: true), keyboardType: TextInputType.number)),
+                    const SizedBox(width: 8),
+                    Expanded(child: TextField(controller: mvC, decoration: const InputDecoration(labelText: '市值', isDense: true), keyboardType: TextInputType.number)),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
+            ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('保存')),
+          ],
+        ),
+      ),
+    );
+
+    if (saved == true) {
+      final updated = r.copyWith(
+        name: nameC.text.trim().isNotEmpty ? nameC.text.trim() : r.name,
+        code: codeC.text.trim().isNotEmpty ? codeC.text.trim() : 'unknown',
+        quantity: double.tryParse(qtyC.text) ?? r.quantity,
+        costPrice: double.tryParse(costC.text) ?? r.costPrice,
+        currentPrice: double.tryParse(priceC.text) ?? r.currentPrice,
+        marketValue: double.tryParse(mvC.text) ?? r.marketValue,
+        assetType: selectedType,
+      );
+      ref.read(ocrResultProvider.notifier).updateResult(index, updated);
+    }
+
+    nameC.dispose(); codeC.dispose(); qtyC.dispose();
+    costC.dispose(); priceC.dispose(); mvC.dispose();
+  }
+}

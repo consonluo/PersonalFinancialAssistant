@@ -1,0 +1,236 @@
+{
+  "familyName": "示范家庭",
+  "version": 1,
+  "exportedAt": "2026-04-04T00:00:00.000",
+  "members": [
+    {
+      "id": "demo-member-1",
+      "name": "张三",
+      "avatar": "",
+      "role": "owner",
+      "createdAt": "2026-01-01T00:00:00.000",
+      "updatedAt": "2026-01-01T00:00:00.000"
+    },
+    {
+      "id": "demo-member-2",
+      "name": "李四",
+      "avatar": "",
+      "role": "spouse",
+      "createdAt": "2026-01-01T00:00:00.000",
+      "updatedAt": "2026-01-01T00:00:00.000"
+    }
+  ],
+  "accounts": [
+    {
+      "id": "demo-acc-1",
+      "memberId": "demo-member-1",
+      "name": "华泰证券",
+      "type": "securities",
+      "institution": "华泰证券",
+      "subType": "stock",
+      "createdAt": "2026-01-01T00:00:00.000",
+      "updatedAt": "2026-01-01T00:00:00.000"
+    },
+    {
+      "id": "demo-acc-2",
+      "memberId": "demo-member-1",
+      "name": "天天基金",
+      "type": "securities",
+      "institution": "天天基金",
+      "subType": "fund",
+      "createdAt": "2026-01-01T00:00:00.000",
+      "updatedAt": "2026-01-01T00:00:00.000"
+    },
+    {
+      "id": "demo-acc-3",
+      "memberId": "demo-member-2",
+      "name": "招商银行",
+      "type": "bank",
+      "institution": "招商银行",
+      "subType": "checking",
+      "createdAt": "2026-01-01T00:00:00.000",
+      "updatedAt": "2026-01-01T00:00:00.000"
+    },
+    {
+      "id": "demo-acc-4",
+      "memberId": "demo-member-2",
+      "name": "中信证券",
+      "type": "securities",
+      "institution": "中信证券",
+      "subType": "stock",
+      "createdAt": "2026-01-01T00:00:00.000",
+      "updatedAt": "2026-01-01T00:00:00.000"
+    }
+  ],
+  "holdings": [
+    {
+      "id": "demo-hold-1",
+      "accountId": "demo-acc-1",
+      "assetCode": "600519",
+      "assetName": "贵州茅台",
+      "assetType": "aStock",
+      "quantity": 100,
+      "costPrice": 1680.00,
+      "currentPrice": 1720.50,
+      "tags": [],
+      "notes": "",
+      "createdAt": "2026-01-15T00:00:00.000",
+      "updatedAt": "2026-04-01T00:00:00.000"
+    },
+    {
+      "id": "demo-hold-2",
+      "accountId": "demo-acc-1",
+      "assetCode": "000858",
+      "assetName": "五粮液",
+      "assetType": "aStock",
+      "quantity": 500,
+      "costPrice": 148.50,
+      "currentPrice": 155.20,
+      "tags": [],
+      "notes": "",
+      "createdAt": "2026-02-01T00:00:00.000",
+      "updatedAt": "2026-04-01T00:00:00.000"
+    },
+    {
+      "id": "demo-hold-3",
+      "accountId": "demo-acc-2",
+      "assetCode": "110011",
+      "assetName": "易方达中小盘混合",
+      "assetType": "mixedFund",
+      "quantity": 10000,
+      "costPrice": 2.85,
+      "currentPrice": 3.12,
+      "tags": [],
+      "notes": "",
+      "createdAt": "2026-01-20T00:00:00.000",
+      "updatedAt": "2026-04-01T00:00:00.000"
+    },
+    {
+      "id": "demo-hold-4",
+      "accountId": "demo-acc-2",
+      "assetCode": "007540",
+      "assetName": "华夏纳斯达克100ETF联接A",
+      "assetType": "nasdaqETF",
+      "quantity": 20000,
+      "costPrice": 1.95,
+      "currentPrice": 2.18,
+      "tags": ["QDII", "纳指"],
+      "notes": "",
+      "createdAt": "2026-02-10T00:00:00.000",
+      "updatedAt": "2026-04-01T00:00:00.000"
+    },
+    {
+      "id": "demo-hold-5",
+      "accountId": "demo-acc-2",
+      "assetCode": "005827",
+      "assetName": "易方达蓝筹精选混合",
+      "assetType": "mixedFund",
+      "quantity": 15000,
+      "costPrice": 1.42,
+      "currentPrice": 1.38,
+      "tags": [],
+      "notes": "",
+      "createdAt": "2026-03-01T00:00:00.000",
+      "updatedAt": "2026-04-01T00:00:00.000"
+    },
+    {
+      "id": "demo-hold-6",
+      "accountId": "demo-acc-3",
+      "assetCode": "DEPOSIT",
+      "assetName": "活期存款",
+      "assetType": "deposit",
+      "quantity": 1,
+      "costPrice": 150000,
+      "currentPrice": 150000,
+      "tags": [],
+      "notes": "",
+      "createdAt": "2026-01-01T00:00:00.000",
+      "updatedAt": "2026-04-01T00:00:00.000"
+    },
+    {
+      "id": "demo-hold-7",
+      "accountId": "demo-acc-4",
+      "assetCode": "00700",
+      "assetName": "腾讯控股",
+      "assetType": "hkStock",
+      "quantity": 200,
+      "costPrice": 310.00,
+      "currentPrice": 388.60,
+      "tags": [],
+      "notes": "",
+      "createdAt": "2026-01-10T00:00:00.000",
+      "updatedAt": "2026-04-01T00:00:00.000"
+    },
+    {
+      "id": "demo-hold-8",
+      "accountId": "demo-acc-4",
+      "assetCode": "AAPL",
+      "assetName": "苹果公司",
+      "assetType": "usStock",
+      "quantity": 50,
+      "costPrice": 178.50,
+      "currentPrice": 195.20,
+      "tags": [],
+      "notes": "",
+      "createdAt": "2026-02-15T00:00:00.000",
+      "updatedAt": "2026-04-01T00:00:00.000"
+    },
+    {
+      "id": "demo-hold-9",
+      "accountId": "demo-acc-2",
+      "assetCode": "090010",
+      "assetName": "大成中证红利指数A",
+      "assetType": "dividendFund",
+      "quantity": 30000,
+      "costPrice": 1.05,
+      "currentPrice": 1.12,
+      "tags": ["红利"],
+      "notes": "",
+      "createdAt": "2026-02-20T00:00:00.000",
+      "updatedAt": "2026-04-01T00:00:00.000"
+    },
+    {
+      "id": "demo-hold-10",
+      "accountId": "demo-acc-2",
+      "assetCode": "003474",
+      "assetName": "南方天天利货币B",
+      "assetType": "moneyFund",
+      "quantity": 1,
+      "costPrice": 50000,
+      "currentPrice": 50150,
+      "tags": [],
+      "notes": "",
+      "createdAt": "2026-03-01T00:00:00.000",
+      "updatedAt": "2026-04-01T00:00:00.000"
+    }
+  ],
+  "fixedAssets": [
+    {
+      "id": "demo-fa-1",
+      "memberId": "demo-member-1",
+      "type": "realEstate",
+      "name": "深圳南山区住宅",
+      "estimatedValue": 6800000,
+      "details": "{\"address\":\"深圳市南山区XX路XX号\",\"area\":89.5}",
+      "notes": "2020年购入",
+      "createdAt": "2026-01-01T00:00:00.000",
+      "updatedAt": "2026-04-01T00:00:00.000"
+    }
+  ],
+  "liabilities": [
+    {
+      "id": "demo-lia-1",
+      "memberId": "demo-member-1",
+      "type": "mortgage",
+      "name": "南山住宅房贷",
+      "totalAmount": 3500000,
+      "remainingAmount": 2850000,
+      "interestRate": 3.85,
+      "monthlyPayment": 16500,
+      "notes": "30年等额本息",
+      "createdAt": "2026-01-01T00:00:00.000",
+      "updatedAt": "2026-04-01T00:00:00.000"
+    }
+  ],
+  "investmentPlans": []
+}

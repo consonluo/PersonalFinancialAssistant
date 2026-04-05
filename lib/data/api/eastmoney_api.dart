@@ -1,0 +1,83 @@
+import 'package:dio/dio.dart';
+import '../models/market_data_model.dart';
+import 'market_api_client.dart';
+
+/// 东方财富 API - A股/港股行情
+class EastMoneyApi implements MarketApiClient {
+  final Dio _dio;
+
+  EastMoneyApi({Dio? dio}) : _dio = dio ?? Dio(BaseOptions(
+    connectTimeout: const Duration(seconds: 10),
+    receiveTimeout: const Duration(seconds: 10),
+  ));
+
+  @override
+  Future<List<MarketDataModel>> getQuotes(List<String> codes) async {
+    final results = <MarketDataModel>[];
+    // 分批请求，每批最多50个
+    for (var i = 0; i < codes.length; i += 50) {
+      final batch = codes.sublist(i, i + 50 > codes.length ? codes.length : i + 50);
+      final batchResults = await _fetchBatch(batch);
+      results.addAll(batchResults);
+    }
+    return results;
+  }
+
+  @override
+  Future<MarketDataModel?> getQuote(String code) async {
+    final results = await getQuotes([code]);
+    return results.isEmpty ? null : results.first;
+  }
+
+  Future<List<MarketDataModel>> _fetchBatch(List<String> codes) async {
+    final secIds = codes.map(_toSecId).where((s) => s.isNotEmpty).join(',');
+    if (secIds.isEmpty) return [];
+
+    final url = 'https://push2.eastmoney.com/api/qt/ulist.np/get';
+    final response = await _dio.get(url, queryParameters: {
+      'fltt': 2,
+      'fields': 'f2,f3,f4,f12,f14,f5',
+      'secids': secIds,
+    });
+
+    if (response.statusCode != 200) return [];
+
+    final data = response.data;
+    if (data == null || data['data'] == null || data['data']['diff'] == null) {
+      return [];
+    }
+
+    final List<dynamic> items = data['data']['diff'];
+    final now = DateTime.now();
+    return items.map((item) {
+      return MarketDataModel(
+        assetCode: item['f12']?.toString() ?? '',
+        name: item['f14']?.toString() ?? '',
+        price: (item['f2'] as num?)?.toDouble() ?? 0,
+        changePercent: (item['f3'] as num?)?.toDouble() ?? 0,
+        change: (item['f4'] as num?)?.toDouble() ?? 0,
+        volume: (item['f5'] as num?)?.toDouble() ?? 0,
+        updatedAt: now,
+      );
+    }).toList();
+  }
+
+  String _toSecId(String code) {
+    final pureCode = code.replaceAll(RegExp(r'\.(SH|SZ|HK)$', caseSensitive: false), '');
+
+    // A股
+    if (RegExp(r'^\d{6}$').hasMatch(pureCode)) {
+      if (pureCode.startsWith('6') || pureCode.startsWith('9')) {
+        return '1.$pureCode'; // 上海
+      }
+      return '0.$pureCode'; // 深圳
+    }
+
+    // 港股
+    if (code.toUpperCase().endsWith('.HK') || RegExp(r'^\d{5}$').hasMatch(pureCode)) {
+      return '116.$pureCode';
+    }
+
+    return '';
+  }
+}
