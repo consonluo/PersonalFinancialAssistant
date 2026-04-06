@@ -18,6 +18,11 @@ class LiabilityListPage extends ConsumerWidget {
       appBar: AppBar(
         title: const Text('负债管理'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.camera_alt_outlined),
+            tooltip: '截图导入',
+            onPressed: () => context.push('/liability-ocr'),
+          ),
           IconButton(icon: const Icon(Icons.bar_chart), onPressed: () => context.push('/balance-sheet')),
         ],
       ),

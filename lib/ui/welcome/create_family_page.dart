@@ -30,6 +30,7 @@ class _CreateFamilyPageState extends ConsumerState<CreateFamilyPage> {
   String _statusMessage = '';
   bool _obscurePassword = true;
   bool _obscureConfirm = true;
+  bool _localOnly = false;
 
   @override
   void dispose() {
@@ -68,34 +69,54 @@ class _CreateFamilyPageState extends ConsumerState<CreateFamilyPage> {
               decoration: const InputDecoration(hintText: '例如：张家、王氏大家庭'),
             ),
             const SizedBox(height: 20),
-            const Text('设置密码', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-            const SizedBox(height: 4),
-            Text('其他设备登录时需要输入密码', style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
-            const SizedBox(height: 8),
-            TextField(
-              controller: _passwordController,
-              obscureText: _obscurePassword,
-              decoration: InputDecoration(
-                hintText: '设置登录密码（至少6位）',
-                suffixIcon: IconButton(
-                  icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility, size: 20),
-                  onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+
+            // 本地/云同步切换
+            Card(
+              margin: EdgeInsets.zero,
+              child: SwitchListTile(
+                title: Text(_localOnly ? '仅本地使用' : '多设备云同步', style: const TextStyle(fontWeight: FontWeight.w600)),
+                subtitle: Text(
+                  _localOnly ? '数据仅保存在本设备，无需密码' : '数据自动同步到云端，可在多台设备使用',
+                  style: const TextStyle(fontSize: 12),
                 ),
+                secondary: Icon(_localOnly ? Icons.phone_android : Icons.cloud_sync, color: AppColors.primary),
+                value: !_localOnly,
+                activeColor: AppColors.primary,
+                onChanged: (v) => setState(() => _localOnly = !v),
               ),
             ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _confirmPasswordController,
-              obscureText: _obscureConfirm,
-              decoration: InputDecoration(
-                hintText: '确认密码',
-                suffixIcon: IconButton(
-                  icon: Icon(_obscureConfirm ? Icons.visibility_off : Icons.visibility, size: 20),
-                  onPressed: () => setState(() => _obscureConfirm = !_obscureConfirm),
+            const SizedBox(height: 16),
+
+            if (!_localOnly) ...[
+              const Text('设置密码', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+              const SizedBox(height: 4),
+              Text('其他设备登录时需要输入密码', style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _passwordController,
+                obscureText: _obscurePassword,
+                decoration: InputDecoration(
+                  hintText: '设置登录密码（至少6位）',
+                  suffixIcon: IconButton(
+                    icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility, size: 20),
+                    onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(height: 24),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _confirmPasswordController,
+                obscureText: _obscureConfirm,
+                decoration: InputDecoration(
+                  hintText: '确认密码',
+                  suffixIcon: IconButton(
+                    icon: Icon(_obscureConfirm ? Icons.visibility_off : Icons.visibility, size: 20),
+                    onPressed: () => setState(() => _obscureConfirm = !_obscureConfirm),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 24),
+            ],
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -178,14 +199,16 @@ class _CreateFamilyPageState extends ConsumerState<CreateFamilyPage> {
       return;
     }
 
-    final password = _passwordController.text;
-    if (password.length < 6) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('密码至少6位')));
-      return;
-    }
-    if (password != _confirmPasswordController.text) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('两次密码不一致')));
-      return;
+    if (!_localOnly) {
+      final password = _passwordController.text;
+      if (password.length < 6) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('密码至少6位')));
+        return;
+      }
+      if (password != _confirmPasswordController.text) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('两次密码不一致')));
+        return;
+      }
     }
 
     final validMembers = _members.where((m) => m.nameController.text.trim().isNotEmpty).toList();
@@ -215,28 +238,45 @@ class _CreateFamilyPageState extends ConsumerState<CreateFamilyPage> {
 
       ref.read(familyNameProvider.notifier).state = familyName;
       ref.read(isDemoModeProvider.notifier).state = false;
-      // 持久化家庭名称
       (await SharedPreferences.getInstance()).setString('family_name', familyName);
 
-      // 生成家庭账号 ID
-      final familyId = _generateFamilyId();
-      await ref.read(familyIdProvider.notifier).setFamilyId(familyId);
-      await ref.read(syncConfigProvider.notifier).setFamilyId(familyId);
+      if (_localOnly) {
+        // 本地模式：生成 ID 但不设密码、不同步
+        final familyId = _generateFamilyId();
+        await ref.read(familyIdProvider.notifier).setFamilyId(familyId);
 
-      // 存储密码哈希
-      final passwordHash = CryptoUtils.hashPassword(password, familyId);
-      await ref.read(passwordHashProvider.notifier).setPasswordHash(passwordHash);
+        if (!mounted) return;
+        context.go('/dashboard');
+      } else {
+        // 云同步模式
+        final familyId = _generateFamilyId();
+        await ref.read(familyIdProvider.notifier).setFamilyId(familyId);
+        await ref.read(syncConfigProvider.notifier).setFamilyId(familyId);
 
-      // 自动上传到云端（含密码哈希）
-      setState(() => _statusMessage = '正在上传到云端...');
-      try {
-        await ref.read(autoSyncProvider).syncUp();
-      } catch (_) {}
+        final password = _passwordController.text;
+        final passwordHash = CryptoUtils.hashPassword(password, familyId);
+        await ref.read(passwordHashProvider.notifier).setPasswordHash(passwordHash);
 
-      if (!mounted) return;
+        setState(() => _statusMessage = '正在上传到云端...');
+        bool syncOk = false;
+        try {
+          syncOk = await ref.read(autoSyncProvider).syncUp();
+        } catch (_) {}
 
-      // 展示家庭账号 ID
-      await _showFamilyIdDialog(familyId);
+        if (!mounted) return;
+
+        if (!syncOk) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('云端同步失败，其他设备暂时无法登录。请稍后在「设置 → 数据管理」中手动同步。'),
+              duration: Duration(seconds: 5),
+            ),
+          );
+        }
+
+        if (!mounted) return;
+        await _showFamilyIdDialog(familyId);
+      }
     } catch (e) {
       setState(() { _isCreating = false; _statusMessage = ''; });
       if (mounted) {

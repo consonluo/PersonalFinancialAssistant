@@ -51,6 +51,9 @@ class _AiAnalysisPageState extends State<AiAnalysisPage> {
       totalAssets: params['totalAssets'] as double,
       totalLiability: params['totalLiability'] as double,
       categories: List<Map<String, dynamic>>.from(params['categories']),
+      investmentPlans: params['investmentPlans'] != null
+          ? List<Map<String, dynamic>>.from(params['investmentPlans'])
+          : null,
     );
 
     _subscription = stream.listen(

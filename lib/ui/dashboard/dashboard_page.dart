@@ -13,6 +13,8 @@ import '../../providers/holding_provider.dart';
 import '../../providers/database_provider.dart';
 import '../../data/models/asset_summary_model.dart';
 import '../../core/utils/snapshot_service.dart';
+import '../../providers/sync_provider.dart';
+import '../../providers/investment_plan_provider.dart';
 import 'widgets/total_asset_card.dart';
 import 'widgets/category_pie_chart.dart';
 
@@ -33,7 +35,13 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
     Future.microtask(() {
       ref.read(marketDataProvider.notifier).startAutoRefresh();
       // 自动记录每日资产快照
-      SnapshotService(ref.read(databaseProvider)).takeSnapshotIfNeeded();
+      try {
+        SnapshotService(ref.read(databaseProvider)).takeSnapshotIfNeeded();
+      } catch (_) {}
+      // 进入首页 5 秒后自动同步到云端
+      Future.delayed(const Duration(seconds: 5), () {
+        try { ref.read(autoSyncProvider).triggerAutoSync(); } catch (_) {}
+      });
     });
   }
 
@@ -239,6 +247,15 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: _QuickActionCard(
+                      icon: Icons.event_repeat,
+                      label: '定投计划',
+                      color: AppColors.primary,
+                      onTap: () => context.push('/investment-plans'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _QuickActionCard(
                       icon: Icons.show_chart,
                       label: '资产走势',
                       color: AppColors.success,
@@ -351,12 +368,20 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
       'percent': c.proportion.toStringAsFixed(1),
     }).toList();
 
-    // 直接跳转到流式 AI 分析页面，无需 loading 弹窗
+    // 读取定投计划
+    final plans = ref.read(allInvestmentPlansProvider).valueOrNull ?? [];
+    final plansData = plans.map((p) => {
+      'name': p.assetName, 'code': p.assetCode,
+      'amount': p.amount.toStringAsFixed(2),
+      'frequency': p.frequency, 'isActive': p.isActive,
+    }).toList();
+
     context.push('/ai-analysis?title=AI 资产分析', extra: <String, dynamic>{
       'holdings': holdingsData,
       'totalAssets': totalAssets,
       'totalLiability': totalLiability,
       'categories': categoryData,
+      'investmentPlans': plansData,
     });
   }
 }

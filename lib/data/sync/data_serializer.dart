@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../database/app_database.dart';
 import 'package:drift/drift.dart';
 
@@ -8,7 +9,7 @@ class DataSerializer {
 
   DataSerializer(this.db);
 
-  /// 导出所有数据为 JSON
+  /// 导出所有数据为 JSON（包含用户配置和资产快照）
   Future<Map<String, dynamic>> exportAll(String familyName) async {
     final members = await db.getAllMembers();
     final accounts = await db.getAllAccounts();
@@ -16,10 +17,19 @@ class DataSerializer {
     final fixedAssets = await db.getAllFixedAssets();
     final liabilities = await db.getAllLiabilities();
     final plans = await db.getAllInvestmentPlans();
+    final snapshots = await db.getAllSnapshots();
+
+    // 读取用户偏好配置
+    final prefs = await SharedPreferences.getInstance();
+    final userPrefs = <String, dynamic>{
+      'ai_provider': prefs.getString('ai_provider') ?? 'zhipu',
+      'zhipu_api_key': prefs.getString('zhipu_api_key'),
+      'gemini_api_key': prefs.getString('gemini_api_key'),
+    };
 
     return {
       'familyName': familyName,
-      'version': 1,
+      'version': 2,
       'exportedAt': DateTime.now().toIso8601String(),
       'members': members.map((m) => {
         'id': m.id, 'name': m.name, 'avatar': m.avatar,
@@ -64,6 +74,16 @@ class DataSerializer {
         'isActive': p.isActive,
         'createdAt': p.createdAt.toIso8601String(),
       }).toList(),
+      'assetSnapshots': snapshots.map((s) => {
+        'snapshotDate': s.snapshotDate.toIso8601String(),
+        'totalAssets': s.totalAssets,
+        'totalLiabilities': s.totalLiabilities,
+        'netWorth': s.netWorth,
+        'totalFixedAssets': s.totalFixedAssets,
+        'categoryBreakdown': s.categoryBreakdown,
+        'createdAt': s.createdAt.toIso8601String(),
+      }).toList(),
+      'userPreferences': userPrefs,
     };
   }
 
@@ -160,6 +180,37 @@ class DataSerializer {
         isActive: Value(p['isActive'] as bool? ?? true),
         createdAt: Value(DateTime.parse(p['createdAt'] as String)),
       ));
+    }
+
+    // 导入资产快照
+    for (final s in (data['assetSnapshots'] as List? ?? [])) {
+      await db.insertSnapshot(AssetSnapshotsCompanion(
+        snapshotDate: Value(DateTime.parse(s['snapshotDate'] as String)),
+        totalAssets: Value((s['totalAssets'] as num).toDouble()),
+        totalLiabilities: Value((s['totalLiabilities'] as num).toDouble()),
+        netWorth: Value((s['netWorth'] as num).toDouble()),
+        totalFixedAssets: Value((s['totalFixedAssets'] as num?)?.toDouble() ?? 0),
+        categoryBreakdown: Value(s['categoryBreakdown'] as String? ?? '{}'),
+        createdAt: Value(DateTime.parse(s['createdAt'] as String)),
+      ));
+    }
+
+    // 导入用户偏好配置（API Key 等）
+    final userPrefs = data['userPreferences'] as Map<String, dynamic>?;
+    if (userPrefs != null) {
+      final prefs = await SharedPreferences.getInstance();
+      final provider = userPrefs['ai_provider'] as String?;
+      if (provider != null) {
+        await prefs.setString('ai_provider', provider);
+      }
+      final zhipuKey = userPrefs['zhipu_api_key'] as String?;
+      if (zhipuKey != null && zhipuKey.isNotEmpty) {
+        await prefs.setString('zhipu_api_key', zhipuKey);
+      }
+      final geminiKey = userPrefs['gemini_api_key'] as String?;
+      if (geminiKey != null && geminiKey.isNotEmpty) {
+        await prefs.setString('gemini_api_key', geminiKey);
+      }
     }
   }
 

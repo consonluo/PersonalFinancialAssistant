@@ -10,6 +10,7 @@ import '../../core/utils/ai_service.dart';
 import '../../providers/holding_provider.dart';
 import '../../providers/database_provider.dart';
 import '../../providers/sync_provider.dart';
+import '../../providers/investment_plan_provider.dart';
 import '../../data/database/app_database.dart';
 
 class HoldingListPage extends ConsumerWidget {
@@ -19,6 +20,7 @@ class HoldingListPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final holdingsAsync = ref.watch(holdingsByAccountProvider(accountId));
+    final plansAsync = ref.watch(investmentPlansByAccountProvider(accountId));
 
     return Scaffold(
       appBar: AppBar(
@@ -39,6 +41,7 @@ class HoldingListPage extends ConsumerWidget {
       body: holdingsAsync.when(
         data: (holdings) {
           if (holdings.isEmpty) return const Center(child: Text('暂无持仓'));
+          final plans = plansAsync.valueOrNull ?? [];
           return ListView.builder(
             padding: const EdgeInsets.all(16),
             itemCount: holdings.length,
@@ -100,6 +103,40 @@ class HoldingListPage extends ConsumerWidget {
                               Text('现价 ${h.currentPrice.toStringAsFixed(2)}', style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
                             ],
                           ),
+                          // 显示关联定投计划
+                          Builder(builder: (_) {
+                            final linkedPlans = plans.where((p) =>
+                              p.assetCode == h.assetCode || p.assetName == h.assetName).toList();
+                            if (linkedPlans.isEmpty) return const SizedBox.shrink();
+                            return Padding(
+                              padding: const EdgeInsets.only(top: 6),
+                              child: Row(
+                                children: linkedPlans.map((p) {
+                                  final freq = InvestFrequency.values.firstWhere(
+                                    (f) => f.name == p.frequency, orElse: () => InvestFrequency.monthly);
+                                  return Container(
+                                    margin: const EdgeInsets.only(right: 6),
+                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: AppColors.primary.withValues(alpha: 0.08),
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(Icons.event_repeat, size: 12, color: p.isActive ? AppColors.primary : AppColors.textHint),
+                                        const SizedBox(width: 3),
+                                        Text(
+                                          '${freq.label}定投¥${p.amount.toStringAsFixed(0)}',
+                                          style: TextStyle(fontSize: 10, color: p.isActive ? AppColors.primary : AppColors.textHint, fontWeight: FontWeight.w600),
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                }).toList(),
+                              ),
+                            );
+                          }),
                         ],
                       ),
                     ),

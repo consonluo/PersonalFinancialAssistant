@@ -22,6 +22,10 @@ import '../../ui/liabilities/liability_form_page.dart';
 import '../../ui/liabilities/balance_sheet_page.dart';
 import '../../ui/fixed_assets/fixed_asset_list_page.dart';
 import '../../ui/fixed_assets/fixed_asset_form_page.dart';
+import '../../ui/investment/investment_plan_list_page.dart';
+import '../../ui/investment/investment_plan_form_page.dart';
+import '../../ui/investment/investment_plan_ocr_page.dart';
+import '../../ui/liabilities/liability_ocr_page.dart';
 import '../../ui/settings/settings_page.dart';
 import '../../ui/settings/data_manage_page.dart';
 
@@ -165,6 +169,30 @@ final GoRouter appRouter = GoRouter(
       path: '/asset-trend',
       parentNavigatorKey: _rootNavigatorKey,
       builder: (context, state) => const AssetTrendPage(),
+    ),
+    GoRoute(
+      path: '/investment-plans',
+      parentNavigatorKey: _rootNavigatorKey,
+      builder: (context, state) => const InvestmentPlanListPage(),
+    ),
+    GoRoute(
+      path: '/investment-plan-form',
+      parentNavigatorKey: _rootNavigatorKey,
+      builder: (context, state) => InvestmentPlanFormPage(
+        planId: state.uri.queryParameters['id'],
+      ),
+    ),
+    GoRoute(
+      path: '/investment-plan-ocr',
+      parentNavigatorKey: _rootNavigatorKey,
+      builder: (context, state) => const InvestmentPlanOcrPage(),
+    ),
+    GoRoute(
+      path: '/liability-ocr',
+      parentNavigatorKey: _rootNavigatorKey,
+      builder: (context, state) => LiabilityOcrPage(
+        memberId: state.uri.queryParameters['memberId'],
+      ),
     ),
   ],
 );
