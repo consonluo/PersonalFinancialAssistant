@@ -7,6 +7,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/theme/app_colors.dart';
 import '../../providers/database_provider.dart';
 import '../../providers/current_role_provider.dart';
+import '../../providers/holding_provider.dart';
+import '../../providers/account_provider.dart';
+import '../../providers/family_provider.dart';
+import '../../providers/liability_provider.dart';
+import '../../providers/investment_plan_provider.dart';
 import '../../data/sync/data_serializer.dart';
 
 class WelcomePage extends ConsumerStatefulWidget {
@@ -115,6 +120,12 @@ class _WelcomePageState extends ConsumerState<WelcomePage> {
     await DataSerializer(db).importAll(data);
     ref.read(familyNameProvider.notifier).state = data['familyName'] as String;
     ref.read(isDemoModeProvider.notifier).state = true;
+    // 强制刷新数据源，防止残留旧数据
+    ref.invalidate(allHoldingsProvider);
+    ref.invalidate(allAccountsProvider);
+    ref.invalidate(familyMembersProvider);
+    ref.invalidate(allLiabilitiesProvider);
+    ref.invalidate(allInvestmentPlansProvider);
     if (context.mounted) context.go('/role-select');
   }
 }

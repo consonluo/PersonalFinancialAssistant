@@ -4,6 +4,8 @@ import 'package:go_router/go_router.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/utils/format_utils.dart';
+import '../../core/utils/category_group.dart';
+import '../../core/utils/snapshot_service.dart';
 import '../../providers/asset_summary_provider.dart';
 import '../../providers/family_provider.dart';
 import '../../providers/liability_provider.dart';
@@ -11,12 +13,14 @@ import '../../providers/market_provider.dart';
 import '../../providers/current_role_provider.dart';
 import '../../providers/holding_provider.dart';
 import '../../providers/database_provider.dart';
-import '../../data/models/asset_summary_model.dart';
-import '../../core/utils/snapshot_service.dart';
 import '../../providers/sync_provider.dart';
 import '../../providers/investment_plan_provider.dart';
+import '../../data/models/asset_summary_model.dart';
 import 'widgets/total_asset_card.dart';
-import 'widgets/category_pie_chart.dart';
+import 'widgets/mini_trend_chart.dart';
+import 'widgets/member_asset_bar.dart';
+import 'widgets/member_detail_view.dart';
+import 'widgets/grouped_pie_chart.dart';
 
 /// 当前选中的成员筛选（null = 全部）
 final _selectedMemberFilter = StateProvider<String?>((ref) => null);
@@ -34,11 +38,9 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
     super.initState();
     Future.microtask(() {
       ref.read(marketDataProvider.notifier).startAutoRefresh();
-      // 自动记录每日资产快照
       try {
         SnapshotService(ref.read(databaseProvider)).takeSnapshotIfNeeded();
       } catch (_) {}
-      // 进入首页 5 秒后自动同步到云端
       Future.delayed(const Duration(seconds: 5), () {
         try { ref.read(autoSyncProvider).triggerAutoSync(); } catch (_) {}
       });
@@ -52,9 +54,14 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
     final isDemo = ref.watch(isDemoModeProvider);
     final familyName = ref.watch(familyNameProvider);
     final membersAsync = ref.watch(familyMembersProvider);
-    final selectedMemberId = ref.watch(_selectedMemberFilter);
+    var selectedMemberId = ref.watch(_selectedMemberFilter);
 
-    // 如果选中了某个成员，计算该成员的数据
+    final members = membersAsync.valueOrNull ?? [];
+    if (selectedMemberId != null && members.isNotEmpty && !members.any((m) => m.id == selectedMemberId)) {
+      Future.microtask(() => ref.read(_selectedMemberFilter.notifier).state = null);
+      selectedMemberId = null;
+    }
+
     final memberFilteredData = selectedMemberId != null
         ? ref.watch(_memberSummaryProvider(selectedMemberId)).valueOrNull
         : null;
@@ -64,7 +71,6 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
     final displayTodayChange = memberFilteredData?.todayChange ?? overview.todayChange;
     final displayTodayChangePct = memberFilteredData?.todayChangePercent ?? overview.todayChangePercent;
 
-    // 负债：筛选成员
     final displayLiabilities = selectedMemberId != null
         ? liabilities.where((l) => l.memberId == selectedMemberId).toList()
         : liabilities;
@@ -72,276 +78,153 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
     final netWorth = displayAssets - displayLiabilityTotal;
 
     return Scaffold(
-      body: CustomScrollView(
-        slivers: [
-          SliverAppBar(
-            floating: true,
-            title: Row(
-              children: [
-                const Icon(Icons.account_balance_wallet, color: AppColors.primary),
-                const SizedBox(width: 8),
-                Text(familyName.isEmpty ? '家庭资产管理' : familyName),
+      body: LayoutBuilder(builder: (context, constraints) {
+        final screenW = constraints.maxWidth;
+        final isWide = screenW >= 840;
+        final pad = isWide ? 24.0 : 16.0;
+
+        return CustomScrollView(
+          slivers: [
+            SliverAppBar(
+              floating: true,
+              title: Row(
+                children: [
+                  const Icon(Icons.account_balance_wallet, color: AppColors.primary),
+                  const SizedBox(width: 8),
+                  Text(familyName.isEmpty ? '加财' : familyName),
+                ],
+              ),
+              actions: [
+                IconButton(icon: const Icon(Icons.person_add_outlined, size: 22), tooltip: '添加成员', onPressed: () => context.push('/member-form')),
+                IconButton(icon: const Icon(Icons.settings_outlined), onPressed: () => context.go('/settings')),
               ],
             ),
-            actions: [
-              IconButton(
-                icon: const Icon(Icons.person_add_outlined, size: 22),
-                tooltip: '添加成员',
-                onPressed: () => context.push('/member-form'),
-              ),
-              IconButton(
-                icon: const Icon(Icons.settings_outlined),
-                onPressed: () => context.go('/settings'),
-              ),
-            ],
-          ),
-          if (isDemo)
-            SliverToBoxAdapter(
-              child: Container(
-                margin: const EdgeInsets.symmetric(horizontal: 16),
-                padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-                decoration: BoxDecoration(
-                  color: AppColors.warning.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: const Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.info_outline, color: AppColors.warning, size: 16),
-                    SizedBox(width: 8),
-                    Flexible(child: Text('当前为演示模式', style: TextStyle(color: AppColors.warning, fontSize: 13))),
-                  ],
-                ),
-              ),
-            ),
-
-          // 成员筛选横向 Chips
-          SliverToBoxAdapter(
-            child: membersAsync.when(
-              data: (members) {
-                if (members.isEmpty) return const SizedBox.shrink();
-                return SizedBox(
-                  height: 52,
-                  child: ListView(
-                    scrollDirection: Axis.horizontal,
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            if (isDemo)
+              SliverToBoxAdapter(
+                child: _CenterPad(pad: pad, child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+                  decoration: BoxDecoration(color: AppColors.warning.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)),
+                  child: const Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      // "全部"按钮
-                      Padding(
-                        padding: const EdgeInsets.only(right: 8),
-                        child: ChoiceChip(
-                          label: const Text('全部'),
-                          selected: selectedMemberId == null,
-                          onSelected: (_) => ref.read(_selectedMemberFilter.notifier).state = null,
-                          labelStyle: TextStyle(
-                            color: selectedMemberId == null ? Colors.white : AppColors.textPrimary,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                      ...members.asMap().entries.map((e) {
-                        final m = e.value;
-                        final selected = selectedMemberId == m.id;
-                        return Padding(
-                          padding: const EdgeInsets.only(right: 8),
-                          child: ChoiceChip(
-                            avatar: selected
-                                ? null
-                                : CircleAvatar(
-                                    backgroundColor: AppColors.getCategoryColor(e.key),
-                                    child: Text(m.name[0], style: const TextStyle(color: Colors.white, fontSize: 11)),
-                                  ),
-                            label: Text(m.name),
-                            selected: selected,
-                            onSelected: (_) => ref.read(_selectedMemberFilter.notifier).state = selected ? null : m.id,
-                            labelStyle: TextStyle(
-                              color: selected ? Colors.white : AppColors.textPrimary,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        );
-                      }),
+                      Icon(Icons.info_outline, color: AppColors.warning, size: 16),
+                      SizedBox(width: 8),
+                      Flexible(child: Text('当前为演示模式', style: TextStyle(color: AppColors.warning, fontSize: 13))),
                     ],
                   ),
+                )),
+              ),
+
+            // Pinned 成员筛选
+            membersAsync.when(
+              data: (members) {
+                if (members.isEmpty) return const SliverToBoxAdapter(child: SizedBox.shrink());
+                return SliverPersistentHeader(
+                  pinned: true,
+                  delegate: _MemberTabDelegate(members: members, selectedMemberId: selectedMemberId, onSelect: (id) => ref.read(_selectedMemberFilter.notifier).state = id),
                 );
               },
-              loading: () => const SizedBox.shrink(),
-              error: (_, __) => const SizedBox.shrink(),
+              loading: () => const SliverToBoxAdapter(child: SizedBox.shrink()),
+              error: (_, __) => const SliverToBoxAdapter(child: SizedBox.shrink()),
             ),
-          ),
 
-          // 总资产卡片
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: GestureDetector(
-                onTap: () => context.push('/asset-trend'),
-                child: TotalAssetCard(
-                  totalAssets: displayAssets,
-                  netWorth: netWorth,
-                  todayChange: displayTodayChange,
-                  todayChangePercent: displayTodayChangePct,
-                ),
-              ),
-            ),
-          ),
-          const SliverToBoxAdapter(child: SizedBox(height: 12)),
+            if (selectedMemberId == null) ...[
+              // ===== 全部 Tab =====
 
-          // 负债 / 净资产
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Row(
-                children: [
+              if (isWide) ...[
+                // 宽屏：总资产卡片 + 迷你走势并排
+                SliverToBoxAdapter(child: _CenterPad(pad: pad, child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(flex: 3, child: GestureDetector(
+                      onTap: () => context.push('/asset-trend'),
+                      child: TotalAssetCard(totalAssets: displayAssets, netWorth: netWorth, todayChange: displayTodayChange, todayChangePercent: displayTodayChangePct),
+                    )),
+                    const SizedBox(width: 16),
+                    const Expanded(flex: 2, child: MiniTrendChart()),
+                  ],
+                ))),
+                const SliverToBoxAdapter(child: SizedBox(height: 12)),
+
+                // 宽屏：负债/净资产 + 快捷入口并排
+                SliverToBoxAdapter(child: _CenterPad(pad: pad, child: Row(
+                  children: [
+                    _QuickStatCard(label: '总负债', value: FormatUtils.formatCurrency(displayLiabilityTotal), color: AppColors.error, onTap: () => context.push('/liabilities')),
+                    const SizedBox(width: 12),
+                    _QuickStatCard(label: '净资产', value: FormatUtils.formatCurrency(netWorth), color: AppColors.success, onTap: () => context.push('/balance-sheet')),
+                    const SizedBox(width: 24),
+                    Expanded(child: _QuickActionCard(icon: Icons.home, label: '其他资产', color: AppColors.info, onTap: () => context.push('/fixed-assets'))),
+                    const SizedBox(width: 8),
+                    Expanded(child: _QuickActionCard(icon: Icons.money_off, label: '负债管理', color: AppColors.error, onTap: () => context.push('/liabilities'))),
+                    const SizedBox(width: 8),
+                    Expanded(child: _QuickActionCard(icon: Icons.event_repeat, label: '定投计划', color: AppColors.primary, onTap: () => context.push('/investment-plans'))),
+                    const SizedBox(width: 8),
+                    Expanded(child: _QuickActionCard(icon: Icons.show_chart, label: '资产走势', color: AppColors.success, onTap: () => context.push('/asset-trend'))),
+                  ],
+                ))),
+                const SliverToBoxAdapter(child: SizedBox(height: 12)),
+
+                // 宽屏：饼图 + 分类网格并排
+                if (displayCategories.isNotEmpty)
+                  SliverToBoxAdapter(child: _CenterPad(pad: pad, child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(child: GroupedPieChart(grouped: groupCategories(displayCategories))),
+                      const SizedBox(width: 16),
+                      Expanded(child: _GroupedCategoryGrid(categories: displayCategories)),
+                    ],
+                  ))),
+                const SliverToBoxAdapter(child: SizedBox(height: 12)),
+
+                SliverToBoxAdapter(child: _CenterPad(pad: pad, child: const MemberAssetBar())),
+              ] else ...[
+                // 窄屏：原有纵向布局
+                SliverToBoxAdapter(child: Padding(padding: EdgeInsets.symmetric(horizontal: pad), child: GestureDetector(
+                  onTap: () => context.push('/asset-trend'),
+                  child: TotalAssetCard(totalAssets: displayAssets, netWorth: netWorth, todayChange: displayTodayChange, todayChangePercent: displayTodayChangePct),
+                ))),
+                const SliverToBoxAdapter(child: SizedBox(height: 12)),
+                const SliverToBoxAdapter(child: MiniTrendChart()),
+                const SliverToBoxAdapter(child: SizedBox(height: 12)),
+                SliverToBoxAdapter(child: Padding(padding: EdgeInsets.symmetric(horizontal: pad), child: Row(children: [
                   _QuickStatCard(label: '总负债', value: FormatUtils.formatCurrency(displayLiabilityTotal), color: AppColors.error, onTap: () => context.push('/liabilities')),
                   const SizedBox(width: 12),
                   _QuickStatCard(label: '净资产', value: FormatUtils.formatCurrency(netWorth), color: AppColors.success, onTap: () => context.push('/balance-sheet')),
-                ],
-              ),
-            ),
-          ),
-          const SliverToBoxAdapter(child: SizedBox(height: 16)),
-
-          // 资产类型分布（饼图+列表）
-          SliverToBoxAdapter(
-            child: GestureDetector(
-              onTap: () => context.go('/analysis'),
-              child: CategoryPieChart(categories: displayCategories),
-            ),
-          ),
-          const SliverToBoxAdapter(child: SizedBox(height: 12)),
-
-          // 负债类型分布
-          if (displayLiabilities.isNotEmpty)
-            SliverToBoxAdapter(
-              child: GestureDetector(
-                onTap: () => context.push('/liabilities'),
-                child: _LiabilityBreakdown(liabilities: displayLiabilities),
-              ),
-            ),
-
-          // 快捷入口
-          const SliverToBoxAdapter(child: SizedBox(height: 12)),
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: _QuickActionCard(
-                      icon: Icons.home,
-                      label: '其他资产',
-                      color: AppColors.info,
-                      onTap: () => context.push('/fixed-assets'),
-                    ),
-                  ),
+                ]))),
+                const SliverToBoxAdapter(child: SizedBox(height: 12)),
+                if (displayCategories.isNotEmpty)
+                  SliverToBoxAdapter(child: GroupedPieChart(grouped: groupCategories(displayCategories))),
+                const SliverToBoxAdapter(child: SizedBox(height: 12)),
+                if (displayCategories.isNotEmpty)
+                  SliverToBoxAdapter(child: _GroupedCategoryGrid(categories: displayCategories)),
+                const SliverToBoxAdapter(child: SizedBox(height: 12)),
+                const SliverToBoxAdapter(child: MemberAssetBar()),
+                const SliverToBoxAdapter(child: SizedBox(height: 12)),
+                SliverToBoxAdapter(child: Padding(padding: EdgeInsets.symmetric(horizontal: pad), child: Row(children: [
+                  Expanded(child: _QuickActionCard(icon: Icons.home, label: '其他资产', color: AppColors.info, onTap: () => context.push('/fixed-assets'))),
                   const SizedBox(width: 12),
-                  Expanded(
-                    child: _QuickActionCard(
-                      icon: Icons.money_off,
-                      label: '负债管理',
-                      color: AppColors.error,
-                      onTap: () => context.push('/liabilities'),
-                    ),
-                  ),
+                  Expanded(child: _QuickActionCard(icon: Icons.money_off, label: '负债管理', color: AppColors.error, onTap: () => context.push('/liabilities'))),
                   const SizedBox(width: 12),
-                  Expanded(
-                    child: _QuickActionCard(
-                      icon: Icons.event_repeat,
-                      label: '定投计划',
-                      color: AppColors.primary,
-                      onTap: () => context.push('/investment-plans'),
-                    ),
-                  ),
+                  Expanded(child: _QuickActionCard(icon: Icons.event_repeat, label: '定投计划', color: AppColors.primary, onTap: () => context.push('/investment-plans'))),
                   const SizedBox(width: 12),
-                  Expanded(
-                    child: _QuickActionCard(
-                      icon: Icons.show_chart,
-                      label: '资产走势',
-                      color: AppColors.success,
-                      onTap: () => context.push('/asset-trend'),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-
-          // 资产明细列表
-          if (displayCategories.isNotEmpty) ...[
-            const SliverToBoxAdapter(child: SizedBox(height: 12)),
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: Text(
-                  '资产明细',
-                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                ),
-              ),
-            ),
-            const SliverToBoxAdapter(child: SizedBox(height: 8)),
-            SliverList(
-              delegate: SliverChildBuilderDelegate(
-                (context, index) {
-                  final c = displayCategories[index];
-                  final pnlColor = c.profitLoss >= 0 ? AppColors.gain : AppColors.loss;
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 3),
-                    child: Card(
-                      child: InkWell(
-                        onTap: () => context.push('/analysis/category/${c.assetType.name}'),
-                        borderRadius: BorderRadius.circular(16),
-                        child: Padding(
-                          padding: const EdgeInsets.all(14),
-                          child: Row(
-                            children: [
-                              Container(
-                                width: 36, height: 36,
-                                decoration: BoxDecoration(
-                                  color: AppColors.getCategoryColor(index).withValues(alpha: 0.15),
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                child: Center(
-                                  child: Text(c.assetType.code, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: AppColors.getCategoryColor(index))),
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(c.categoryName, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
-                                    Text('${c.holdingCount} 笔持仓 · ${c.proportion.toStringAsFixed(1)}%', style: const TextStyle(fontSize: 11, color: AppColors.textSecondary)),
-                                  ],
-                                ),
-                              ),
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.end,
-                                children: [
-                                  Text(FormatUtils.formatCurrency(c.totalMarketValue), style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
-                                  Text(
-                                    '${c.profitLoss >= 0 ? "+" : ""}${FormatUtils.formatCurrency(c.profitLoss)}',
-                                    style: TextStyle(fontSize: 11, color: pnlColor),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(width: 4),
-                              const Icon(Icons.chevron_right, size: 18, color: AppColors.textHint),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  );
-                },
-                childCount: displayCategories.length,
-              ),
-            ),
+                  Expanded(child: _QuickActionCard(icon: Icons.show_chart, label: '资产走势', color: AppColors.success, onTap: () => context.push('/asset-trend'))),
+                ]))),
+              ],
+              const SliverToBoxAdapter(child: SizedBox(height: 80)),
+            ] else ...[
+              // ===== 成员 Tab =====
+              SliverToBoxAdapter(child: _CenterPad(pad: pad, child: Row(children: [
+                _QuickStatCard(label: '总资产', value: FormatUtils.formatCurrency(displayAssets), color: AppColors.primary),
+                const SizedBox(width: 8),
+                _QuickStatCard(label: '负债', value: FormatUtils.formatCurrency(displayLiabilityTotal), color: AppColors.error),
+                const SizedBox(width: 8),
+                _QuickStatCard(label: '净值', value: FormatUtils.formatCurrency(netWorth), color: AppColors.success),
+              ]))),
+              SliverToBoxAdapter(child: _CenterPad(pad: pad, child: MemberDetailView(memberId: selectedMemberId!))),
+            ],
           ],
-
-          const SliverToBoxAdapter(child: SizedBox(height: 80)),
-        ],
-      ),
+        );
+      }),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _showAiAnalysis(context, displayCategories, displayAssets, displayLiabilityTotal),
         icon: const Icon(Icons.auto_awesome),
@@ -368,7 +251,6 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
       'percent': c.proportion.toStringAsFixed(1),
     }).toList();
 
-    // 读取定投计划
     final plans = ref.read(allInvestmentPlansProvider).valueOrNull ?? [];
     final plansData = plans.map((p) => {
       'name': p.assetName, 'code': p.assetCode,
@@ -386,7 +268,144 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
   }
 }
 
-/// 按成员筛选的资产汇总 Provider
+// ===== 响应式 Padding 包装 =====
+class _CenterPad extends StatelessWidget {
+  final double pad;
+  final Widget child;
+  const _CenterPad({required this.pad, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(padding: EdgeInsets.symmetric(horizontal: pad), child: child);
+  }
+}
+
+// ===== Pinned Member Tab Delegate =====
+
+class _MemberTabDelegate extends SliverPersistentHeaderDelegate {
+  final List<dynamic> members;
+  final String? selectedMemberId;
+  final ValueChanged<String?> onSelect;
+
+  _MemberTabDelegate({required this.members, required this.selectedMemberId, required this.onSelect});
+
+  @override
+  double get minExtent => 52;
+  @override
+  double get maxExtent => 52;
+
+  @override
+  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
+    return Container(
+      color: AppColors.backgroundLight,
+      child: SizedBox(
+        height: 52,
+        child: ListView(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: ChoiceChip(
+                label: const Text('全部'),
+                selected: selectedMemberId == null,
+                onSelected: (_) => onSelect(null),
+                labelStyle: TextStyle(color: selectedMemberId == null ? Colors.white : AppColors.textPrimary, fontWeight: FontWeight.w600),
+              ),
+            ),
+            ...members.asMap().entries.map((e) {
+              final m = e.value;
+              final selected = selectedMemberId == m.id;
+              return Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: ChoiceChip(
+                  avatar: selected ? null : CircleAvatar(backgroundColor: AppColors.getCategoryColor(e.key), child: Text(m.name[0], style: const TextStyle(color: Colors.white, fontSize: 11))),
+                  label: Text(m.name),
+                  selected: selected,
+                  onSelected: (_) => onSelect(selected ? null : m.id),
+                  labelStyle: TextStyle(color: selected ? Colors.white : AppColors.textPrimary, fontWeight: FontWeight.w600),
+                ),
+              );
+            }),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  bool shouldRebuild(covariant _MemberTabDelegate oldDelegate) {
+    return selectedMemberId != oldDelegate.selectedMemberId || members.length != oldDelegate.members.length;
+  }
+}
+
+// ===== 大类网格 =====
+
+class _GroupedCategoryGrid extends StatelessWidget {
+  final List<AssetSummaryModel> categories;
+  const _GroupedCategoryGrid({required this.categories});
+
+  @override
+  Widget build(BuildContext context) {
+    final grouped = groupCategories(categories);
+    if (grouped.isEmpty) return const SizedBox.shrink();
+
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 16),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('资产分类', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+            const SizedBox(height: 12),
+            LayoutBuilder(builder: (context, constraints) {
+              final cols = constraints.maxWidth > 400 ? 3 : 2;
+              return GridView.count(
+                crossAxisCount: cols,
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                mainAxisSpacing: 10,
+                crossAxisSpacing: 10,
+                childAspectRatio: cols == 3 ? 1.9 : 2.2,
+                children: grouped.map((g) {
+                  return GestureDetector(
+                    onTap: () => context.push('/analysis/category-group/${g.group.name}'),
+                    child: Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: g.group.color.withValues(alpha: 0.06),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: g.group.color.withValues(alpha: 0.15)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Row(children: [
+                            Icon(g.group.icon, size: 15, color: g.group.color),
+                            const SizedBox(width: 4),
+                            Expanded(child: Text(g.group.label, style: TextStyle(fontSize: 12, color: g.group.color, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis)),
+                            Text('${g.proportion.toStringAsFixed(0)}%', style: const TextStyle(fontSize: 10, color: AppColors.textSecondary)),
+                          ]),
+                          const SizedBox(height: 4),
+                          Text(FormatUtils.formatCurrency(g.totalMarketValue), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700), overflow: TextOverflow.ellipsis),
+                        ],
+                      ),
+                    ),
+                  );
+                }).toList(),
+              );
+            }),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ===== 按成员筛选的资产汇总 Provider =====
+
 final _memberSummaryProvider = FutureProvider.family<FamilyAssetOverview, String>((ref, memberId) async {
   final db = ref.watch(databaseProvider);
   final marketData = ref.watch(marketDataProvider);
@@ -398,6 +417,7 @@ final _memberSummaryProvider = FutureProvider.family<FamilyAssetOverview, String
   for (final acc in accounts) {
     final holdings = await db.getHoldingsByAccount(acc.id);
     for (final h in holdings) {
+      if (h.quantity == 0) continue;
       final type = AssetType.values.firstWhere((e) => e.name == h.assetType, orElse: () => AssetType.other);
       final market = marketData[h.assetCode];
       final price = market?.price ?? h.currentPrice;
@@ -445,83 +465,7 @@ class _CatAcc {
   int count = 0;
 }
 
-/// 负债类型分布卡片
-class _LiabilityBreakdown extends StatelessWidget {
-  final List<dynamic> liabilities;
-  const _LiabilityBreakdown({required this.liabilities});
-
-  @override
-  Widget build(BuildContext context) {
-    // 按类型聚合
-    final typeMap = <String, double>{};
-    for (final l in liabilities) {
-      final type = l.type as String;
-      final label = LiabilityType.values
-          .firstWhere((e) => e.name == type, orElse: () => LiabilityType.other)
-          .label;
-      typeMap[label] = (typeMap[label] ?? 0) + (l.remainingAmount as double);
-    }
-
-    final sorted = typeMap.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
-    final total = sorted.fold(0.0, (sum, e) => sum + e.value);
-
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 16),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                const Text('负债分布', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-                const Spacer(),
-                Text(FormatUtils.formatCurrency(total), style: const TextStyle(fontWeight: FontWeight.w600, color: AppColors.error)),
-              ],
-            ),
-            const SizedBox(height: 12),
-            // 横向比例条
-            ClipRRect(
-              borderRadius: BorderRadius.circular(4),
-              child: SizedBox(
-                height: 8,
-                child: Row(
-                  children: sorted.asMap().entries.map((e) {
-                    final ratio = total > 0 ? e.value.value / total : 0.0;
-                    return Expanded(
-                      flex: (ratio * 100).round().clamp(1, 100),
-                      child: Container(color: AppColors.getCategoryColor(e.key + 6)),
-                    );
-                  }).toList(),
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-            ...sorted.asMap().entries.map((e) {
-              final pct = total > 0 ? e.value.value / total * 100 : 0.0;
-              return Padding(
-                padding: const EdgeInsets.symmetric(vertical: 3),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 10, height: 10,
-                      decoration: BoxDecoration(color: AppColors.getCategoryColor(e.key + 6), shape: BoxShape.circle),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(child: Text(e.value.key, style: const TextStyle(fontSize: 13))),
-                    Text('${pct.toStringAsFixed(0)}%', style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
-                    const SizedBox(width: 8),
-                    Text(FormatUtils.formatCurrency(e.value.value), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-                  ],
-                ),
-              );
-            }),
-          ],
-        ),
-      ),
-    );
-  }
-}
+// ===== 通用组件 =====
 
 class _QuickStatCard extends StatelessWidget {
   final String label;
@@ -536,7 +480,7 @@ class _QuickStatCard extends StatelessWidget {
       child: GestureDetector(
         onTap: onTap,
         child: Container(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(12),
@@ -545,15 +489,13 @@ class _QuickStatCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                children: [
-                  Expanded(child: Text(label, style: TextStyle(color: AppColors.textSecondary, fontSize: 13))),
-                  if (onTap != null)
-                    Icon(Icons.chevron_right, size: 16, color: color.withValues(alpha: 0.5)),
-                ],
-              ),
+              Row(children: [
+                Expanded(child: Text(label, style: const TextStyle(color: AppColors.textSecondary, fontSize: 13))),
+                if (onTap != null) Icon(Icons.chevron_right, size: 16, color: color.withValues(alpha: 0.5)),
+              ]),
               const SizedBox(height: 4),
-              Text(value, style: TextStyle(color: color, fontSize: 18, fontWeight: FontWeight.w700)),
+              FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.centerLeft,
+                child: Text(value, style: TextStyle(color: color, fontSize: 18, fontWeight: FontWeight.w700))),
             ],
           ),
         ),
@@ -575,19 +517,17 @@ class _QuickActionCard extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.circular(12),
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
+        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(color: color.withValues(alpha: 0.2)),
         ),
-        child: Column(
-          children: [
-            Icon(icon, color: color, size: 28),
-            const SizedBox(height: 6),
-            Text(label, style: TextStyle(color: AppColors.textPrimary, fontSize: 12, fontWeight: FontWeight.w600)),
-          ],
-        ),
+        child: Column(children: [
+          Icon(icon, color: color, size: 24),
+          const SizedBox(height: 4),
+          Text(label, style: TextStyle(color: AppColors.textPrimary, fontSize: 11, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis),
+        ]),
       ),
     );
   }

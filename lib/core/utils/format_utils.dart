@@ -72,4 +72,14 @@ class FormatUtils {
     }
     return _currencyFormat.format(qty);
   }
+
+  /// 格式化数字（千分位，不带前缀）
+  static String formatNumber(double value) {
+    return _currencyFormat.format(value);
+  }
+
+  /// 格式化价格（不带前缀）
+  static String formatPrice(double value) {
+    return _currencyFormat.format(value);
+  }
 }

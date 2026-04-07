@@ -15,32 +15,29 @@ class MemberAssetBar extends ConsumerWidget {
     return membersAsync.when(
       data: (members) {
         if (members.isEmpty) return const SizedBox.shrink();
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 20),
-              child: Text('成员资产分布', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-            ),
-            const SizedBox(height: 12),
-            SizedBox(
-              height: 110,
-              child: ListView.separated(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                itemCount: members.length,
-                separatorBuilder: (_, __) => const SizedBox(width: 12),
-                itemBuilder: (context, index) {
-                  final member = members[index];
-                  return _MemberChip(
+        return Card(
+          margin: const EdgeInsets.symmetric(horizontal: 16),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('成员资产分布',
+                    style:
+                        TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+                const SizedBox(height: 14),
+                ...members.asMap().entries.map((e) {
+                  final idx = e.key;
+                  final member = e.value;
+                  return _MemberRow(
                     name: member.name,
                     memberId: member.id,
-                    color: AppColors.getCategoryColor(index),
+                    color: AppColors.getCategoryColor(idx),
                   );
-                },
-              ),
+                }),
+              ],
             ),
-          ],
+          ),
         );
       },
       loading: () => const SizedBox.shrink(),
@@ -49,12 +46,12 @@ class MemberAssetBar extends ConsumerWidget {
   }
 }
 
-class _MemberChip extends ConsumerWidget {
+class _MemberRow extends ConsumerWidget {
   final String name;
   final String memberId;
   final Color color;
 
-  const _MemberChip({
+  const _MemberRow({
     required this.name,
     required this.memberId,
     required this.color,
@@ -63,38 +60,62 @@ class _MemberChip extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final assetAsync = ref.watch(memberAssetProvider(memberId));
+    final allMembers = ref.watch(familyMembersProvider).valueOrNull ?? [];
 
-    return Container(
-      width: 110,
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: color.withValues(alpha: 0.2)),
-      ),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        mainAxisSize: MainAxisSize.min,
+    double maxAsset = 0;
+    for (final m in allMembers) {
+      final v = ref.watch(memberAssetProvider(m.id)).valueOrNull ?? 0;
+      if (v > maxAsset) maxAsset = v;
+    }
+
+    final myAsset = assetAsync.valueOrNull ?? 0;
+    final ratio = maxAsset > 0 ? myAsset / maxAsset : 0.0;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
         children: [
           CircleAvatar(
-            radius: 16,
+            radius: 14,
             backgroundColor: color.withValues(alpha: 0.2),
             child: Text(
               name.isNotEmpty ? name[0] : '?',
-              style: TextStyle(color: color, fontWeight: FontWeight.w700, fontSize: 14),
+              style: TextStyle(
+                  color: color, fontWeight: FontWeight.w700, fontSize: 12),
             ),
           ),
-          const SizedBox(height: 6),
-          Text(name, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500), overflow: TextOverflow.ellipsis),
-          const SizedBox(height: 2),
+          const SizedBox(width: 10),
+          SizedBox(
+            width: 48,
+            child: Text(name,
+                style: const TextStyle(fontSize: 13),
+                overflow: TextOverflow.ellipsis),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: LinearProgressIndicator(
+                value: ratio,
+                minHeight: 14,
+                backgroundColor: AppColors.backgroundCard,
+                valueColor: AlwaysStoppedAnimation<Color>(color),
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
           assetAsync.when(
             data: (total) => Text(
               FormatUtils.formatCurrency(total),
-              style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
-              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textPrimary),
             ),
-            loading: () => const Text('...', style: TextStyle(fontSize: 11)),
-            error: (_, _) => const Text('-', style: TextStyle(fontSize: 11)),
+            loading: () =>
+                const Text('...', style: TextStyle(fontSize: 12)),
+            error: (_, __) =>
+                const Text('-', style: TextStyle(fontSize: 12)),
           ),
         ],
       ),

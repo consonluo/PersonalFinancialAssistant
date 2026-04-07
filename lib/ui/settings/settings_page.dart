@@ -10,6 +10,11 @@ import '../../core/utils/ocr_service.dart';
 import '../../providers/current_role_provider.dart';
 import '../../providers/sync_provider.dart';
 import '../../providers/database_provider.dart';
+import '../../providers/holding_provider.dart';
+import '../../providers/account_provider.dart';
+import '../../providers/family_provider.dart';
+import '../../providers/liability_provider.dart';
+import '../../providers/investment_plan_provider.dart';
 
 class SettingsPage extends ConsumerStatefulWidget {
   const SettingsPage({super.key});
@@ -47,7 +52,10 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
 
     return Scaffold(
       appBar: AppBar(title: const Text('设置')),
-      body: ListView(
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 600),
+          child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
           if (familyName.isNotEmpty)
@@ -156,6 +164,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             ),
           ),
         ],
+      ),
+      ),
       ),
     );
   }
@@ -315,6 +325,12 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     await ref.read(syncConfigProvider.notifier).clearConfig();
     await ref.read(passwordHashProvider.notifier).clear();
     (await SharedPreferences.getInstance()).remove('family_name');
+
+    ref.invalidate(allHoldingsProvider);
+    ref.invalidate(allAccountsProvider);
+    ref.invalidate(familyMembersProvider);
+    ref.invalidate(allLiabilitiesProvider);
+    ref.invalidate(allInvestmentPlansProvider);
 
     if (context.mounted) {
       context.go('/welcome');

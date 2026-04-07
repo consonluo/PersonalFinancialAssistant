@@ -3,122 +3,389 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/format_utils.dart';
+import '../../core/utils/category_group.dart';
 import '../../providers/asset_summary_provider.dart';
+import '../../providers/analysis_dimension_provider.dart';
 
 class AnalysisPage extends ConsumerWidget {
   const AnalysisPage({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    return DefaultTabController(
+      length: 3,
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('资产分析'),
+          bottom: const TabBar(
+            tabs: [
+              Tab(text: '按分类'),
+              Tab(text: '按市场'),
+              Tab(text: '按品种'),
+            ],
+          ),
+        ),
+        body: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 960),
+            child: const TabBarView(
+              children: [
+                _CategoryTab(),
+                _MarketTab(),
+                _AssetTab(),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ======== 按分类 Tab ========
+
+class _CategoryTab extends ConsumerWidget {
+  const _CategoryTab();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
     final overview = ref.watch(assetSummaryProvider);
     final categories = overview.categories;
+    if (categories.isEmpty) return const Center(child: Text('暂无数据'));
 
-    return Scaffold(
-      appBar: AppBar(title: const Text('资产分析')),
-      body: categories.isEmpty
-          ? const Center(child: Text('暂无数据'))
-          : ListView(
+    final grouped = groupCategories(categories);
+
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        SizedBox(
+          height: 80,
+          child: ListView(
+            scrollDirection: Axis.horizontal,
+            children: [
+              _StatChip(label: '投资总额', value: FormatUtils.formatCurrency(overview.totalInvestment), color: AppColors.primary),
+              _StatChip(label: '今日收益', value: FormatUtils.formatChange(overview.todayChange), color: overview.todayChange >= 0 ? AppColors.gain : AppColors.loss),
+              _StatChip(label: '分类数', value: '${grouped.length}', color: AppColors.info),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        Card(
+          child: InkWell(
+            onTap: () => context.push('/asset-trend'),
+            borderRadius: BorderRadius.circular(16),
+            child: Padding(
               padding: const EdgeInsets.all(16),
-              children: [
-                // 汇总统计
-                SizedBox(
-                  height: 80,
-                  child: ListView(
-                    scrollDirection: Axis.horizontal,
-                    children: [
-                      _StatChip(label: '投资总额', value: FormatUtils.formatCurrency(overview.totalInvestment), color: AppColors.primary),
-                      _StatChip(label: '今日收益', value: FormatUtils.formatChange(overview.todayChange), color: overview.todayChange >= 0 ? AppColors.gain : AppColors.loss),
-                      _StatChip(label: '分类数', value: '${categories.length}', color: AppColors.info),
-                    ],
+              child: Row(
+                children: [
+                  Container(
+                    width: 40, height: 40,
+                    decoration: BoxDecoration(
+                      color: AppColors.success.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(Icons.show_chart, color: AppColors.success),
                   ),
-                ),
-                const SizedBox(height: 12),
-                // 资产走势入口
-                Card(
-                  child: InkWell(
-                    onTap: () => context.push('/asset-trend'),
-                    borderRadius: BorderRadius.circular(16),
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Row(
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('资产走势图', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
+                        Text('查看资产历史变化趋势', style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+                      ],
+                    ),
+                  ),
+                  const Icon(Icons.chevron_right, color: AppColors.textHint),
+                ],
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        ...grouped.map((g) {
+          return Card(
+            margin: const EdgeInsets.only(bottom: 8),
+            child: InkWell(
+              onTap: () => context.push('/analysis/category-group/${g.group.name}'),
+              borderRadius: BorderRadius.circular(16),
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 36, height: 36,
+                      decoration: BoxDecoration(
+                        color: g.group.color.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Icon(g.group.icon, size: 20, color: g.group.color),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Container(
-                            width: 40, height: 40,
-                            decoration: BoxDecoration(
-                              color: AppColors.success.withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: const Icon(Icons.show_chart, color: AppColors.success),
+                          Text(g.group.label, style: const TextStyle(fontWeight: FontWeight.w600)),
+                          const SizedBox(height: 4),
+                          LinearProgressIndicator(
+                            value: g.proportion / 100,
+                            backgroundColor: AppColors.backgroundCard,
+                            color: g.group.color,
                           ),
-                          const SizedBox(width: 12),
-                          const Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text('资产走势图', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
-                                Text('查看资产历史变化趋势', style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
-                              ],
-                            ),
-                          ),
-                          const Icon(Icons.chevron_right, color: AppColors.textHint),
+                          const SizedBox(height: 4),
+                          Text('${g.holdingCount}只  占比 ${g.proportion.toStringAsFixed(1)}%',
+                            style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
                         ],
                       ),
                     ),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                ...categories.asMap().entries.map((e) {
-                  final i = e.key;
-                  final c = e.value;
-                  return Card(
-                    margin: const EdgeInsets.only(bottom: 8),
-                    child: InkWell(
-                      onTap: () => context.push('/analysis/category/${c.assetType.name}'),
-                      borderRadius: BorderRadius.circular(16),
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Row(
-                          children: [
-                            Container(
-                              width: 12, height: 12,
-                              decoration: BoxDecoration(color: AppColors.getCategoryColor(i), shape: BoxShape.circle),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(c.categoryName, style: const TextStyle(fontWeight: FontWeight.w600)),
-                                  const SizedBox(height: 4),
-                                  LinearProgressIndicator(
-                                    value: c.proportion / 100,
-                                    backgroundColor: AppColors.backgroundCard,
-                                    color: AppColors.getCategoryColor(i),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text('${c.holdingCount}只  占比 ${c.proportion.toStringAsFixed(1)}%',
-                                    style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.end,
-                              children: [
-                                Text(FormatUtils.formatCurrency(c.totalMarketValue),
-                                  style: const TextStyle(fontWeight: FontWeight.w600)),
-                                Text(FormatUtils.formatPercent(c.profitLossPercent),
-                                  style: TextStyle(fontSize: 12, color: c.profitLoss >= 0 ? AppColors.gain : AppColors.loss)),
-                              ],
-                            ),
-                          ],
+                    const SizedBox(width: 12),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(FormatUtils.formatCurrency(g.totalMarketValue),
+                          style: const TextStyle(fontWeight: FontWeight.w600)),
+                        Text(
+                          FormatUtils.formatChange(g.profitLoss),
+                          style: TextStyle(fontSize: 12, color: g.profitLoss >= 0 ? AppColors.gain : AppColors.loss),
                         ),
-                      ),
+                      ],
                     ),
-                  );
-                }),
-              ],
+                  ],
+                ),
+              ),
             ),
+          );
+        }),
+      ],
+    );
+  }
+}
+
+// ======== 按市场 Tab ========
+
+class _MarketTab extends ConsumerWidget {
+  const _MarketTab();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final marketGroups = ref.watch(marketGroupProvider);
+    if (marketGroups.isEmpty) return const Center(child: Text('暂无数据'));
+
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: marketGroups.length,
+      itemBuilder: (context, index) {
+        return _MarketGroupTile(group: marketGroups[index]);
+      },
+    );
+  }
+}
+
+class _MarketGroupTile extends StatefulWidget {
+  final MarketGroupData group;
+  const _MarketGroupTile({required this.group});
+
+  @override
+  State<_MarketGroupTile> createState() => _MarketGroupTileState();
+}
+
+class _MarketGroupTileState extends State<_MarketGroupTile> {
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final g = widget.group;
+    return Card(
+      margin: const EdgeInsets.only(bottom: 10),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        children: [
+          InkWell(
+            onTap: () => setState(() => _expanded = !_expanded),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(g.market.label, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
+                        const SizedBox(height: 4),
+                        Text('${g.holdingCount}只  占比 ${g.proportion.toStringAsFixed(1)}%',
+                            style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+                      ],
+                    ),
+                  ),
+                  Text(FormatUtils.formatCurrency(g.totalMarketValue),
+                      style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+                  const SizedBox(width: 4),
+                  AnimatedRotation(
+                    turns: _expanded ? 0.5 : 0,
+                    duration: const Duration(milliseconds: 200),
+                    child: const Icon(Icons.expand_more, color: AppColors.textHint),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          AnimatedCrossFade(
+            firstChild: const SizedBox.shrink(),
+            secondChild: Column(
+              children: g.holdings.map((h) => ListTile(
+                dense: true,
+                title: Text(h.assetName, style: const TextStyle(fontSize: 13)),
+                subtitle: Text(h.assetCode, style: const TextStyle(fontSize: 11, color: AppColors.textHint)),
+                trailing: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(FormatUtils.formatCurrency(h.marketValue), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                    Text(
+                      FormatUtils.formatPercent(h.pnlPercent),
+                      style: TextStyle(fontSize: 11, color: h.pnl >= 0 ? AppColors.gain : AppColors.loss),
+                    ),
+                  ],
+                ),
+              )).toList(),
+            ),
+            crossFadeState: _expanded ? CrossFadeState.showSecond : CrossFadeState.showFirst,
+            duration: const Duration(milliseconds: 200),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ======== 按品种 Tab ========
+
+class _AssetTab extends ConsumerWidget {
+  const _AssetTab();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final groups = ref.watch(assetTypeGroupProvider);
+    if (groups.isEmpty) return const Center(child: Text('暂无数据'));
+
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: groups.length,
+      itemBuilder: (context, index) => _AssetTypeGroupTile(group: groups[index]),
+    );
+  }
+}
+
+class _AssetTypeGroupTile extends StatefulWidget {
+  final AssetTypeGroupData group;
+  const _AssetTypeGroupTile({required this.group});
+
+  @override
+  State<_AssetTypeGroupTile> createState() => _AssetTypeGroupTileState();
+}
+
+class _AssetTypeGroupTileState extends State<_AssetTypeGroupTile> {
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final g = widget.group;
+    final pnlColor = g.totalPnl >= 0 ? AppColors.gain : AppColors.loss;
+    return Card(
+      margin: const EdgeInsets.only(bottom: 10),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        children: [
+          InkWell(
+            onTap: () => setState(() => _expanded = !_expanded),
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Row(
+                children: [
+                  Expanded(child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(g.assetType.label, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
+                      const SizedBox(height: 4),
+                      Text('${g.holdingCount}只  占比 ${g.proportion.toStringAsFixed(1)}%',
+                          style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+                    ],
+                  )),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(FormatUtils.formatCurrency(g.totalMarketValue),
+                          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+                      Text(FormatUtils.formatChange(g.totalPnl),
+                          style: TextStyle(fontSize: 12, color: pnlColor)),
+                    ],
+                  ),
+                  const SizedBox(width: 4),
+                  AnimatedRotation(
+                    turns: _expanded ? 0.5 : 0,
+                    duration: const Duration(milliseconds: 200),
+                    child: const Icon(Icons.expand_more, color: AppColors.textHint),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          AnimatedCrossFade(
+            firstChild: const SizedBox.shrink(),
+            secondChild: Column(children: g.items.map((a) {
+              final itemPnlColor = a.totalPnl >= 0 ? AppColors.gain : AppColors.loss;
+              return Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                child: Row(
+                  children: [
+                    Expanded(child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(a.assetName, style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13)),
+                        Text('${a.assetCode}  数量 ${FormatUtils.formatQuantity(a.totalQuantity)}',
+                            style: const TextStyle(fontSize: 11, color: AppColors.textHint)),
+                      ],
+                    )),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(FormatUtils.formatCurrency(a.totalMarketValue),
+                            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                        Text(FormatUtils.formatPercent(a.pnlPercent),
+                            style: TextStyle(fontSize: 11, color: itemPnlColor)),
+                      ],
+                    ),
+                  ],
+                ),
+              );
+            }).toList()),
+            crossFadeState: _expanded ? CrossFadeState.showSecond : CrossFadeState.showFirst,
+            duration: const Duration(milliseconds: 200),
+          ),
+          if (_expanded) const SizedBox(height: 8),
+        ],
+      ),
+    );
+  }
+}
+
+class _InfoCell extends StatelessWidget {
+  final String label;
+  final String value;
+  final Color? color;
+  const _InfoCell({required this.label, required this.value, this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Column(
+        children: [
+          Text(label, style: const TextStyle(fontSize: 11, color: AppColors.textSecondary)),
+          const SizedBox(height: 2),
+          Text(value, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: color)),
+        ],
+      ),
     );
   }
 }

@@ -16,6 +16,7 @@ import '../../ui/holdings/holding_form_page.dart';
 import '../../ui/holdings/ocr_import_page.dart';
 import '../../ui/analysis/analysis_page.dart';
 import '../../ui/analysis/category_detail_page.dart';
+import '../../ui/analysis/category_group_detail_page.dart';
 import '../../ui/analysis/asset_trend_page.dart';
 import '../../ui/liabilities/liability_list_page.dart';
 import '../../ui/liabilities/liability_form_page.dart';
@@ -68,6 +69,10 @@ final GoRouter appRouter = GoRouter(
             GoRoute(
               path: 'category/:type',
               builder: (context, state) => CategoryDetailPage(categoryType: state.pathParameters['type']!),
+            ),
+            GoRoute(
+              path: 'category-group/:group',
+              builder: (context, state) => CategoryGroupDetailPage(groupName: state.pathParameters['group']!),
             ),
           ],
         ),
@@ -198,9 +203,12 @@ final GoRouter appRouter = GoRouter(
 );
 
 /// 主界面外壳（4 Tab：首页、账户、分析、设置）
+/// 宽屏 (>=800) 使用左侧 NavigationRail，窄屏使用底部 NavigationBar
 class MainShell extends StatelessWidget {
   final Widget child;
   const MainShell({super.key, required this.child});
+
+  static const _paths = ['/dashboard', '/accounts', '/analysis', '/settings'];
 
   int _calculateSelectedIndex(BuildContext context) {
     final location = GoRouterState.of(context).uri.path;
@@ -211,45 +219,90 @@ class MainShell extends StatelessWidget {
     return 0;
   }
 
+  void _onSelect(BuildContext context, int index) {
+    context.go(_paths[index]);
+  }
+
   @override
   Widget build(BuildContext context) {
     final selectedIndex = _calculateSelectedIndex(context);
 
-    return Scaffold(
-      body: child,
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: selectedIndex,
-        onDestinationSelected: (index) {
-          switch (index) {
-            case 0: context.go('/dashboard');
-            case 1: context.go('/accounts');
-            case 2: context.go('/analysis');
-            case 3: context.go('/settings');
-          }
-        },
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.dashboard_outlined),
-            selectedIcon: Icon(Icons.dashboard),
-            label: '总览',
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isWide = constraints.maxWidth >= 800;
+
+        if (isWide) {
+          return Scaffold(
+            body: Row(
+              children: [
+                NavigationRail(
+                  selectedIndex: selectedIndex,
+                  onDestinationSelected: (i) => _onSelect(context, i),
+                  labelType: NavigationRailLabelType.all,
+                  leading: const Padding(
+                    padding: EdgeInsets.only(top: 8, bottom: 16),
+                    child: Icon(Icons.account_balance_wallet, size: 28),
+                  ),
+                  destinations: const [
+                    NavigationRailDestination(
+                      icon: Icon(Icons.dashboard_outlined),
+                      selectedIcon: Icon(Icons.dashboard),
+                      label: Text('总览'),
+                    ),
+                    NavigationRailDestination(
+                      icon: Icon(Icons.account_balance_outlined),
+                      selectedIcon: Icon(Icons.account_balance),
+                      label: Text('账户'),
+                    ),
+                    NavigationRailDestination(
+                      icon: Icon(Icons.analytics_outlined),
+                      selectedIcon: Icon(Icons.analytics),
+                      label: Text('分析'),
+                    ),
+                    NavigationRailDestination(
+                      icon: Icon(Icons.settings_outlined),
+                      selectedIcon: Icon(Icons.settings),
+                      label: Text('设置'),
+                    ),
+                  ],
+                ),
+                const VerticalDivider(thickness: 1, width: 1),
+                Expanded(child: child),
+              ],
+            ),
+          );
+        }
+
+        return Scaffold(
+          body: child,
+          bottomNavigationBar: NavigationBar(
+            selectedIndex: selectedIndex,
+            onDestinationSelected: (i) => _onSelect(context, i),
+            destinations: const [
+              NavigationDestination(
+                icon: Icon(Icons.dashboard_outlined),
+                selectedIcon: Icon(Icons.dashboard),
+                label: '总览',
+              ),
+              NavigationDestination(
+                icon: Icon(Icons.account_balance_outlined),
+                selectedIcon: Icon(Icons.account_balance),
+                label: '账户',
+              ),
+              NavigationDestination(
+                icon: Icon(Icons.analytics_outlined),
+                selectedIcon: Icon(Icons.analytics),
+                label: '分析',
+              ),
+              NavigationDestination(
+                icon: Icon(Icons.settings_outlined),
+                selectedIcon: Icon(Icons.settings),
+                label: '设置',
+              ),
+            ],
           ),
-          NavigationDestination(
-            icon: Icon(Icons.account_balance_outlined),
-            selectedIcon: Icon(Icons.account_balance),
-            label: '账户',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.analytics_outlined),
-            selectedIcon: Icon(Icons.analytics),
-            label: '分析',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.settings_outlined),
-            selectedIcon: Icon(Icons.settings),
-            label: '设置',
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 }

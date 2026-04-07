@@ -4,17 +4,8 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/format_utils.dart';
-import '../../core/utils/snapshot_service.dart';
 import '../../data/database/app_database.dart';
-import '../../providers/database_provider.dart';
-
-/// 快照数据 Provider
-final snapshotListProvider = FutureProvider<List<AssetSnapshot>>((ref) async {
-  final db = ref.watch(databaseProvider);
-  // 先尝试记录今日快照
-  await SnapshotService(db).takeSnapshotIfNeeded();
-  return db.getAllSnapshots();
-});
+import '../../providers/snapshot_provider.dart';
 
 class AssetTrendPage extends ConsumerStatefulWidget {
   const AssetTrendPage({super.key});
