@@ -37,11 +37,17 @@ class _WelcomePageState extends ConsumerState<WelcomePage> {
     final roleId = prefs.getString('current_role_id');
 
     if (familyId != null && familyId.isNotEmpty) {
-      // 已有登录记录，检查数据库是否有数据
       final db = ref.read(databaseProvider);
-      final members = await db.getAllMembers();
+
+      // Web 端数据库初始化可能稍慢，最多等 3 秒
+      List members = [];
+      for (int i = 0; i < 6; i++) {
+        members = await db.getAllMembers();
+        if (members.isNotEmpty) break;
+        await Future.delayed(const Duration(milliseconds: 500));
+      }
+
       if (members.isNotEmpty) {
-        // 恢复状态
         ref.read(familyNameProvider.notifier).state =
             prefs.getString('family_name') ?? '我的家庭';
         ref.read(isDemoModeProvider.notifier).state = false;

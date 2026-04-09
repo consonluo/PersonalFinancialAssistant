@@ -228,6 +228,13 @@ class _LoginFamilyPageState extends ConsumerState<LoginFamilyPage> {
       ref.read(isDemoModeProvider.notifier).state = false;
       (await SharedPreferences.getInstance()).setString('family_name', familyName);
 
+      // 自动选择第一个成员作为当前角色（确保自动登录可用）
+      final db = ref.read(databaseProvider);
+      final members = await db.getAllMembers();
+      if (members.isNotEmpty) {
+        await ref.read(currentRoleProvider.notifier).setRole(members.first.id);
+      }
+
       if (mounted) context.go('/dashboard');
     } catch (e) {
       setState(() { _isLoading = false; _error = '登录失败: $e'; });
@@ -263,6 +270,12 @@ class _LoginFamilyPageState extends ConsumerState<LoginFamilyPage> {
       final familyName = data['familyName'] as String? ?? '我的家庭';
       ref.read(familyNameProvider.notifier).state = familyName;
       ref.read(isDemoModeProvider.notifier).state = false;
+
+      // 自动选择第一个成员
+      final members = await db.getAllMembers();
+      if (members.isNotEmpty) {
+        await ref.read(currentRoleProvider.notifier).setRole(members.first.id);
+      }
 
       if (mounted) context.go('/dashboard');
     } catch (e) {
