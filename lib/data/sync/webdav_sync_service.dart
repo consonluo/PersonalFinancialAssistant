@@ -1,43 +1,39 @@
 import 'dart:convert';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:webdav_client/webdav_client.dart' as webdav;
 import '../../core/constants/app_constants.dart';
 import '../../core/utils/crypto_utils.dart';
 import '../database/app_database.dart';
 import 'data_serializer.dart';
 
-// Web 端获取当前页面 origin
-String _getWebOrigin() {
-  if (kIsWeb) {
-    // 在 Web 端通过 Uri.base 获取当前页面的 origin
-    final base = Uri.base;
-    return '${base.scheme}://${base.host}${base.hasPort ? ':${base.port}' : ''}';
-  }
-  return '';
-}
-
-/// WebDAV 同步服务（使用预设配置，按家庭ID分目录，加密存储）
-/// Web 端通过同源 CORS 代理 /webdav-proxy/ 中转请求
+/// WebDAV 同步服务
+/// - 原生端：使用 webdav_client 完整 WebDAV 协议
+/// - Web 端：通过 CORS 代理用简单 HTTP GET/PUT 直接读写文件（避免 PROPFIND 等复杂方法）
 class WebDavSyncService {
   final AppDatabase db;
   final String familyId;
-  late final webdav.Client _client;
 
-  /// Web 端使用代理地址以绕过 CORS 限制
-  static String get _effectiveUrl {
-    if (kIsWeb) {
-      return '${_getWebOrigin()}/webdav-proxy/';
-    }
-    return AppConstants.webdavUrl;
+  // 原生端使用的 webdav_client
+  webdav.Client? _client;
+
+  // Web 端使用的 Dio
+  static final Dio _dio = Dio(BaseOptions(
+    connectTimeout: const Duration(seconds: 30),
+    receiveTimeout: const Duration(seconds: 30),
+  ));
+
+  /// Web 端代理 base URL
+  static String get _webProxyBase {
+    final base = Uri.base;
+    return '${base.scheme}://${base.host}${base.hasPort ? ':${base.port}' : ''}/webdav-proxy';
   }
 
-  WebDavSyncService({required this.db, required this.familyId}) {
-    _client = webdav.newClient(
-      _effectiveUrl,
-      user: AppConstants.webdavUser,
-      password: AppConstants.webdavPass,
-    );
-    _client.setHeaders({'accept-charset': 'utf-8'});
+  /// Web 端 Basic Auth header
+  static String get _webAuthHeader {
+    final credentials = base64Encode(
+        utf8.encode('${AppConstants.webdavUser}:${AppConstants.webdavPass}'));
+    return 'Basic $credentials';
   }
 
   /// 家庭专属远程目录
@@ -46,30 +42,101 @@ class WebDavSyncService {
   /// 远程数据文件路径
   String get _remoteFilePath => '${_familyDir}data.json';
 
-  /// 远程元信息文件路径（存储密码哈希、家庭名称等）
+  /// 远程元信息文件路径
   String get _remoteMetaPath => '${_familyDir}meta.json';
 
-  /// 测试连接
-  Future<bool> testConnection() async {
+  WebDavSyncService({required this.db, required this.familyId}) {
+    if (!kIsWeb) {
+      _client = webdav.newClient(
+        AppConstants.webdavUrl,
+        user: AppConstants.webdavUser,
+        password: AppConstants.webdavPass,
+      );
+      _client!.setHeaders({'accept-charset': 'utf-8'});
+    }
+  }
+
+  // ===== Web 端简单 HTTP 方法 =====
+
+  Future<List<int>?> _webRead(String remotePath) async {
     try {
-      await _client.ping();
+      final url = '$_webProxyBase$remotePath';
+      debugPrint('[WebDAV-Web] GET $url');
+      final resp = await _dio.get<List<int>>(url,
+          options: Options(
+            headers: {'Authorization': _webAuthHeader},
+            responseType: ResponseType.bytes,
+          ));
+      if (resp.statusCode == 200) return resp.data;
+      debugPrint('[WebDAV-Web] GET failed: ${resp.statusCode}');
+      return null;
+    } catch (e) {
+      debugPrint('[WebDAV-Web] GET error: $e');
+      return null;
+    }
+  }
+
+  Future<bool> _webWrite(String remotePath, List<int> data) async {
+    try {
+      final url = '$_webProxyBase$remotePath';
+      debugPrint('[WebDAV-Web] PUT $url (${data.length} bytes)');
+      final resp = await _dio.put(url,
+          data: Stream.fromIterable([data]),
+          options: Options(
+            headers: {
+              'Authorization': _webAuthHeader,
+              'Content-Type': 'application/octet-stream',
+              'Content-Length': data.length,
+            },
+          ));
+      final ok = resp.statusCode == 200 ||
+          resp.statusCode == 201 ||
+          resp.statusCode == 204;
+      if (!ok) debugPrint('[WebDAV-Web] PUT failed: ${resp.statusCode}');
+      return ok;
+    } catch (e) {
+      debugPrint('[WebDAV-Web] PUT error: $e');
+      return false;
+    }
+  }
+
+  Future<void> _webMkdir(String remotePath) async {
+    try {
+      final url = '$_webProxyBase$remotePath';
+      final resp = await _dio.request(url,
+          options: Options(
+            method: 'MKCOL',
+            headers: {'Authorization': _webAuthHeader},
+          ));
+      debugPrint('[WebDAV-Web] MKCOL $remotePath -> ${resp.statusCode}');
+    } catch (_) {}
+  }
+
+  // ===== 公共接口 =====
+
+  Future<bool> testConnection() async {
+    if (kIsWeb) {
+      final bytes = await _webRead(AppConstants.webdavBaseDir);
+      return bytes != null;
+    }
+    try {
+      await _client!.ping();
       return true;
     } catch (_) {
       return false;
     }
   }
 
-  /// 确保远程目录结构存在
   Future<void> _ensureDirs() async {
-    try {
-      await _client.mkdir(AppConstants.webdavBaseDir);
-    } catch (_) {}
-    try {
-      await _client.mkdir(_familyDir);
-    } catch (_) {}
+    if (kIsWeb) {
+      await _webMkdir(AppConstants.webdavBaseDir);
+      await _webMkdir(_familyDir);
+      return;
+    }
+    try { await _client!.mkdir(AppConstants.webdavBaseDir); } catch (_) {}
+    try { await _client!.mkdir(_familyDir); } catch (_) {}
   }
 
-  /// 上传元信息（密码哈希、家庭名称）
   Future<void> uploadMeta({
     required String familyName,
     required String passwordHash,
@@ -82,42 +149,62 @@ class WebDavSyncService {
       'updatedAt': DateTime.now().toIso8601String(),
     };
     final bytes = utf8.encode(jsonEncode(meta));
-    await _client.write(_remoteMetaPath, bytes);
+    if (kIsWeb) {
+      await _webWrite(_remoteMetaPath, bytes);
+      return;
+    }
+    await _client!.write(_remoteMetaPath, bytes);
   }
 
-  /// 下载元信息
   Future<Map<String, dynamic>?> downloadMeta() async {
     try {
-      final bytes = await _client.read(_remoteMetaPath);
+      List<int> bytes;
+      if (kIsWeb) {
+        final result = await _webRead(_remoteMetaPath);
+        if (result == null) return null;
+        bytes = result;
+      } else {
+        bytes = await _client!.read(_remoteMetaPath);
+      }
       return jsonDecode(utf8.decode(bytes)) as Map<String, dynamic>;
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[WebDAV] downloadMeta error: $e');
       return null;
     }
   }
 
-  /// 上传数据到 WebDAV（加密）
   Future<void> upload(String familyName) async {
     await _ensureDirs();
     final serializer = DataSerializer(db);
     final jsonStr = await serializer.exportToJsonString(familyName);
     final encrypted = CryptoUtils.encryptData(jsonStr, familyId);
     final bytes = utf8.encode(encrypted);
-    await _client.write(_remoteFilePath, bytes);
+    if (kIsWeb) {
+      await _webWrite(_remoteFilePath, bytes);
+      return;
+    }
+    await _client!.write(_remoteFilePath, bytes);
   }
 
-  /// 从 WebDAV 下载并解密数据
   Future<Map<String, dynamic>?> download() async {
     try {
-      final bytes = await _client.read(_remoteFilePath);
+      List<int> bytes;
+      if (kIsWeb) {
+        final result = await _webRead(_remoteFilePath);
+        if (result == null) return null;
+        bytes = result;
+      } else {
+        bytes = await _client!.read(_remoteFilePath);
+      }
       final encrypted = utf8.decode(bytes);
       final jsonStr = CryptoUtils.decryptData(encrypted, familyId);
       return jsonDecode(jsonStr) as Map<String, dynamic>;
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[WebDAV] download error: $e');
       return null;
     }
   }
 
-  /// 同步上传（数据+元信息）
   Future<void> syncUp(String familyName, {String? passwordHash}) async {
     await upload(familyName);
     if (passwordHash != null && passwordHash.isNotEmpty) {
@@ -129,7 +216,6 @@ class WebDavSyncService {
     }
   }
 
-  /// 同步下载并导入
   Future<bool> syncDown() async {
     final data = await download();
     if (data == null) return false;
@@ -138,10 +224,13 @@ class WebDavSyncService {
     return true;
   }
 
-  /// 检查远程是否存在该家庭的数据
   Future<bool> exists() async {
+    if (kIsWeb) {
+      final bytes = await _webRead(_remoteFilePath);
+      return bytes != null;
+    }
     try {
-      final files = await _client.readDir(_familyDir);
+      final files = await _client!.readDir(_familyDir);
       return files.any((f) => f.name == 'data.json');
     } catch (_) {
       return false;
