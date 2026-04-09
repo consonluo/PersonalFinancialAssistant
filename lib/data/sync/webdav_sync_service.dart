@@ -6,6 +6,16 @@ import '../../core/utils/crypto_utils.dart';
 import '../database/app_database.dart';
 import 'data_serializer.dart';
 
+// Web 端获取当前页面 origin
+String _getWebOrigin() {
+  if (kIsWeb) {
+    // 在 Web 端通过 Uri.base 获取当前页面的 origin
+    final base = Uri.base;
+    return '${base.scheme}://${base.host}${base.hasPort ? ':${base.port}' : ''}';
+  }
+  return '';
+}
+
 /// WebDAV 同步服务（使用预设配置，按家庭ID分目录，加密存储）
 /// Web 端通过同源 CORS 代理 /webdav-proxy/ 中转请求
 class WebDavSyncService {
@@ -16,7 +26,7 @@ class WebDavSyncService {
   /// Web 端使用代理地址以绕过 CORS 限制
   static String get _effectiveUrl {
     if (kIsWeb) {
-      return '/webdav-proxy/';
+      return '${_getWebOrigin()}/webdav-proxy/';
     }
     return AppConstants.webdavUrl;
   }
