@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:webdav_client/webdav_client.dart' as webdav;
 import '../../core/constants/app_constants.dart';
 import '../../core/utils/crypto_utils.dart';
@@ -6,14 +7,23 @@ import '../database/app_database.dart';
 import 'data_serializer.dart';
 
 /// WebDAV 同步服务（使用预设配置，按家庭ID分目录，加密存储）
+/// Web 端通过同源 CORS 代理 /webdav-proxy/ 中转请求
 class WebDavSyncService {
   final AppDatabase db;
   final String familyId;
   late final webdav.Client _client;
 
+  /// Web 端使用代理地址以绕过 CORS 限制
+  static String get _effectiveUrl {
+    if (kIsWeb) {
+      return '/webdav-proxy/';
+    }
+    return AppConstants.webdavUrl;
+  }
+
   WebDavSyncService({required this.db, required this.familyId}) {
     _client = webdav.newClient(
-      AppConstants.webdavUrl,
+      _effectiveUrl,
       user: AppConstants.webdavUser,
       password: AppConstants.webdavPass,
     );
@@ -100,15 +110,11 @@ class WebDavSyncService {
   /// 同步上传（数据+元信息）
   Future<void> syncUp(String familyName, {String? passwordHash}) async {
     await upload(familyName);
-    // 始终确保 meta.json 存在
     if (passwordHash != null && passwordHash.isNotEmpty) {
-      // 有新密码哈希，直接上传
       await uploadMeta(familyName: familyName, passwordHash: passwordHash);
     } else {
-      // 尝试读取已有的元信息保留密码哈希
       final existingMeta = await downloadMeta();
       final existingHash = existingMeta?['passwordHash'] as String? ?? '';
-      // 无论如何都上传 meta（保证 meta.json 存在）
       await uploadMeta(familyName: familyName, passwordHash: existingHash);
     }
   }

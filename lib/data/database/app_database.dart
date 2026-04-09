@@ -12,6 +12,8 @@ import 'tables/asset_snapshots.dart';
 
 part 'app_database.g.dart';
 
+// Web 端 Drift 数据库配置
+
 @DriftDatabase(tables: [
   FamilyMembers,
   Accounts,
@@ -180,5 +182,11 @@ class AppDatabase extends _$AppDatabase {
 }
 
 QueryExecutor _openConnection() {
-  return driftDatabase(name: 'family_finance');
+  return driftDatabase(
+    name: 'family_finance',
+    web: DriftWebOptions(
+      sqlite3Wasm: Uri.parse('sqlite3.wasm'),
+      driftWorker: Uri.parse('drift_worker.js'),
+    ),
+  );
 }

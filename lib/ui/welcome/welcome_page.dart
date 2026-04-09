@@ -23,6 +23,7 @@ class WelcomePage extends ConsumerStatefulWidget {
 
 class _WelcomePageState extends ConsumerState<WelcomePage> {
   bool _checking = true;
+  bool _loadingDemo = false;
 
   @override
   void initState() {
@@ -102,7 +103,7 @@ class _WelcomePageState extends ConsumerState<WelcomePage> {
                   const SizedBox(height: 16),
                   _ActionCard(icon: Icons.add_home_outlined, title: '新建家庭', subtitle: '创建全新的家庭资产档案', onTap: () => context.push('/create-family')),
                   const SizedBox(height: 16),
-                  _ActionCard(icon: Icons.explore_outlined, title: '游客体验', subtitle: '使用演示数据体验完整功能', outlined: true, onTap: () => _loadDemo(context)),
+                  _ActionCard(icon: Icons.explore_outlined, title: '游客体验', subtitle: _loadingDemo ? '正在加载演示数据...' : '使用演示数据体验完整功能', outlined: true, onTap: _loadingDemo ? () {} : () => _loadDemo(context)),
                   const SizedBox(height: 40),
                 ],
               ),
@@ -114,19 +115,32 @@ class _WelcomePageState extends ConsumerState<WelcomePage> {
   }
 
   Future<void> _loadDemo(BuildContext context) async {
-    final jsonStr = await rootBundle.loadString('assets/demo/demo_family.json');
-    final data = jsonDecode(jsonStr) as Map<String, dynamic>;
-    final db = ref.read(databaseProvider);
-    await DataSerializer(db).importAll(data);
-    ref.read(familyNameProvider.notifier).state = data['familyName'] as String;
-    ref.read(isDemoModeProvider.notifier).state = true;
-    // 强制刷新数据源，防止残留旧数据
-    ref.invalidate(allHoldingsProvider);
-    ref.invalidate(allAccountsProvider);
-    ref.invalidate(familyMembersProvider);
-    ref.invalidate(allLiabilitiesProvider);
-    ref.invalidate(allInvestmentPlansProvider);
-    if (context.mounted) context.go('/role-select');
+    if (_loadingDemo) return;
+    setState(() => _loadingDemo = true);
+
+    try {
+      final jsonStr = await rootBundle.loadString('assets/demo/demo_family.json');
+      final data = jsonDecode(jsonStr) as Map<String, dynamic>;
+      final db = ref.read(databaseProvider);
+      await DataSerializer(db).importAll(data);
+      ref.read(familyNameProvider.notifier).state = data['familyName'] as String;
+      ref.read(isDemoModeProvider.notifier).state = true;
+      // 强制刷新数据源，防止残留旧数据
+      ref.invalidate(allHoldingsProvider);
+      ref.invalidate(allAccountsProvider);
+      ref.invalidate(familyMembersProvider);
+      ref.invalidate(allLiabilitiesProvider);
+      ref.invalidate(allInvestmentPlansProvider);
+      if (context.mounted) context.go('/role-select');
+    } catch (e, stack) {
+      debugPrint('游客体验加载失败: $e\n$stack');
+      if (mounted) {
+        setState(() => _loadingDemo = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('加载演示数据失败: $e'), duration: const Duration(seconds: 5)),
+        );
+      }
+    }
   }
 }
 

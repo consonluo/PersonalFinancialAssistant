@@ -20,10 +20,10 @@ class AppConstants {
   static const int syncConflictTimeoutSeconds = 30;
   static const String syncRemoteDir = '/FamilyFinance/';
 
-  // 预设 WebDAV 配置（坚果云公共存储后台）
-  static const String webdavUrl = 'https://dav.jianguoyun.com/dav/';
-  static const String webdavUser = 'luo.gz@qq.com';
-  static const String webdavPass = 'a5fh7wv56g4mg6jc';
+  // 预设 WebDAV 配置（通过 --dart-define 编译时注入）
+  static const String webdavUrl = String.fromEnvironment('WEBDAV_URL', defaultValue: 'https://dav.jianguoyun.com/dav/');
+  static const String webdavUser = String.fromEnvironment('WEBDAV_USER', defaultValue: '');
+  static const String webdavPass = String.fromEnvironment('WEBDAV_PASS', defaultValue: '');
   static const String webdavBaseDir = '/FamilyFinance/';
 }
 

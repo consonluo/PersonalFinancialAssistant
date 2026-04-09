@@ -7,7 +7,7 @@ import 'package:crypto/crypto.dart';
 class CryptoUtils {
   CryptoUtils._();
 
-  static const String _salt = 'FamilyFinance2024SecretSalt';
+  static const String _salt = String.fromEnvironment('CRYPTO_SALT', defaultValue: 'FamilyFinance_DefaultSalt_ChangeMeInProd');
 
   /// 从 familyId 派生 AES-256 密钥（32字节）
   static encrypt.Key deriveKey(String familyId) {
