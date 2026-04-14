@@ -333,6 +333,15 @@ class _InstitutionTileState extends State<_InstitutionTile> {
                   )),
                   Text(FormatUtils.formatCurrency(g.totalMarketValue), style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
                   const SizedBox(width: 4),
+                  // 截图导入按钮
+                  if (g.accountIds.isNotEmpty)
+                    IconButton(
+                      icon: const Icon(Icons.camera_alt_outlined, size: 20, color: AppColors.textSecondary),
+                      tooltip: '截图导入',
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                      onPressed: () => context.push('/ocr-import?accountId=${g.accountIds.first}'),
+                    ),
                   AnimatedRotation(turns: _expanded ? 0.5 : 0, duration: const Duration(milliseconds: 200), child: const Icon(Icons.expand_more, color: AppColors.textHint)),
                 ],
               ),
@@ -398,7 +407,9 @@ class _CategorySubTileState extends State<_CategorySubTile> {
             final mv = h.quantity * h.currentPrice;
             final pnl = (h.currentPrice - h.costPrice) * h.quantity;
             final pnlPct = h.costPrice != 0 ? (h.currentPrice - h.costPrice) / h.costPrice * 100 : 0.0;
-            return Padding(
+            return InkWell(
+              onTap: () => context.push('/holding-form?id=${h.id}&accountId=${h.accountId}'),
+              child: Padding(
               padding: const EdgeInsets.only(left: 62, right: 16, bottom: 6),
               child: Row(
                 children: [
@@ -416,8 +427,11 @@ class _CategorySubTileState extends State<_CategorySubTile> {
                       Text(FormatUtils.formatPercent(pnlPct), style: TextStyle(fontSize: 11, color: pnl >= 0 ? AppColors.gain : AppColors.loss)),
                     ],
                   ),
+                  const SizedBox(width: 4),
+                  const Icon(Icons.chevron_right, size: 16, color: AppColors.textHint),
                 ],
               ),
+            ),
             );
           }),
         if (cs.holdings.isNotEmpty) const Divider(height: 1, indent: 20, endIndent: 20),

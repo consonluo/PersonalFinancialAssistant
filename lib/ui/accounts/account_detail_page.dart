@@ -8,6 +8,8 @@ import '../../providers/holding_provider.dart';
 import '../../providers/market_provider.dart';
 import '../../providers/investment_plan_provider.dart';
 import '../../providers/liability_provider.dart';
+import '../../providers/database_provider.dart';
+import '../../providers/sync_provider.dart';
 
 class AccountDetailPage extends ConsumerWidget {
   final String accountId;
@@ -69,11 +71,41 @@ class AccountDetailPage extends ConsumerWidget {
                   final pnl = (price - h.costPrice) * h.quantity;
                   final pnlPct = h.costPrice != 0 ? (price - h.costPrice) / h.costPrice * 100 : 0.0;
                   final todayChgPct = market?.changePercent ?? 0.0;
-                  final todayChgAmt = market != null ? mv * market.changePercent / 100 : 0.0;
 
-                  return Card(
+                  return Dismissible(
+                    key: ValueKey(h.id),
+                    direction: DismissDirection.endToStart,
+                    confirmDismiss: (_) async {
+                      final confirm = await showDialog<bool>(
+                        context: context,
+                        builder: (ctx) => AlertDialog(
+                          title: const Text('删除持仓'),
+                          content: Text('确定删除「${h.assetName}」？'),
+                          actions: [
+                            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
+                            TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('删除', style: TextStyle(color: AppColors.error))),
+                          ],
+                        ),
+                      );
+                      if (confirm == true) {
+                        ref.read(databaseProvider).deleteHolding(h.id);
+                        ref.read(autoSyncProvider).triggerAutoSync();
+                        return true;
+                      }
+                      return false;
+                    },
+                    background: Container(
+                      alignment: Alignment.centerRight,
+                      padding: const EdgeInsets.only(right: 20),
+                      color: AppColors.error,
+                      child: const Icon(Icons.delete, color: Colors.white),
+                    ),
+                    child: Card(
                     margin: const EdgeInsets.only(bottom: 8),
-                    child: Padding(
+                    child: InkWell(
+                      onTap: () => context.push('/holding-form?id=${h.id}&accountId=$accountId'),
+                      borderRadius: BorderRadius.circular(12),
+                      child: Padding(
                       padding: const EdgeInsets.all(14),
                       child: Column(
                         children: [
@@ -115,6 +147,8 @@ class AccountDetailPage extends ConsumerWidget {
                           ),
                         ],
                       ),
+                    ),
+                    ),
                     ),
                   );
                 }),

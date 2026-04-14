@@ -7,15 +7,8 @@ import '../../core/constants/app_constants.dart';
 import '../../core/theme/app_colors.dart';
 import '../../providers/database_provider.dart';
 import '../../providers/family_provider.dart';
+import '../../providers/sync_provider.dart';
 import '../../data/database/app_database.dart';
-
-/// 常用机构
-const _commonInstitutions = [
-  '富途证券', '华泰证券', '中信证券', '中银证券', '国泰君安', '招商证券',
-  '东方财富', '同花顺', '老虎证券', '长桥证券', '盈透证券',
-  '微众银行', '招商银行', '工商银行', '建设银行', '中国银行', '农业银行',
-  '天天基金', '蚂蚁财富', '理财通', '京东金融',
-];
 
 class AccountFormPage extends ConsumerStatefulWidget {
   final String? accountId;
@@ -30,11 +23,32 @@ class _AccountFormPageState extends ConsumerState<AccountFormPage> {
   final _institutionController = TextEditingController();
   AccountType _type = AccountType.securities;
   String? _selectedMemberId;
+  bool _isEdit = false;
+  String? _editAccountId;
 
   @override
   void initState() {
     super.initState();
     _selectedMemberId = widget.memberId;
+    if (widget.accountId != null) {
+      _isEdit = true;
+      _editAccountId = widget.accountId;
+      _loadAccount();
+    }
+  }
+
+  Future<void> _loadAccount() async {
+    final db = ref.read(databaseProvider);
+    final acc = await db.getAccountById(widget.accountId!);
+    if (acc != null && mounted) {
+      setState(() {
+        _institutionController.text = acc.institution;
+        _selectedMemberId = acc.memberId;
+        _type = AccountType.values.firstWhere(
+            (e) => e.name == acc.type,
+            orElse: () => AccountType.securities);
+      });
+    }
   }
 
   @override
@@ -42,7 +56,16 @@ class _AccountFormPageState extends ConsumerState<AccountFormPage> {
     final membersAsync = ref.watch(familyMembersProvider);
 
     return Scaffold(
-      appBar: AppBar(title: Text(widget.accountId != null ? '编辑账户' : '添加账户')),
+      appBar: AppBar(
+        title: Text(_isEdit ? '编辑账户' : '添加账户'),
+        actions: [
+          if (_isEdit)
+            IconButton(
+              icon: const Icon(Icons.delete_outline, color: AppColors.error),
+              onPressed: _deleteAccount,
+            ),
+        ],
+      ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
         child: Column(
@@ -61,45 +84,28 @@ class _AccountFormPageState extends ConsumerState<AccountFormPage> {
             ),
             const SizedBox(height: 20),
 
-            // 机构名称（唯一必填项）
+            // 机构名称
             const Text('金融机构', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
             const SizedBox(height: 4),
             Text('输入或选择券商/银行名称', style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
             const SizedBox(height: 8),
-            Autocomplete<String>(
-              optionsBuilder: (textEditingValue) {
-                if (textEditingValue.text.isEmpty) return _commonInstitutions;
-                return _commonInstitutions.where((i) => i.contains(textEditingValue.text));
-              },
-              fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
-                // 同步到 _institutionController
-                controller.addListener(() {
-                  if (_institutionController.text != controller.text) {
-                    _institutionController.text = controller.text;
-                  }
-                });
-                if (controller.text.isEmpty && _institutionController.text.isNotEmpty) {
-                  controller.text = _institutionController.text;
-                }
-                return TextField(
-                  controller: controller,
-                  focusNode: focusNode,
-                  decoration: const InputDecoration(
-                    hintText: '例如：富途证券、微众银行',
-                    prefixIcon: Icon(Icons.business, size: 20),
-                  ),
-                );
-              },
-              onSelected: (v) => _institutionController.text = v,
+            TextField(
+              controller: _institutionController,
+              decoration: const InputDecoration(
+                hintText: '例如：富途证券、微众银行',
+                prefixIcon: Icon(Icons.business, size: 20),
+              ),
             ),
             const SizedBox(height: 8),
             Wrap(
               spacing: 8,
               runSpacing: 6,
               children: ['富途证券', '微众银行', '东方财富', '天天基金', '招商银行'].map((inst) {
-                return ActionChip(
-                  label: Text(inst, style: const TextStyle(fontSize: 12)),
-                  onPressed: () => setState(() => _institutionController.text = inst),
+                final selected = _institutionController.text == inst;
+                return ChoiceChip(
+                  label: Text(inst, style: TextStyle(fontSize: 12, color: selected ? Colors.white : AppColors.textPrimary)),
+                  selected: selected,
+                  onSelected: (_) => setState(() => _institutionController.text = inst),
                   visualDensity: VisualDensity.compact,
                 );
               }).toList(),
@@ -137,19 +143,56 @@ class _AccountFormPageState extends ConsumerState<AccountFormPage> {
 
     final db = ref.read(databaseProvider);
     final now = DateTime.now();
-    // 账户名称自动生成：机构名 + 账户类型
     final accountName = '$institution ${_type.label}';
 
-    await db.insertAccount(AccountsCompanion(
-      id: Value(const Uuid().v4()),
-      memberId: Value(_selectedMemberId!),
-      name: Value(accountName),
-      type: Value(_type.name),
-      institution: Value(institution),
-      createdAt: Value(now),
-      updatedAt: Value(now),
-    ));
+    if (_isEdit && _editAccountId != null) {
+      await db.updateAccount(AccountsCompanion(
+        id: Value(_editAccountId!),
+        memberId: Value(_selectedMemberId!),
+        name: Value(accountName),
+        type: Value(_type.name),
+        institution: Value(institution),
+        createdAt: Value(now),
+        updatedAt: Value(now),
+      ));
+    } else {
+      await db.insertAccount(AccountsCompanion(
+        id: Value(const Uuid().v4()),
+        memberId: Value(_selectedMemberId!),
+        name: Value(accountName),
+        type: Value(_type.name),
+        institution: Value(institution),
+        createdAt: Value(now),
+        updatedAt: Value(now),
+      ));
+    }
+    ref.read(autoSyncProvider).triggerAutoSync();
     if (mounted) context.pop();
+  }
+
+  Future<void> _deleteAccount() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('删除账户'),
+        content: const Text('删除账户将同时删除该账户下的所有持仓数据，确定删除？'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
+          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('删除', style: TextStyle(color: AppColors.error))),
+        ],
+      ),
+    );
+    if (confirm == true && _editAccountId != null) {
+      final db = ref.read(databaseProvider);
+      // 先删除该账户下的所有持仓
+      final holdings = await db.getHoldingsByAccount(_editAccountId!);
+      for (final h in holdings) {
+        await db.deleteHolding(h.id);
+      }
+      await db.deleteAccount(_editAccountId!);
+      ref.read(autoSyncProvider).triggerAutoSync();
+      if (mounted) context.pop();
+    }
   }
 
   @override

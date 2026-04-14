@@ -12,12 +12,14 @@ class InstitutionGroup {
   final List<CategorySubGroup> categories;
   final double totalMarketValue;
   final int holdingCount;
+  final List<String> accountIds;
 
   const InstitutionGroup({
     required this.institution,
     required this.categories,
     required this.totalMarketValue,
     required this.holdingCount,
+    this.accountIds = const [],
   });
 }
 
@@ -96,11 +98,20 @@ final accountGroupByMemberProvider = Provider.family<List<InstitutionGroup>, Str
     }
     catSubs.sort((a, b) => b.totalMarketValue.compareTo(a.totalMarketValue));
 
+    // 收集该机构下的所有 accountId（去重）
+    final ids = <String>{};
+    for (final cat in catSubs) {
+      for (final hs in cat.holdings) {
+        ids.add(hs.holding.accountId);
+      }
+    }
+
     return InstitutionGroup(
       institution: instEntry.key,
       categories: catSubs,
       totalMarketValue: instTotal,
       holdingCount: instCount,
+      accountIds: ids.toList(),
     );
   }).toList()
     ..sort((a, b) => b.totalMarketValue.compareTo(a.totalMarketValue));
