@@ -218,10 +218,9 @@ class _LoginFamilyPageState extends ConsumerState<LoginFamilyPage> {
       final newHash = CryptoUtils.hashPassword(password, familyId);
       await ref.read(passwordHashProvider.notifier).setPasswordHash(newHash);
 
-      // 立即上传新的密码哈希到云端
-      try {
-        await ref.read(autoSyncProvider).syncUp();
-      } catch (_) {}
+      // 注意：不在登录后立即 syncUp 全量数据，因为 importAll 刚写入的 API Key
+      // 在某些平台（特别是 Web）可能还未刷盘，syncUp 的 exportAll 会读到空值覆盖云端数据。
+      // Dashboard 的 triggerAutoSync 会在数据稳定后自动同步。
 
       final familyName = meta['familyName'] as String? ?? '我的家庭';
       ref.read(familyNameProvider.notifier).state = familyName;

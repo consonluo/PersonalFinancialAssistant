@@ -41,7 +41,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
       try {
         SnapshotService(ref.read(databaseProvider)).takeSnapshotIfNeeded();
       } catch (_) {}
-      Future.delayed(const Duration(seconds: 5), () {
+      Future.delayed(const Duration(seconds: 10), () {
         try { ref.read(autoSyncProvider).triggerAutoSync(); } catch (_) {}
       });
     });
