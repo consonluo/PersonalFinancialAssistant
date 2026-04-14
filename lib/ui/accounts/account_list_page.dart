@@ -303,6 +303,37 @@ class _InstitutionTile extends StatefulWidget {
 class _InstitutionTileState extends State<_InstitutionTile> {
   bool _expanded = true;
 
+  Future<void> _deleteInstitution(BuildContext context) async {
+    final g = widget.group;
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('删除账户'),
+        content: Text('确定删除「${g.institution}」及其所有持仓和定投计划？\n\n共 ${g.holdingCount} 条持仓将被删除。'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
+          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('删除', style: TextStyle(color: AppColors.error))),
+        ],
+      ),
+    );
+    if (confirm != true || !context.mounted) return;
+
+    final db = ProviderScope.containerOf(context).read(databaseProvider);
+    final sync = ProviderScope.containerOf(context).read(autoSyncProvider);
+
+    for (final accountId in g.accountIds) {
+      final holdings = await db.getHoldingsByAccount(accountId);
+      for (final h in holdings) { await db.deleteHolding(h.id); }
+      final plans = await db.getInvestmentPlansByAccount(accountId);
+      for (final p in plans) { await db.deleteInvestmentPlan(p.id); }
+      await db.deleteAccount(accountId);
+    }
+    try { await sync.syncUp(); } catch (_) {}
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已删除「${g.institution}」')));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final g = widget.group;
@@ -313,6 +344,7 @@ class _InstitutionTileState extends State<_InstitutionTile> {
         children: [
           InkWell(
             onTap: () => setState(() => _expanded = !_expanded),
+            onLongPress: () => _deleteInstitution(context),
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
               child: Row(
@@ -342,6 +374,14 @@ class _InstitutionTileState extends State<_InstitutionTile> {
                       constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
                       onPressed: () => context.push('/ocr-import?accountId=${g.accountIds.first}'),
                     ),
+                  // 删除账户按钮
+                  IconButton(
+                    icon: const Icon(Icons.delete_outline, size: 20, color: AppColors.textHint),
+                    tooltip: '删除账户',
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                    onPressed: () => _deleteInstitution(context),
+                  ),
                   AnimatedRotation(turns: _expanded ? 0.5 : 0, duration: const Duration(milliseconds: 200), child: const Icon(Icons.expand_more, color: AppColors.textHint)),
                 ],
               ),

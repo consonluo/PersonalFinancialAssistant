@@ -222,7 +222,14 @@ class DataManagePage extends ConsumerWidget {
 
     final db = ref.read(databaseProvider);
     await db.clearAllData();
+
+    // 立即同步空数据到云端（确保其他端也看到删除结果）
+    try { await ref.read(autoSyncProvider).syncUp(); } catch (_) {}
+
     ref.read(familyNameProvider.notifier).state = '';
+    ref.read(isDemoModeProvider.notifier).state = false;
+    await ref.read(familyIdProvider.notifier).clearFamilyId();
+    await ref.read(currentRoleProvider.notifier).clearRole();
 
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('所有数据已清空')));

@@ -8,6 +8,7 @@ import '../../core/theme/app_colors.dart';
 import '../../providers/database_provider.dart';
 import '../../providers/family_provider.dart';
 import '../../providers/sync_provider.dart';
+import '../../providers/current_role_provider.dart';
 import '../../data/database/app_database.dart';
 
 class AccountFormPage extends ConsumerStatefulWidget {
@@ -29,7 +30,8 @@ class _AccountFormPageState extends ConsumerState<AccountFormPage> {
   @override
   void initState() {
     super.initState();
-    _selectedMemberId = widget.memberId;
+    // 默认选中当前角色对应的成员
+    _selectedMemberId = widget.memberId ?? ref.read(currentRoleProvider);
     if (widget.accountId != null) {
       _isEdit = true;
       _editAccountId = widget.accountId;
@@ -184,13 +186,19 @@ class _AccountFormPageState extends ConsumerState<AccountFormPage> {
     );
     if (confirm == true && _editAccountId != null) {
       final db = ref.read(databaseProvider);
-      // 先删除该账户下的所有持仓
+      // 删除该账户下的所有持仓
       final holdings = await db.getHoldingsByAccount(_editAccountId!);
       for (final h in holdings) {
         await db.deleteHolding(h.id);
       }
+      // 删除该账户下的所有定投计划
+      final plans = await db.getInvestmentPlansByAccount(_editAccountId!);
+      for (final p in plans) {
+        await db.deleteInvestmentPlan(p.id);
+      }
       await db.deleteAccount(_editAccountId!);
-      ref.read(autoSyncProvider).triggerAutoSync();
+      // 立即同步（不用防抖，确保删除立刻上传到云端）
+      try { await ref.read(autoSyncProvider).syncUp(); } catch (_) {}
       if (mounted) context.pop();
     }
   }
