@@ -30,12 +30,31 @@ class _AccountFormPageState extends ConsumerState<AccountFormPage> {
   @override
   void initState() {
     super.initState();
-    // 默认选中当前角色对应的成员
     _selectedMemberId = widget.memberId ?? ref.read(currentRoleProvider);
     if (widget.accountId != null) {
       _isEdit = true;
       _editAccountId = widget.accountId;
       _loadAccount();
+    }
+    // 如果 currentRole 还没加载出来，等待加载后自动选中第一个成员
+    if (_selectedMemberId == null && !_isEdit) {
+      _autoSelectMember();
+    }
+  }
+
+  Future<void> _autoSelectMember() async {
+    // 等 currentRoleProvider 异步加载
+    await Future.delayed(const Duration(milliseconds: 300));
+    if (!mounted) return;
+    final role = ref.read(currentRoleProvider);
+    if (role != null) {
+      setState(() => _selectedMemberId = role);
+      return;
+    }
+    // 如果还是没有，取成员列表第一个
+    final members = ref.read(familyMembersProvider).valueOrNull ?? [];
+    if (members.isNotEmpty) {
+      setState(() => _selectedMemberId = members.first.id);
     }
   }
 
@@ -75,12 +94,20 @@ class _AccountFormPageState extends ConsumerState<AccountFormPage> {
           children: [
             // 所属成员
             membersAsync.when(
-              data: (members) => DropdownButtonFormField<String>(
-                value: _selectedMemberId,
-                decoration: const InputDecoration(labelText: '所属成员'),
-                items: members.map((m) => DropdownMenuItem(value: m.id, child: Text(m.name))).toList(),
-                onChanged: (v) => setState(() => _selectedMemberId = v),
-              ),
+              data: (members) {
+                // 确保 value 在 items 中，否则设为 null
+                final validValue = members.any((m) => m.id == _selectedMemberId) ? _selectedMemberId : null;
+                // 如果没有有效选中且有成员，自动选第一个
+                if (validValue == null && members.isNotEmpty && _selectedMemberId == null) {
+                  Future.microtask(() => setState(() => _selectedMemberId = members.first.id));
+                }
+                return DropdownButtonFormField<String>(
+                  value: validValue,
+                  decoration: const InputDecoration(labelText: '所属成员'),
+                  items: members.map((m) => DropdownMenuItem(value: m.id, child: Text(m.name))).toList(),
+                  onChanged: (v) => setState(() => _selectedMemberId = v),
+                );
+              },
               loading: () => const LinearProgressIndicator(),
               error: (_, __) => const Text('加载成员失败'),
             ),

@@ -214,26 +214,37 @@ class _AssetTrendPageState extends ConsumerState<AssetTrendPage> {
   }
 
   Widget _buildLineChart(List<AssetSnapshot> snapshots) {
-    if (snapshots.length < 2) {
-      return const Center(child: Text('至少需要两天数据才能显示走势图', style: TextStyle(color: AppColors.textHint)));
+    if (snapshots.isEmpty) {
+      return const Center(child: Text('暂无数据', style: TextStyle(color: AppColors.textHint)));
     }
 
+    // 只有1条数据时复制一份以绘制水平线
+    final chartData = snapshots.length == 1 ? [snapshots.first, snapshots.first] : snapshots;
+
     final color = _getMetricColor();
-    final spots = snapshots.asMap().entries.map((e) {
+    final spots = chartData.asMap().entries.map((e) {
       return FlSpot(e.key.toDouble(), _getMetricValue(e.value, _selectedMetric));
     }).toList();
 
     final values = spots.map((s) => s.y).toList();
-    final minY = values.reduce((a, b) => a < b ? a : b);
-    final maxY = values.reduce((a, b) => a > b ? a : b);
-    final padding = (maxY - minY) * 0.1;
+    final rawMin = values.reduce((a, b) => a < b ? a : b);
+    final rawMax = values.reduce((a, b) => a > b ? a : b);
+    final range = rawMax - rawMin;
+    // 当所有值相同时，提供合理的上下边距避免 interval=0 报错
+    final padding = range > 0 ? range * 0.1 : (rawMax.abs() * 0.1).clamp(1.0, double.infinity);
+    final minY = rawMin - padding;
+    final maxY = rawMax + padding;
+    final hInterval = (range > 0 ? range / 4 : padding).clamp(0.01, double.infinity);
+    final bInterval = chartData.length > 1
+        ? (chartData.length / 5).ceilToDouble().clamp(1.0, double.infinity)
+        : 1.0;
 
     return LineChart(
       LineChartData(
         gridData: FlGridData(
           show: true,
           drawVerticalLine: false,
-          horizontalInterval: (maxY - minY) > 0 ? (maxY - minY) / 4 : 1,
+          horizontalInterval: hInterval,
           getDrawingHorizontalLine: (value) => FlLine(
             color: AppColors.textHint.withValues(alpha: 0.15),
             strokeWidth: 1,
@@ -244,7 +255,9 @@ class _AssetTrendPageState extends ConsumerState<AssetTrendPage> {
             sideTitles: SideTitles(
               showTitles: true,
               reservedSize: 60,
+              interval: hInterval,
               getTitlesWidget: (value, meta) {
+                if (value <= meta.min || value >= meta.max) return const SizedBox();
                 return Text(
                   FormatUtils.formatCurrency(value),
                   style: const TextStyle(fontSize: 10, color: AppColors.textHint),
@@ -255,7 +268,7 @@ class _AssetTrendPageState extends ConsumerState<AssetTrendPage> {
           bottomTitles: AxisTitles(
             sideTitles: SideTitles(
               showTitles: true,
-              interval: (snapshots.length / 5).ceilToDouble().clamp(1, double.infinity),
+              interval: bInterval,
               getTitlesWidget: (value, meta) {
                 final index = value.toInt();
                 if (index < 0 || index >= snapshots.length) return const SizedBox();
@@ -273,17 +286,17 @@ class _AssetTrendPageState extends ConsumerState<AssetTrendPage> {
           rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
         ),
         borderData: FlBorderData(show: false),
-        minY: minY - padding,
-        maxY: maxY + padding,
+        minY: minY,
+        maxY: maxY,
         lineBarsData: [
           LineChartBarData(
             spots: spots,
-            isCurved: true,
+            isCurved: chartData.length > 2,
             preventCurveOverShooting: true,
             color: color,
             barWidth: 2.5,
             dotData: FlDotData(
-              show: snapshots.length <= 30,
+              show: chartData.length <= 30,
               getDotPainter: (spot, percent, barData, index) => FlDotCirclePainter(
                 radius: 3,
                 color: Colors.white,
@@ -302,9 +315,8 @@ class _AssetTrendPageState extends ConsumerState<AssetTrendPage> {
             getTooltipItems: (touchedSpots) {
               return touchedSpots.map((spot) {
                 final index = spot.x.toInt();
-                final date = index < snapshots.length
-                    ? DateFormat('yyyy/MM/dd').format(snapshots[index].snapshotDate)
-                    : '';
+                if (index < 0 || index >= snapshots.length) return null;
+                final date = DateFormat('yyyy/MM/dd').format(snapshots[index].snapshotDate);
                 return LineTooltipItem(
                   '$date\n${FormatUtils.formatCurrency(spot.y)}',
                   TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w600),

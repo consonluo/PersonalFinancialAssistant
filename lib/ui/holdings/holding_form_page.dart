@@ -89,11 +89,43 @@ class _HoldingFormPageState extends ConsumerState<HoldingFormPage> {
               onChanged: (v) => setState(() => _assetType = v ?? AssetType.other),
             ),
             const SizedBox(height: 16),
-            TextField(controller: _qtyController, decoration: const InputDecoration(labelText: '持仓数量'), keyboardType: TextInputType.number),
+            TextField(
+              controller: _qtyController,
+              decoration: const InputDecoration(
+                labelText: '持仓数量/份额 *',
+                hintText: '如 1000',
+                helperText: '股票填股数，基金填份额',
+              ),
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            ),
             const SizedBox(height: 16),
-            TextField(controller: _costController, decoration: const InputDecoration(labelText: '成本价'), keyboardType: TextInputType.number),
+            TextField(
+              controller: _costController,
+              decoration: const InputDecoration(
+                labelText: '成本价 *',
+                hintText: '如 15.50',
+                helperText: '买入均价，用于计算盈亏',
+              ),
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            ),
             const SizedBox(height: 16),
-            TextField(controller: _priceController, decoration: const InputDecoration(labelText: '现价'), keyboardType: TextInputType.number),
+            TextField(
+              controller: _priceController,
+              decoration: InputDecoration(
+                labelText: '现价',
+                hintText: '留空则取成本价',
+                helperText: _canAutoUpdate(_assetType)
+                    ? '股票/基金会自动更新行情价格'
+                    : '理财/存款等需手动维护现价',
+                suffixIcon: _isEdit && _canAutoUpdate(_assetType)
+                    ? Tooltip(
+                        message: '自动行情更新中',
+                        child: Icon(Icons.sync, size: 18, color: Colors.green.shade400),
+                      )
+                    : null,
+              ),
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            ),
             const SizedBox(height: 32),
             SizedBox(width: double.infinity, child: ElevatedButton(onPressed: _save, child: const Text('保存'))),
           ],
@@ -102,10 +134,22 @@ class _HoldingFormPageState extends ConsumerState<HoldingFormPage> {
     );
   }
 
+  /// 是否支持自动更新行情（股票和基金类）
+  static bool _canAutoUpdate(AssetType type) {
+    return const {
+      AssetType.aStock, AssetType.hkStock, AssetType.usStock,
+      AssetType.indexETF, AssetType.qdii, AssetType.dividendFund,
+      AssetType.nasdaqETF, AssetType.bondFund, AssetType.moneyFund,
+      AssetType.mixedFund,
+    }.contains(type);
+  }
+
   Future<void> _save() async {
     final db = ref.read(databaseProvider);
     final now = DateTime.now();
     final accountId = widget.accountId ?? _existingAccountId ?? '';
+    final costPrice = double.tryParse(_costController.text) ?? 0;
+    final currentPrice = double.tryParse(_priceController.text) ?? costPrice;
 
     if (_isEdit) {
       await db.updateHolding(HoldingsCompanion(
@@ -115,8 +159,8 @@ class _HoldingFormPageState extends ConsumerState<HoldingFormPage> {
         assetName: Value(_nameController.text.trim()),
         assetType: Value(_assetType.name),
         quantity: Value(double.tryParse(_qtyController.text) ?? 0),
-        costPrice: Value(double.tryParse(_costController.text) ?? 0),
-        currentPrice: Value(double.tryParse(_priceController.text) ?? 0),
+        costPrice: Value(costPrice),
+        currentPrice: Value(currentPrice),
         updatedAt: Value(now),
       ));
     } else {
@@ -127,8 +171,8 @@ class _HoldingFormPageState extends ConsumerState<HoldingFormPage> {
         assetName: Value(_nameController.text.trim()),
         assetType: Value(_assetType.name),
         quantity: Value(double.tryParse(_qtyController.text) ?? 0),
-        costPrice: Value(double.tryParse(_costController.text) ?? 0),
-        currentPrice: Value(double.tryParse(_priceController.text) ?? 0),
+        costPrice: Value(costPrice),
+        currentPrice: Value(currentPrice),
         createdAt: Value(now),
         updatedAt: Value(now),
       ));

@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/format_utils.dart';
+import '../../../data/database/app_database.dart';
 import '../../../providers/snapshot_provider.dart';
 
 class MiniTrendChart extends ConsumerWidget {
@@ -66,15 +67,16 @@ class MiniTrendChart extends ConsumerWidget {
     );
   }
 
-  Widget _buildChart(List<dynamic> snapshots) {
+  Widget _buildChart(List<AssetSnapshot> snapshots) {
     final spots = snapshots.asMap().entries.map((e) {
-      return FlSpot(e.key.toDouble(), e.value.totalAssets as double);
+      return FlSpot(e.key.toDouble(), e.value.totalAssets);
     }).toList();
 
     final values = spots.map((s) => s.y).toList();
     final minY = values.reduce((a, b) => a < b ? a : b);
     final maxY = values.reduce((a, b) => a > b ? a : b);
-    final padding = (maxY - minY) * 0.15;
+    final range = maxY - minY;
+    final padding = range > 0 ? range * 0.15 : (maxY.abs() * 0.15).clamp(1.0, double.infinity);
 
     final isUp = spots.last.y >= spots.first.y;
     final color = isUp ? AppColors.gain : AppColors.loss;

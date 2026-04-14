@@ -61,8 +61,18 @@ final accountGroupByMemberProvider = Provider.family<List<InstitutionGroup>, Str
   final memberNameMap = {for (final m in members) m.id: m.name};
   final accountMap = {for (final a in accounts) a.id: a};
 
+  // 按机构聚合持仓
   final instCatMap = <String, Map<CategoryGroup, List<HoldingSummary>>>{};
+  // 按机构收集 accountId（包含空账户）
+  final instAccountIds = <String, Set<String>>{};
 
+  // 先把所有账户按机构注册（确保空账户也出现）
+  for (final acc in accounts) {
+    if (memberId != null && acc.memberId != memberId) continue;
+    instAccountIds.putIfAbsent(acc.institution, () => {}).add(acc.id);
+  }
+
+  // 再聚合持仓
   for (final h in allHoldings) {
     final acc = accountMap[h.accountId];
     if (acc == null) continue;
@@ -81,12 +91,17 @@ final accountGroupByMemberProvider = Provider.family<List<InstitutionGroup>, Str
     ));
   }
 
-  final groups = instCatMap.entries.map((instEntry) {
+  // 构建结果：遍历所有机构（包含无持仓的）
+  final groups = instAccountIds.entries.map((instEntry) {
+    final institution = instEntry.key;
+    final accountIds = instEntry.value.toList();
+    final catMap = instCatMap[institution] ?? {};
+
     final catSubs = <CategorySubGroup>[];
     double instTotal = 0;
     int instCount = 0;
 
-    for (final catEntry in instEntry.value.entries) {
+    for (final catEntry in catMap.entries) {
       final catMv = catEntry.value.fold(0.0, (sum, hs) => sum + hs.holding.quantity * hs.holding.currentPrice);
       catSubs.add(CategorySubGroup(
         category: catEntry.key,
@@ -98,20 +113,12 @@ final accountGroupByMemberProvider = Provider.family<List<InstitutionGroup>, Str
     }
     catSubs.sort((a, b) => b.totalMarketValue.compareTo(a.totalMarketValue));
 
-    // 收集该机构下的所有 accountId（去重）
-    final ids = <String>{};
-    for (final cat in catSubs) {
-      for (final hs in cat.holdings) {
-        ids.add(hs.holding.accountId);
-      }
-    }
-
     return InstitutionGroup(
-      institution: instEntry.key,
+      institution: institution,
       categories: catSubs,
       totalMarketValue: instTotal,
       holdingCount: instCount,
-      accountIds: ids.toList(),
+      accountIds: accountIds,
     );
   }).toList()
     ..sort((a, b) => b.totalMarketValue.compareTo(a.totalMarketValue));

@@ -376,12 +376,13 @@ class _InstitutionTileState extends State<_InstitutionTile> {
                     ),
                   // 删除账户按钮
                   IconButton(
-                    icon: const Icon(Icons.delete_outline, size: 20, color: AppColors.textHint),
-                    tooltip: '删除账户',
+                    icon: Icon(Icons.delete_outline, size: 20, color: Colors.red.shade300),
+                    tooltip: '长按或点此删除整个账户',
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
                     onPressed: () => _deleteInstitution(context),
                   ),
+                  const SizedBox(width: 2),
                   AnimatedRotation(turns: _expanded ? 0.5 : 0, duration: const Duration(milliseconds: 200), child: const Icon(Icons.expand_more, color: AppColors.textHint)),
                 ],
               ),
@@ -409,6 +410,61 @@ class _CategorySubTile extends StatefulWidget {
 
 class _CategorySubTileState extends State<_CategorySubTile> {
   bool _expanded = false;
+
+  Future<void> _showQuickPriceUpdate(BuildContext context, dynamic holding) async {
+    final controller = TextEditingController(text: holding.currentPrice.toString());
+    final newPrice = await showDialog<double>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('更新现价 · ${holding.assetName}'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('成本价: ${FormatUtils.formatCurrency(holding.costPrice)}', style: const TextStyle(fontSize: 13, color: AppColors.textSecondary)),
+            Text('当前现价: ${FormatUtils.formatCurrency(holding.currentPrice)}', style: const TextStyle(fontSize: 13, color: AppColors.textSecondary)),
+            const SizedBox(height: 12),
+            TextField(
+              controller: controller,
+              autofocus: true,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(labelText: '新现价', border: OutlineInputBorder()),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
+          ElevatedButton(
+            onPressed: () {
+              final v = double.tryParse(controller.text);
+              Navigator.pop(ctx, v);
+            },
+            child: const Text('保存'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (newPrice == null || !context.mounted) return;
+
+    final db = ProviderScope.containerOf(context).read(databaseProvider);
+    final sync = ProviderScope.containerOf(context).read(autoSyncProvider);
+    await db.updateHolding(HoldingsCompanion(
+      id: Value(holding.id as String),
+      accountId: Value(holding.accountId as String),
+      assetCode: Value(holding.assetCode as String),
+      assetName: Value(holding.assetName as String),
+      assetType: Value(holding.assetType as String),
+      quantity: Value(holding.quantity as double),
+      costPrice: Value(holding.costPrice as double),
+      currentPrice: Value(newPrice),
+      updatedAt: Value(DateTime.now()),
+    ));
+    try { await sync.syncUp(); } catch (_) {}
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${holding.assetName} 现价已更新为 ${FormatUtils.formatCurrency(newPrice)}')));
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -449,6 +505,7 @@ class _CategorySubTileState extends State<_CategorySubTile> {
             final pnlPct = h.costPrice != 0 ? (h.currentPrice - h.costPrice) / h.costPrice * 100 : 0.0;
             return InkWell(
               onTap: () => context.push('/holding-form?id=${h.id}&accountId=${h.accountId}'),
+              onLongPress: () => _showQuickPriceUpdate(context, h),
               child: Padding(
               padding: const EdgeInsets.only(left: 62, right: 16, bottom: 6),
               child: Row(

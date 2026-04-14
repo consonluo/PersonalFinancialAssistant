@@ -456,13 +456,11 @@ class _OcrImportPageState extends ConsumerState<OcrImportPage> {
     String targetAccountId = widget.accountId;
 
     if (targetAccountId.isEmpty) {
-      // 需要自动创建账户（基于机构名）
       final memberId = _selectedMemberId;
       if (memberId == null) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('请选择所属成员')));
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('请选择所属成员')));
         return;
       }
-      // 创建一个以机构命名的账户
       targetAccountId = uuid.v4();
       await db.insertAccount(AccountsCompanion(
         id: Value(targetAccountId),
@@ -475,30 +473,139 @@ class _OcrImportPageState extends ConsumerState<OcrImportPage> {
       ));
     }
 
+    // 获取该账户下的已有持仓
+    final existingHoldings = await db.getHoldingsByAccount(targetAccountId);
+
+    int updatedCount = 0;
+    int addedCount = 0;
+    final matchedExistingIds = <String>{};
+
     for (final r in results) {
-      // 优先使用 AI 识别的类型，fallback 到规则分类
       final aiType = AssetType.values.where((e) => e.name == r.assetType).firstOrNull;
       final type = aiType ?? AssetClassifier.classify(r.code, r.name);
-      await db.insertHolding(HoldingsCompanion(
-        id: Value(uuid.v4()),
-        accountId: Value(targetAccountId),
-        assetCode: Value(r.code),
-        assetName: Value(r.name),
-        assetType: Value(type.name),
-        quantity: Value(r.quantity),
-        costPrice: Value(r.costPrice),
-        currentPrice: Value(r.currentPrice),
-        createdAt: Value(now),
-        updatedAt: Value(now),
-      ));
+
+      // 尝试匹配已有持仓：优先按代码匹配，其次按名称匹配
+      final existing = existingHoldings.where((h) {
+        if (r.code != 'unknown' && r.code.isNotEmpty && h.assetCode == r.code) return true;
+        if (h.assetName == r.name) return true;
+        return false;
+      }).firstOrNull;
+
+      if (existing != null) {
+        // 更新已有持仓
+        matchedExistingIds.add(existing.id);
+        await db.updateHolding(HoldingsCompanion(
+          id: Value(existing.id),
+          accountId: Value(targetAccountId),
+          assetCode: Value(r.code != 'unknown' ? r.code : existing.assetCode),
+          assetName: Value(r.name),
+          assetType: Value(type.name),
+          quantity: Value(r.quantity),
+          costPrice: Value(r.costPrice > 0 ? r.costPrice : existing.costPrice),
+          currentPrice: Value(r.currentPrice),
+          updatedAt: Value(now),
+        ));
+        updatedCount++;
+      } else {
+        // 新增持仓
+        await db.insertHolding(HoldingsCompanion(
+          id: Value(uuid.v4()),
+          accountId: Value(targetAccountId),
+          assetCode: Value(r.code),
+          assetName: Value(r.name),
+          assetType: Value(type.name),
+          quantity: Value(r.quantity),
+          costPrice: Value(r.costPrice),
+          currentPrice: Value(r.currentPrice),
+          createdAt: Value(now),
+          updatedAt: Value(now),
+        ));
+        addedCount++;
+      }
     }
 
-    // 触发自动同步
-    ref.read(autoSyncProvider).triggerAutoSync();
+    // 检查不在新截图中的旧持仓，提示用户是否删除
+    final unmatchedHoldings = existingHoldings.where((h) => !matchedExistingIds.contains(h.id)).toList();
+    int deletedCount = 0;
 
+    if (unmatchedHoldings.isNotEmpty && mounted) {
+      final shouldDelete = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('发现未匹配的旧持仓'),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '以下 ${unmatchedHoldings.length} 条持仓在新截图中未出现，是否删除？',
+                  style: const TextStyle(fontSize: 14),
+                ),
+                const SizedBox(height: 12),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 200),
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: unmatchedHoldings.length,
+                    itemBuilder: (_, i) {
+                      final h = unmatchedHoldings[i];
+                      final mv = h.quantity * h.currentPrice;
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 3),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(h.assetName, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                                  Text(h.assetCode, style: const TextStyle(fontSize: 11, color: AppColors.textHint)),
+                                ],
+                              ),
+                            ),
+                            Text('¥${mv.toStringAsFixed(0)}', style: const TextStyle(fontSize: 13)),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('保留'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('删除', style: TextStyle(color: AppColors.error)),
+            ),
+          ],
+        ),
+      );
+
+      if (shouldDelete == true) {
+        for (final h in unmatchedHoldings) {
+          await db.deleteHolding(h.id);
+          deletedCount++;
+        }
+      }
+    }
+
+    ref.read(autoSyncProvider).triggerAutoSync();
     ref.read(ocrResultProvider.notifier).clear();
+
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('成功导入 ${results.length} 条资产到「$institution」')));
+      final parts = <String>[];
+      if (addedCount > 0) parts.add('新增$addedCount条');
+      if (updatedCount > 0) parts.add('更新$updatedCount条');
+      if (deletedCount > 0) parts.add('删除$deletedCount条');
+      final msg = parts.isEmpty ? '无变化' : parts.join('，');
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('「$institution」$msg')));
       context.pop();
     }
   }

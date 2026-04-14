@@ -71,7 +71,7 @@ class GroupedPieChart extends StatelessWidget {
           final showTitle = g.proportion >= 8;
           return PieChartSectionData(
             color: g.group.color,
-            value: g.totalMarketValue,
+            value: g.totalMarketValue.abs().clamp(0.01, double.infinity),
             title: showTitle ? '${g.proportion.toStringAsFixed(0)}%' : '',
             titleStyle: const TextStyle(
                 color: Colors.white,

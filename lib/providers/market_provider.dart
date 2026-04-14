@@ -90,6 +90,36 @@ class MarketDataNotifier extends StateNotifier<Map<String, MarketDataModel>> {
 
     // 更新数据库缓存
     _updateDbCache(results);
+
+    // 自动更新持仓表中的现价
+    _updateHoldingPrices(results);
+  }
+
+  /// 将最新行情价格写入持仓表的 currentPrice 字段
+  Future<void> _updateHoldingPrices(List<MarketDataModel> data) async {
+    if (data.isEmpty) return;
+    try {
+      final db = _ref.read(databaseProvider);
+      final holdings = _ref.read(allHoldingsProvider).valueOrNull ?? [];
+      final priceMap = {for (final d in data) d.assetCode: d.price};
+
+      for (final h in holdings) {
+        final newPrice = priceMap[h.assetCode];
+        if (newPrice != null && newPrice > 0 && newPrice != h.currentPrice) {
+          await db.updateHolding(HoldingsCompanion(
+            id: Value(h.id),
+            accountId: Value(h.accountId),
+            assetCode: Value(h.assetCode),
+            assetName: Value(h.assetName),
+            assetType: Value(h.assetType),
+            quantity: Value(h.quantity),
+            costPrice: Value(h.costPrice),
+            currentPrice: Value(newPrice),
+            updatedAt: Value(DateTime.now()),
+          ));
+        }
+      }
+    } catch (_) {}
   }
 
   Future<void> _updateDbCache(List<MarketDataModel> data) async {

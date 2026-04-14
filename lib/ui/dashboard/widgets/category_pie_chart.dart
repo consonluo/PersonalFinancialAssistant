@@ -76,7 +76,7 @@ class CategoryPieChart extends StatelessWidget {
           final showTitle = c.proportion >= 6; // 占比 < 6% 不显示文字
           return PieChartSectionData(
             color: AppColors.getCategoryColor(i),
-            value: c.totalMarketValue,
+            value: c.totalMarketValue.abs().clamp(0.01, double.infinity),
             title: showTitle ? '${c.proportion.toStringAsFixed(0)}%' : '',
             titleStyle: const TextStyle(
               color: Colors.white,
