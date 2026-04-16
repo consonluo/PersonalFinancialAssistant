@@ -329,6 +329,8 @@ class _InstitutionTileState extends State<_InstitutionTile> {
       await db.deleteAccount(accountId);
     }
     try { await sync.syncUp(); } catch (_) {}
+    ProviderScope.containerOf(context).invalidate(allAccountsProvider);
+    ProviderScope.containerOf(context).invalidate(allHoldingsProvider);
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已删除「${g.institution}」')));
     }

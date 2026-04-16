@@ -9,6 +9,7 @@ import '../../providers/database_provider.dart';
 import '../../providers/family_provider.dart';
 import '../../providers/sync_provider.dart';
 import '../../providers/current_role_provider.dart';
+import '../../providers/account_provider.dart';
 import '../../data/database/app_database.dart';
 
 class AccountFormPage extends ConsumerStatefulWidget {
@@ -196,6 +197,8 @@ class _AccountFormPageState extends ConsumerState<AccountFormPage> {
       ));
     }
     ref.read(autoSyncProvider).triggerAutoSync();
+    // 手动刷新账户列表（Web端 drift stream 可能不及时通知）
+    ref.invalidate(allAccountsProvider);
     if (mounted) context.pop();
   }
 
@@ -226,6 +229,7 @@ class _AccountFormPageState extends ConsumerState<AccountFormPage> {
       await db.deleteAccount(_editAccountId!);
       // 立即同步（不用防抖，确保删除立刻上传到云端）
       try { await ref.read(autoSyncProvider).syncUp(); } catch (_) {}
+      ref.invalidate(allAccountsProvider);
       if (mounted) context.pop();
     }
   }

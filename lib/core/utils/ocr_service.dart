@@ -69,22 +69,28 @@ class OcrService {
 你的任务是从截图中**智能识别并提取所有资产/持仓信息**，返回结构化的JSON数据。
 
 **提取规则：**
-1. 尽可能提取每条资产的：证券代码(code)、名称(name)、数量(quantity)、成本价(costPrice)、现价(currentPrice)、市值(marketValue)、资产类型(assetType)
+1. 尽可能提取每条资产的：证券代码(code)、名称(name)、数量(quantity)、成本价(costPrice)、现价(currentPrice)、市值(marketValue)、资产类型(assetType)、币种(currency)
 2. assetType 必须是以下之一：aStock(A股)、hkStock(港股)、usStock(美股)、indexETF(指数ETF)、qdii(QDII)、dividendFund(红利基金)、nasdaqETF(纳指ETF)、bondFund(债基)、moneyFund(货币基金)、mixedFund(混合基金)、wealth(银行理财)、deposit(存款)、other(其他)
-3. 如果是A股/港股/美股，提取代码和名称
-4. 如果是基金，code填基金代码(如161725)，quantity是份额，currentPrice是净值
-5. 如果是银行存款/活期，name填"活期存款"/"定期存款"等，quantity填1，currentPrice和marketValue填金额，assetType填deposit
-6. 如果是银行理财产品，name填产品名称，quantity填1，currentPrice和marketValue填当前市值/金额，assetType填wealth
-7. 如果是货币基金/零钱通/余额宝类，assetType填moneyFund
-8. 缺失的数字字段填0，缺失的代码填"unknown"
-9. 忽略广告、推荐、菜单等非资产信息
-10. 如果截图中只显示了总资产金额而没有明细，也要提取，name填"账户总资产"，marketValue填总额
+3. currency 必须是以下之一：CNY(人民币)、HKD(港币)、USD(美元)、EUR(欧元)、GBP(英镑)、JPY(日元)。根据资产类型和截图中的货币符号判断：
+   - A股、国内基金、银行理财、存款 → CNY
+   - 港股 → HKD（注意：如果截图显示的是港币金额）
+   - 美股 → USD（注意：如果截图显示的是美元金额）
+   - 如果券商已经帮用户换算成了人民币，currency 填 CNY
+   - 注意看截图中的 ¥/￥(CNY)、HK\$/港元(HKD)、\$/US\$(USD) 等货币符号
+4. 如果是A股/港股/美股，提取代码和名称
+5. 如果是基金，code填基金代码(如161725)，quantity是份额，currentPrice是净值
+6. 如果是银行存款/活期，name填"活期存款"/"定期存款"等，quantity填1，currentPrice和marketValue填金额，assetType填deposit
+7. 如果是银行理财产品，name填产品名称，quantity填1，currentPrice和marketValue填当前市值/金额，assetType填wealth
+8. 如果是货币基金/零钱通/余额宝类，assetType填moneyFund
+9. 缺失的数字字段填0，缺失的代码填"unknown"
+10. 忽略广告、推荐、菜单等非资产信息
+11. 如果截图中只显示了总资产金额而没有明细，也要提取，name填"账户总资产"，marketValue填总额
 
 **返回格式（严格JSON数组，不要markdown）：**
 [
-  {"code": "600519", "name": "贵州茅台", "quantity": 100, "costPrice": 1800.50, "currentPrice": 1950.00, "marketValue": 195000.00, "assetType": "aStock"},
-  {"code": "161725", "name": "招商中证白酒", "quantity": 5000, "costPrice": 1.20, "currentPrice": 1.35, "marketValue": 6750.00, "assetType": "mixedFund"},
-  {"code": "unknown", "name": "活期存款", "quantity": 1, "costPrice": 50000, "currentPrice": 50000, "marketValue": 50000, "assetType": "deposit"}
+  {"code": "600519", "name": "贵州茅台", "quantity": 100, "costPrice": 1800.50, "currentPrice": 1950.00, "marketValue": 195000.00, "assetType": "aStock", "currency": "CNY"},
+  {"code": "00700", "name": "腾讯控股", "quantity": 200, "costPrice": 350.00, "currentPrice": 380.50, "marketValue": 76100.00, "assetType": "hkStock", "currency": "HKD"},
+  {"code": "AAPL", "name": "苹果", "quantity": 50, "costPrice": 170.00, "currentPrice": 195.20, "marketValue": 9760.00, "assetType": "usStock", "currency": "USD"}
 ]''';
 
   // ===== 识别入口 =====

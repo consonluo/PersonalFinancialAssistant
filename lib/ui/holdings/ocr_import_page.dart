@@ -12,10 +12,13 @@ import '../../core/constants/app_constants.dart';
 import '../../core/utils/ocr_service.dart';
 import '../../core/utils/ocr_parser.dart';
 import '../../core/utils/asset_classifier.dart';
+import '../../core/utils/exchange_rate_service.dart';
 import '../../providers/database_provider.dart';
 import '../../providers/ocr_provider.dart';
 import '../../providers/sync_provider.dart';
 import '../../providers/family_provider.dart';
+import '../../providers/holding_provider.dart';
+import '../../providers/account_provider.dart';
 import '../../data/database/app_database.dart';
 
 /// 常用机构列表
@@ -298,6 +301,17 @@ class _OcrImportPageState extends ConsumerState<OcrImportPage> {
                               ),
                               child: Text(typeLabel, style: const TextStyle(fontSize: 10, color: AppColors.primary, fontWeight: FontWeight.w600)),
                             ),
+                            if (r.needsCurrencyConversion) ...[
+                              const SizedBox(width: 4),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: Colors.orange.withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(r.currency, style: TextStyle(fontSize: 10, color: Colors.orange.shade700, fontWeight: FontWeight.w600)),
+                              ),
+                            ],
                             const SizedBox(width: 10),
                             Expanded(
                               child: Column(
@@ -315,7 +329,10 @@ class _OcrImportPageState extends ConsumerState<OcrImportPage> {
                             Column(
                               crossAxisAlignment: CrossAxisAlignment.end,
                               children: [
-                                Text('¥${r.marketValue.toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+                                Text(
+                                  '${ExchangeRateService.currencySymbols[r.currency] ?? "¥"}${r.marketValue.toStringAsFixed(0)}',
+                                  style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+                                ),
                                 const Icon(Icons.edit, size: 14, color: AppColors.textHint),
                               ],
                             ),
@@ -444,8 +461,95 @@ class _OcrImportPageState extends ConsumerState<OcrImportPage> {
   }
 
   Future<void> _confirmImport() async {
-    final results = ref.read(ocrResultProvider).results;
+    var results = ref.read(ocrResultProvider).results.toList();
     if (results.isEmpty) return;
+
+    // 检查是否有需要汇率转换的持仓
+    final foreignCurrencies = results
+        .where((r) => r.needsCurrencyConversion)
+        .map((r) => r.currency)
+        .toSet();
+
+    if (foreignCurrencies.isNotEmpty && mounted) {
+      final rates = await ExchangeRateService.getRates(foreignCurrencies);
+      if (!mounted) return;
+
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('汇率转换确认'),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('以下持仓将按实时汇率转换为人民币：', style: TextStyle(fontSize: 14)),
+                const SizedBox(height: 12),
+                ...rates.entries.map((e) => Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(color: Colors.orange.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(4)),
+                        child: Text(e.key, style: TextStyle(fontWeight: FontWeight.w600, color: Colors.orange.shade700)),
+                      ),
+                      const SizedBox(width: 8),
+                      Text('1 ${ExchangeRateService.currencyNames[e.key] ?? e.key} = ¥${e.value.toStringAsFixed(4)}', style: const TextStyle(fontSize: 14)),
+                    ],
+                  ),
+                )),
+                const Divider(height: 16),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 200),
+                  child: ListView(
+                    shrinkWrap: true,
+                    children: results.where((r) => r.needsCurrencyConversion).map((r) {
+                      final rate = rates[r.currency] ?? 1.0;
+                      final symbol = ExchangeRateService.currencySymbols[r.currency] ?? '';
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 4),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(r.name, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                            Text(
+                              '现价: $symbol${r.currentPrice.toStringAsFixed(2)} → ¥${(r.currentPrice * rate).toStringAsFixed(2)}  '
+                              '市值: $symbol${r.marketValue.toStringAsFixed(0)} → ¥${(r.marketValue * rate).toStringAsFixed(0)}',
+                              style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
+                            ),
+                          ],
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('保留原币')),
+            ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('转换为人民币')),
+          ],
+        ),
+      );
+
+      if (confirmed == true) {
+        results = results.map((r) {
+          if (!r.needsCurrencyConversion) return r;
+          final rate = rates[r.currency] ?? 1.0;
+          return r.copyWith(
+            costPrice: r.costPrice * rate,
+            currentPrice: r.currentPrice * rate,
+            marketValue: r.marketValue * rate,
+            currency: 'CNY',
+          );
+        }).toList();
+        ref.read(ocrResultProvider.notifier).setResults(results);
+      }
+      if (!mounted) return;
+    }
 
     final db = ref.read(databaseProvider);
     final now = DateTime.now();
@@ -597,6 +701,8 @@ class _OcrImportPageState extends ConsumerState<OcrImportPage> {
     }
 
     ref.read(autoSyncProvider).triggerAutoSync();
+    ref.invalidate(allHoldingsProvider);
+    ref.invalidate(allAccountsProvider);
     ref.read(ocrResultProvider.notifier).clear();
 
     if (mounted) {

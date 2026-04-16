@@ -51,12 +51,25 @@ class OcrParser {
       final currentPrice = _getDouble(item, ['currentPrice', 'price', 'lastPrice', 'latestPrice']);
       final marketValue = _getDouble(item, ['marketValue', 'value', 'totalValue']);
       final assetType = _getString(item, ['assetType', 'type', 'category']);
+      final currency = _getString(item, ['currency', 'currencyCode', 'ccy']);
 
       if (code.isEmpty && name.isEmpty) continue;
 
       final computedMv = marketValue > 0
           ? marketValue
           : (quantity > 0 && currentPrice > 0 ? quantity * currentPrice : 0.0);
+
+      // 根据 assetType 推断币种（如果 AI 没返回）
+      String resolvedCurrency = currency;
+      if (resolvedCurrency.isEmpty) {
+        if (assetType == 'hkStock') {
+          resolvedCurrency = 'HKD';
+        } else if (assetType == 'usStock') {
+          resolvedCurrency = 'USD';
+        } else {
+          resolvedCurrency = 'CNY';
+        }
+      }
 
       results.add(ParsedHolding(
         code: code.isNotEmpty ? code : 'unknown',
@@ -66,6 +79,7 @@ class OcrParser {
         currentPrice: currentPrice,
         marketValue: computedMv,
         assetType: assetType.isNotEmpty ? assetType : '',
+        currency: resolvedCurrency,
       ));
     }
     return results;
@@ -139,6 +153,7 @@ class ParsedHolding {
   final double currentPrice;
   final double marketValue;
   final String assetType; // AI 识别的资产类型
+  final String currency; // 币种: CNY/HKD/USD/EUR/GBP/JPY
 
   const ParsedHolding({
     required this.code,
@@ -148,20 +163,24 @@ class ParsedHolding {
     required this.currentPrice,
     required this.marketValue,
     this.assetType = '',
+    this.currency = 'CNY',
   });
 
   ParsedHolding copyWith({
     String? code, String? name, double? quantity, double? costPrice,
-    double? currentPrice, double? marketValue, String? assetType,
+    double? currentPrice, double? marketValue, String? assetType, String? currency,
   }) {
     return ParsedHolding(
       code: code ?? this.code, name: name ?? this.name,
       quantity: quantity ?? this.quantity, costPrice: costPrice ?? this.costPrice,
       currentPrice: currentPrice ?? this.currentPrice, marketValue: marketValue ?? this.marketValue,
-      assetType: assetType ?? this.assetType,
+      assetType: assetType ?? this.assetType, currency: currency ?? this.currency,
     );
   }
 
+  /// 是否需要汇率转换
+  bool get needsCurrencyConversion => currency != 'CNY' && currency.isNotEmpty;
+
   @override
-  String toString() => 'ParsedHolding($code, $name, type=$assetType, mv=$marketValue)';
+  String toString() => 'ParsedHolding($code, $name, type=$assetType, currency=$currency, mv=$marketValue)';
 }

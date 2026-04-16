@@ -8,6 +8,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/utils/asset_classifier.dart';
 import '../../providers/database_provider.dart';
 import '../../providers/sync_provider.dart';
+import '../../providers/holding_provider.dart';
 import '../../data/database/app_database.dart';
 
 class HoldingFormPage extends ConsumerStatefulWidget {
@@ -178,6 +179,7 @@ class _HoldingFormPageState extends ConsumerState<HoldingFormPage> {
       ));
     }
     ref.read(autoSyncProvider).triggerAutoSync();
+    ref.invalidate(allHoldingsProvider);
     if (mounted) context.pop();
   }
 
