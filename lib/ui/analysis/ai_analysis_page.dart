@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/ai_service.dart';
 
@@ -133,13 +134,21 @@ class _AiAnalysisPageState extends State<AiAnalysisPage> {
               ),
             )
           : _content.trim().isEmpty && !_isLoading
-              ? const Center(
+              ? Center(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.info_outline, size: 48, color: AppColors.textHint),
-                      SizedBox(height: 12),
-                      Text('暂无分析内容', style: TextStyle(color: AppColors.textHint, fontSize: 16)),
+                      const Icon(Icons.auto_awesome, size: 48, color: AppColors.textHint),
+                      const SizedBox(height: 12),
+                      const Text('分析数据已过期', style: TextStyle(color: AppColors.textHint, fontSize: 16)),
+                      const SizedBox(height: 8),
+                      const Text('请返回首页重新发起 AI 分析', style: TextStyle(color: AppColors.textHint, fontSize: 13)),
+                      const SizedBox(height: 16),
+                      ElevatedButton.icon(
+                        onPressed: () => Navigator.of(context).canPop() ? Navigator.pop(context) : context.go('/dashboard'),
+                        icon: const Icon(Icons.home),
+                        label: const Text('返回首页'),
+                      ),
                     ],
                   ),
                 )

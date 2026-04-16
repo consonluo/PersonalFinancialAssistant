@@ -12,6 +12,7 @@ import '../../providers/account_provider.dart';
 import '../../providers/family_provider.dart';
 import '../../providers/liability_provider.dart';
 import '../../providers/investment_plan_provider.dart';
+import '../../providers/sync_provider.dart';
 import '../../data/sync/data_serializer.dart';
 
 class WelcomePage extends ConsumerStatefulWidget {
@@ -39,12 +40,23 @@ class _WelcomePageState extends ConsumerState<WelcomePage> {
     if (familyId != null && familyId.isNotEmpty) {
       final db = ref.read(databaseProvider);
 
-      // Web 端数据库初始化可能稍慢，最多等 3 秒
+      // Web 端 WASM 数据库初始化可能较慢，最多等 8 秒
       List members = [];
-      for (int i = 0; i < 6; i++) {
+      for (int i = 0; i < 16; i++) {
         members = await db.getAllMembers();
         if (members.isNotEmpty) break;
         await Future.delayed(const Duration(milliseconds: 500));
+      }
+
+      // 如果本地数据库为空但有 familyId，尝试从云端恢复数据
+      if (members.isEmpty) {
+        try {
+          final sync = ref.read(autoSyncProvider);
+          final success = await sync.syncDown(familyId);
+          if (success) {
+            members = await db.getAllMembers();
+          }
+        } catch (_) {}
       }
 
       if (members.isNotEmpty) {

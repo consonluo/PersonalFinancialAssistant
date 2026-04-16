@@ -180,7 +180,13 @@ class _HoldingFormPageState extends ConsumerState<HoldingFormPage> {
     }
     ref.read(autoSyncProvider).triggerAutoSync();
     ref.invalidate(allHoldingsProvider);
-    if (mounted) context.pop();
+    if (mounted) {
+      if (Navigator.of(context).canPop()) {
+        context.pop();
+      } else {
+        context.go('/accounts');
+      }
+    }
   }
 
   Future<void> _deleteHolding() async {
@@ -199,7 +205,14 @@ class _HoldingFormPageState extends ConsumerState<HoldingFormPage> {
       final db = ref.read(databaseProvider);
       await db.deleteHolding(widget.holdingId!);
       ref.read(autoSyncProvider).triggerAutoSync();
-      if (mounted) context.pop();
+      ref.invalidate(allHoldingsProvider);
+      if (mounted) {
+        if (Navigator.of(context).canPop()) {
+          context.pop();
+        } else {
+          context.go('/accounts');
+        }
+      }
     }
   }
 
