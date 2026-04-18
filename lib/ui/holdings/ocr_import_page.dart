@@ -6,7 +6,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:uuid/uuid.dart';
 import 'package:drift/drift.dart' hide Column;
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import '../../core/theme/app_colors.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/utils/ocr_service.dart';
@@ -40,10 +40,12 @@ class OcrImportPage extends ConsumerStatefulWidget {
 class _OcrImportPageState extends ConsumerState<OcrImportPage> {
   final _picker = ImagePicker();
   final _institutionController = TextEditingController();
-  Uint8List? _selectedImageBytes;
+  List<Uint8List> _selectedImages = [];
   String _selectedInstitution = '';
   String? _selectedMemberId;
-  bool _hasAccount = false; // 是否已有账户（不需要选机构/成员）
+  bool _hasAccount = false;
+  int _processedCount = 0;
+  int _totalImages = 0;
 
   @override
   void initState() {
@@ -199,9 +201,9 @@ class _OcrImportPageState extends ConsumerState<OcrImportPage> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: OutlinedButton.icon(
-                      onPressed: ocrState.isProcessing ? null : () => _pickImageMobile(ImageSource.gallery),
+                      onPressed: ocrState.isProcessing ? null : _pickMultiImageMobile,
                       icon: const Icon(Icons.photo_library),
-                      label: const Text('相册'),
+                      label: const Text('选择多张'),
                     ),
                   ),
                 ],
@@ -209,14 +211,23 @@ class _OcrImportPageState extends ConsumerState<OcrImportPage> {
             ],
 
             // 图片预览
-            if (_selectedImageBytes != null) ...[
+            if (_selectedImages.isNotEmpty) ...[
               const SizedBox(height: 16),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxHeight: 200),
-                  child: Image.memory(_selectedImageBytes!, fit: BoxFit.contain, width: double.infinity),
+              SizedBox(
+                height: 100,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: _selectedImages.length,
+                  separatorBuilder: (_, __) => const SizedBox(width: 8),
+                  itemBuilder: (_, i) => ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: Image.memory(_selectedImages[i], height: 100, width: 80, fit: BoxFit.cover),
+                  ),
                 ),
+              ),
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text('已选 ${_selectedImages.length} 张图片', style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
               ),
             ],
 
@@ -224,13 +235,19 @@ class _OcrImportPageState extends ConsumerState<OcrImportPage> {
 
             // 处理状态
             if (ocrState.isProcessing) ...[
-              const Center(
+              Center(
                 child: Padding(
-                  padding: EdgeInsets.all(32),
+                  padding: const EdgeInsets.all(32),
                   child: Column(
                     children: [
-                      CircularProgressIndicator(),
-                      SizedBox(height: 16),
+                      const CircularProgressIndicator(),
+                      const SizedBox(height: 16),
+                      Text(
+                        _totalImages > 1
+                            ? 'AI 正在分析第 $_processedCount/$_totalImages 张截图...'
+                            : 'AI 正在分析截图...',
+                        style: const TextStyle(color: AppColors.textSecondary),
+                      ),
                       Text('AI 正在分析截图...', style: TextStyle(color: AppColors.textSecondary)),
                     ],
                   ),
@@ -354,7 +371,7 @@ class _OcrImportPageState extends ConsumerState<OcrImportPage> {
               ),
             ],
 
-            if (!ocrState.isProcessing && ocrState.results.isEmpty && ocrState.errorMessage == null && _selectedImageBytes == null)
+            if (!ocrState.isProcessing && ocrState.results.isEmpty && ocrState.errorMessage == null && _selectedImages.isEmpty)
               const Padding(
                 padding: EdgeInsets.symmetric(vertical: 40),
                 child: Center(
@@ -412,7 +429,9 @@ class _OcrImportPageState extends ConsumerState<OcrImportPage> {
           children: [
             Icon(Icons.upload_file, size: 40, color: AppColors.primary.withValues(alpha: 0.6)),
             const SizedBox(height: 8),
-            const Text('点击选择持仓截图', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+            const Text('点击选择持仓截图（可多选）', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+            const SizedBox(height: 4),
+            const Text('支持同时选择多张截图，自动合并去重', style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
           ],
         ),
       ),
@@ -420,36 +439,76 @@ class _OcrImportPageState extends ConsumerState<OcrImportPage> {
   }
 
   Future<void> _pickImageDesktop() async {
-    final result = await FilePicker.platform.pickFiles(type: FileType.image, withData: true);
-    if (result == null || result.files.single.bytes == null) return;
-    final bytes = result.files.single.bytes!;
-    setState(() => _selectedImageBytes = bytes);
-    _processImage(bytes);
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.image,
+      withData: true,
+      allowMultiple: true,
+    );
+    if (result == null || result.files.isEmpty) return;
+    final imageList = result.files
+        .where((f) => f.bytes != null)
+        .map((f) => f.bytes!)
+        .toList();
+    if (imageList.isEmpty) return;
+    setState(() => _selectedImages = imageList);
+    _processMultiImages(imageList);
   }
 
   Future<void> _pickImageMobile(ImageSource source) async {
     final image = await _picker.pickImage(source: source, imageQuality: 90);
     if (image == null) return;
     final bytes = await image.readAsBytes();
-    setState(() => _selectedImageBytes = bytes);
-    _processImage(bytes);
+    setState(() => _selectedImages = [bytes]);
+    _processMultiImages([bytes]);
   }
 
-  Future<void> _processImage(Uint8List bytes) async {
+  Future<void> _pickMultiImageMobile() async {
+    final images = await _picker.pickMultiImage(imageQuality: 90);
+    if (images.isEmpty) return;
+    final imageList = <Uint8List>[];
+    for (final img in images) {
+      imageList.add(await img.readAsBytes());
+    }
+    setState(() => _selectedImages = imageList);
+    _processMultiImages(imageList);
+  }
+
+  /// 处理多张图片：逐张识别、合并去重
+  Future<void> _processMultiImages(List<Uint8List> images) async {
     ref.read(ocrResultProvider.notifier).setProcessing();
+    setState(() { _processedCount = 0; _totalImages = images.length; });
+
+    final allHoldings = <ParsedHolding>[];
+    final institution = _selectedInstitution.isNotEmpty ? _selectedInstitution : '未知机构';
 
     try {
-      final institution = _selectedInstitution.isNotEmpty ? _selectedInstitution : '未知机构';
-      final text = await OcrService.recognizeFromBytes(bytes, institution: institution);
-      final holdings = OcrParser.parseHoldingText(text);
+      for (int i = 0; i < images.length; i++) {
+        setState(() => _processedCount = i + 1);
+        try {
+          final text = await OcrService.recognizeFromBytes(images[i], institution: institution);
+          final holdings = OcrParser.parseHoldingText(text);
+          allHoldings.addAll(holdings);
+        } catch (e) {
+          debugPrint('图片 ${i + 1} 识别失败: $e');
+        }
+      }
 
-      if (holdings.isEmpty) {
+      // 去重：按 code+name 合并，保留最新的（后出现的覆盖前面的）
+      final deduped = <String, ParsedHolding>{};
+      for (final h in allHoldings) {
+        final key = h.code != 'unknown' && h.code.isNotEmpty ? h.code : h.name;
+        deduped[key] = h;
+      }
+
+      final results = deduped.values.toList();
+
+      if (results.isEmpty) {
         ref.read(ocrResultProvider.notifier).setError(
-          '未能从截图中识别出持仓数据\n\n'
-          '请确保截图包含持仓信息，建议截取"$institution"的持仓页面。',
+          '未能从 ${images.length} 张截图中识别出持仓数据\n\n'
+          '请确保截图包含持仓信息。',
         );
       } else {
-        ref.read(ocrResultProvider.notifier).setResults(holdings);
+        ref.read(ocrResultProvider.notifier).setResults(results);
       }
     } on OcrException catch (e) {
       ref.read(ocrResultProvider.notifier).setError(
@@ -607,6 +666,9 @@ class _OcrImportPageState extends ConsumerState<OcrImportPage> {
           quantity: Value(r.quantity),
           costPrice: Value(r.costPrice > 0 ? r.costPrice : existing.costPrice),
           currentPrice: Value(r.currentPrice),
+          tags: Value(existing.tags),
+          notes: Value(existing.notes),
+          createdAt: Value(existing.createdAt),
           updatedAt: Value(now),
         ));
         updatedCount++;

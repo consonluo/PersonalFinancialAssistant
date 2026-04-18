@@ -12,6 +12,9 @@ dependencies:
 
   cupertino_icons: ^1.0.8
 
+  # Web 平台 API
+  web: ^1.1.0
+
   # 状态管理
   flutter_riverpod: ^2.6.1
   riverpod_annotation: ^2.6.1

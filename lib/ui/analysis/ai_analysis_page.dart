@@ -175,7 +175,7 @@ class _AiAnalysisPageState extends State<AiAnalysisPage> {
                             children: [
                               const Icon(Icons.warning_amber, color: AppColors.error, size: 18),
                               const SizedBox(width: 8),
-                              Expanded(child: Text('传输中断: $_error', style: const TextStyle(color: AppColors.error, fontSize: 13))),
+                              Expanded(child: SelectableText('传输中断: $_error', style: const TextStyle(color: AppColors.error, fontSize: 13))),
                             ],
                           ),
                         ),
@@ -216,14 +216,14 @@ class _AiAnalysisPageState extends State<AiAnalysisPage> {
     for (final line in lines) {
       if (line.startsWith('## ')) {
         widgets.add(const SizedBox(height: 16));
-        widgets.add(Text(
+        widgets.add(SelectableText(
           line.substring(3).trim(),
           style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: AppColors.primary),
         ));
         widgets.add(const Divider(height: 16));
       } else if (line.startsWith('# ')) {
         widgets.add(const SizedBox(height: 12));
-        widgets.add(Text(
+        widgets.add(SelectableText(
           line.substring(2).trim(),
           style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
         ));
@@ -235,19 +235,19 @@ class _AiAnalysisPageState extends State<AiAnalysisPage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text('• ', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
-              Expanded(child: Text(line.substring(2).trim(), style: const TextStyle(fontSize: 14, height: 1.5))),
+              Expanded(child: SelectableText(line.substring(2).trim(), style: const TextStyle(fontSize: 14, height: 1.5))),
             ],
           ),
         ));
       } else if (line.startsWith('**') && line.endsWith('**')) {
         widgets.add(Padding(
           padding: const EdgeInsets.only(top: 8),
-          child: Text(line.replaceAll('**', ''), style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+          child: SelectableText(line.replaceAll('**', ''), style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
         ));
       } else if (line.trim().isNotEmpty) {
         widgets.add(Padding(
           padding: const EdgeInsets.symmetric(vertical: 2),
-          child: Text(line, style: const TextStyle(fontSize: 14, height: 1.6)),
+          child: SelectableText(line, style: const TextStyle(fontSize: 14, height: 1.6)),
         ));
       } else {
         widgets.add(const SizedBox(height: 8));

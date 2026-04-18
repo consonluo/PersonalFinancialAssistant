@@ -176,13 +176,15 @@ class _AccountFormPageState extends ConsumerState<AccountFormPage> {
     final accountName = '$institution ${_type.label}';
 
     if (_isEdit && _editAccountId != null) {
+      final existing = await db.getAccountById(_editAccountId!);
       await db.updateAccount(AccountsCompanion(
         id: Value(_editAccountId!),
         memberId: Value(_selectedMemberId!),
         name: Value(accountName),
         type: Value(_type.name),
         institution: Value(institution),
-        createdAt: Value(now),
+        subType: Value(existing?.subType ?? ''),
+        createdAt: Value(existing?.createdAt ?? now),
         updatedAt: Value(now),
       ));
     } else {

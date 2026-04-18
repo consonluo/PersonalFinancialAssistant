@@ -64,6 +64,11 @@ class _WelcomePageState extends ConsumerState<WelcomePage> {
             prefs.getString('family_name') ?? '我的家庭';
         ref.read(isDemoModeProvider.notifier).state = false;
 
+        // 确保 familyIdProvider 内存状态与 SharedPreferences 一致
+        // (它的异步 _load 可能还没完成)
+        await ref.read(familyIdProvider.notifier).setFamilyId(familyId);
+        await ref.read(syncConfigProvider.notifier).setFamilyId(familyId);
+
         if (roleId != null && members.any((m) => m.id == roleId)) {
           await ref.read(currentRoleProvider.notifier).setRole(roleId);
         } else {

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../ui/welcome/welcome_page.dart';
 import '../../ui/welcome/create_family_page.dart';
@@ -35,10 +36,29 @@ import '../../ui/analysis/ai_analysis_page.dart';
 final _rootNavigatorKey = GlobalKey<NavigatorState>();
 final _shellNavigatorKey = GlobalKey<NavigatorState>();
 
+/// 不需要登录态的白名单路径
+const _publicPaths = {'/welcome', '/create-family', '/login-family', '/role-select'};
+
 /// 应用路由配置
 final GoRouter appRouter = GoRouter(
   navigatorKey: _rootNavigatorKey,
   initialLocation: '/welcome',
+  redirect: (context, state) async {
+    final path = state.uri.path;
+    // 白名单路径不做拦截
+    if (_publicPaths.contains(path)) return null;
+
+    // 检查是否有登录态（current_role_id 必须存在；family_id 在 Demo 模式可能为空）
+    final prefs = await SharedPreferences.getInstance();
+    final roleId = prefs.getString('current_role_id');
+
+    if (roleId == null || roleId.isEmpty) {
+      // 没有登录态，重定向到欢迎页
+      return '/welcome';
+    }
+
+    return null; // 已登录，放行
+  },
   routes: [
     // 欢迎引导流程
     GoRoute(path: '/welcome', builder: (context, state) => const WelcomePage()),

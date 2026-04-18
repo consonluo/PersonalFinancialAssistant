@@ -115,6 +115,9 @@ class MarketDataNotifier extends StateNotifier<Map<String, MarketDataModel>> {
             quantity: Value(h.quantity),
             costPrice: Value(h.costPrice),
             currentPrice: Value(newPrice),
+            tags: Value(h.tags),
+            notes: Value(h.notes),
+            createdAt: Value(h.createdAt),
             updatedAt: Value(DateTime.now()),
           ));
         }

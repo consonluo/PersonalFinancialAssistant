@@ -49,6 +49,11 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     final isDemo = ref.watch(isDemoModeProvider);
     final familyName = ref.watch(familyNameProvider);
     final familyId = ref.watch(familyIdProvider);
+    final currentRoleId = ref.watch(currentRoleProvider);
+    final membersAsync = ref.watch(familyMembersProvider);
+    final currentMemberName = membersAsync.whenOrNull(
+      data: (members) => members.where((m) => m.id == currentRoleId).firstOrNull?.name,
+    );
 
     return Scaffold(
       appBar: AppBar(title: const Text('设置')),
@@ -58,31 +63,42 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          if (familyName.isNotEmpty)
-            Card(
-              child: ListTile(
-                leading: const Icon(Icons.home, color: AppColors.primary),
-                title: Text(familyName),
-                subtitle: Text(isDemo ? '演示模式' : '正式家庭'),
-              ),
+          // 账号信息
+          const Padding(
+            padding: EdgeInsets.only(left: 4, bottom: 8),
+            child: Text('账号', style: TextStyle(fontSize: 13, color: AppColors.textSecondary, fontWeight: FontWeight.w600)),
+          ),
+          Card(
+            child: Column(
+              children: [
+                if (familyName.isNotEmpty)
+                  ListTile(
+                    leading: const Icon(Icons.home, color: AppColors.primary),
+                    title: Text(familyName),
+                    subtitle: Text(isDemo ? '演示模式' : '正式家庭'),
+                  ),
+                if (familyId != null && familyId.isNotEmpty)
+                  ListTile(
+                    leading: const Icon(Icons.vpn_key, color: AppColors.info),
+                    title: const Text('家庭账号 ID'),
+                    subtitle: Text(familyId, style: const TextStyle(fontWeight: FontWeight.w600, letterSpacing: 1)),
+                    trailing: IconButton(
+                      icon: const Icon(Icons.copy, size: 20),
+                      onPressed: () {
+                        Clipboard.setData(ClipboardData(text: familyId));
+                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('已复制到剪贴板')));
+                      },
+                    ),
+                  ),
+                if (currentMemberName != null)
+                  ListTile(
+                    leading: const Icon(Icons.person, color: AppColors.success),
+                    title: const Text('当前身份'),
+                    subtitle: Text(currentMemberName, style: const TextStyle(fontWeight: FontWeight.w600)),
+                  ),
+              ],
             ),
-          if (familyId != null && familyId.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            Card(
-              child: ListTile(
-                leading: const Icon(Icons.vpn_key, color: AppColors.info),
-                title: const Text('家庭账号 ID'),
-                subtitle: Text(familyId, style: const TextStyle(fontWeight: FontWeight.w600, letterSpacing: 1)),
-                trailing: IconButton(
-                  icon: const Icon(Icons.copy, size: 20),
-                  onPressed: () {
-                    Clipboard.setData(ClipboardData(text: familyId));
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('已复制到剪贴板')));
-                  },
-                ),
-              ),
-            ),
-          ],
+          ),
           const SizedBox(height: 16),
 
           // AI 截图识别配置
@@ -180,113 +196,128 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) {
           final isZhipu = dialogProvider == 'zhipu';
-          return AlertDialog(
-            title: const Text('AI 截图识别配置'),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('选择 AI 服务商', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: ChoiceChip(
-                          label: const Text('智谱AI（推荐）'),
-                          selected: isZhipu,
-                          onSelected: (_) {
-                            setDialogState(() { dialogProvider = 'zhipu'; controller.clear(); });
-                          },
-                          labelStyle: TextStyle(color: isZhipu ? Colors.white : AppColors.textPrimary, fontSize: 12),
+          return Dialog(
+            insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.of(ctx).size.height * 0.8,
+              ),
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(24, 20, 24, 16),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('AI 截图识别配置', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 16),
+                    const Text('选择 AI 服务商', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: ChoiceChip(
+                            label: const Text('智谱AI（推荐）'),
+                            selected: isZhipu,
+                            onSelected: (_) {
+                              setDialogState(() { dialogProvider = 'zhipu'; controller.clear(); });
+                            },
+                            labelStyle: TextStyle(color: isZhipu ? Colors.white : AppColors.textPrimary, fontSize: 12),
+                          ),
                         ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: ChoiceChip(
+                            label: const Text('Google Gemini'),
+                            selected: !isZhipu,
+                            onSelected: (_) {
+                              setDialogState(() { dialogProvider = 'gemini'; controller.clear(); });
+                            },
+                            labelStyle: TextStyle(color: !isZhipu ? Colors.white : AppColors.textPrimary, fontSize: 12),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      isZhipu
+                          ? '智谱AI GLM-4V-Flash：国内直连、完全免费'
+                          : 'Google Gemini：需翻墙，有免费额度',
+                      style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                    ),
+                    const SizedBox(height: 4),
+                    InkWell(
+                      onTap: () => launchUrl(Uri.parse(isZhipu
+                          ? 'https://open.bigmodel.cn/usercenter/apikeys'
+                          : 'https://aistudio.google.com/apikey')),
+                      child: Text(
+                        isZhipu ? '前往智谱AI申请免费 Key →' : '前往 Google AI Studio 申请 →',
+                        style: const TextStyle(color: AppColors.primary, fontSize: 13, decoration: TextDecoration.underline),
                       ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: ChoiceChip(
-                          label: const Text('Google Gemini'),
-                          selected: !isZhipu,
-                          onSelected: (_) {
-                            setDialogState(() { dialogProvider = 'gemini'; controller.clear(); });
-                          },
-                          labelStyle: TextStyle(color: !isZhipu ? Colors.white : AppColors.textPrimary, fontSize: 12),
-                        ),
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: controller,
+                      decoration: const InputDecoration(hintText: '粘贴 API Key', labelText: 'API Key', isDense: true),
+                      maxLines: 1,
+                      enableInteractiveSelection: true,
+                    ),
+                    if (isTesting) ...[
+                      const SizedBox(height: 12),
+                      const Row(
+                        children: [
+                          SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
+                          SizedBox(width: 8),
+                          Text('验证中...', style: TextStyle(fontSize: 13)),
+                        ],
                       ),
                     ],
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    isZhipu
-                        ? '智谱AI GLM-4V-Flash：国内直连、完全免费'
-                        : 'Google Gemini：需翻墙，有免费额度',
-                    style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
-                  ),
-                  const SizedBox(height: 4),
-                  InkWell(
-                    onTap: () => launchUrl(Uri.parse(isZhipu
-                        ? 'https://open.bigmodel.cn/usercenter/apikeys'
-                        : 'https://aistudio.google.com/apikey')),
-                    child: Text(
-                      isZhipu ? '前往智谱AI申请免费 Key →' : '前往 Google AI Studio 申请 →',
-                      style: const TextStyle(color: AppColors.primary, fontSize: 13, decoration: TextDecoration.underline),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  TextField(
-                    controller: controller,
-                    decoration: const InputDecoration(hintText: '粘贴 API Key', labelText: 'API Key', isDense: true),
-                    maxLines: 1,
-                  ),
-                  if (isTesting) ...[
-                    const SizedBox(height: 12),
-                    const Row(
+                    const SizedBox(height: 20),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
                       children: [
-                        SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)),
-                        SizedBox(width: 8),
-                        Text('验证中...', style: TextStyle(fontSize: 13)),
+                        if (_apiKey != null && _apiKey!.isNotEmpty)
+                          TextButton(
+                            onPressed: () async {
+                              await OcrService.clearApiKey();
+                              setState(() => _apiKey = null);
+                              ref.read(autoSyncProvider).triggerAutoSync();
+                              if (ctx.mounted) Navigator.pop(ctx);
+                            },
+                            child: const Text('清除', style: TextStyle(color: AppColors.error)),
+                          ),
+                        TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
+                        const SizedBox(width: 8),
+                        ElevatedButton(
+                          onPressed: isTesting
+                              ? null
+                              : () async {
+                                  final key = controller.text.trim();
+                                  if (key.isEmpty) return;
+                                  setDialogState(() => isTesting = true);
+
+                                  await OcrService.setProvider(dialogProvider);
+                                  final valid = await OcrService.testApiKey(key);
+
+                                  if (!ctx.mounted) return;
+                                  if (valid) {
+                                    await OcrService.setApiKey(key);
+                                    setState(() { _apiKey = key; _provider = dialogProvider; });
+                                    ref.read(autoSyncProvider).triggerAutoSync();
+                                    Navigator.pop(ctx);
+                                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('API Key 配置成功，已同步到云端')));
+                                  } else {
+                                    setDialogState(() => isTesting = false);
+                                    ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('API Key 无效，请检查后重试')));
+                                  }
+                                },
+                          child: const Text('验证并保存'),
+                        ),
                       ],
                     ),
                   ],
-                ],
+                ),
               ),
             ),
-            actions: [
-              if (_apiKey != null && _apiKey!.isNotEmpty)
-                TextButton(
-                  onPressed: () async {
-                    await OcrService.clearApiKey();
-                    setState(() => _apiKey = null);
-                    if (ctx.mounted) Navigator.pop(ctx);
-                  },
-                  child: const Text('清除', style: TextStyle(color: AppColors.error)),
-                ),
-              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
-              ElevatedButton(
-                onPressed: isTesting
-                    ? null
-                    : () async {
-                        final key = controller.text.trim();
-                        if (key.isEmpty) return;
-                        setDialogState(() => isTesting = true);
-
-                        // 先保存 provider 设置
-                        await OcrService.setProvider(dialogProvider);
-                        final valid = await OcrService.testApiKey(key);
-
-                        if (!ctx.mounted) return;
-                        if (valid) {
-                          await OcrService.setApiKey(key);
-                          setState(() { _apiKey = key; _provider = dialogProvider; });
-                          Navigator.pop(ctx);
-                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('API Key 配置成功')));
-                        } else {
-                          setDialogState(() => isTesting = false);
-                          ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('API Key 无效，请检查后重试')));
-                        }
-                      },
-                child: const Text('验证并保存'),
-              ),
-            ],
           );
         },
       ),

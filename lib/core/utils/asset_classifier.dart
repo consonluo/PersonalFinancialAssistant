@@ -145,8 +145,17 @@ class AssetClassifier {
       case AssetType.mixedFund:
         return '基金';
       case AssetType.wealth:
+      case AssetType.structuredDeposit:
+      case AssetType.treasuryRepo:
+      case AssetType.insurance:
+        return '理财';
       case AssetType.deposit:
+      case AssetType.fixedDeposit:
+      case AssetType.largeDeposit:
+      case AssetType.noticeDeposit:
         return '现金类';
+      case AssetType.gold:
+        return '贵金属';
       case AssetType.realEstate:
       case AssetType.vehicle:
         return '固定资产';

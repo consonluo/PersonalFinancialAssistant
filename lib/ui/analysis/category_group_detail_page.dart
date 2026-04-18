@@ -61,10 +61,12 @@ class CategoryGroupDetailPage extends ConsumerWidget {
                 final market = marketData[h.assetCode];
                 final price = market?.price ?? h.currentPrice;
                 final mv = h.quantity * price;
-                final pnl = (price - h.costPrice) * h.quantity;
-                final pnlPct = h.costPrice != 0 ? (price - h.costPrice) / h.costPrice * 100 : 0.0;
-                final todayChg = market != null ? mv * market.changePercent / 100 : 0.0;
+                final cost = h.quantity * h.costPrice;
+                final pnl = mv - cost;
+                final pnlPct = cost != 0 ? pnl / cost * 100 : 0.0;
                 final todayChgPct = market?.changePercent ?? 0.0;
+                final assetType = AssetType.values.where((e) => e.name == h.assetType).firstOrNull;
+                final dm = getDisplayModeForAssetType(assetType ?? AssetType.other);
 
                 return Card(
                   margin: const EdgeInsets.only(bottom: 8),
@@ -74,13 +76,21 @@ class CategoryGroupDetailPage extends ConsumerWidget {
                       children: [
                         Row(
                           children: [
+                            if (assetType != null) ...[
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(color: group.color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(4)),
+                                child: Text(assetType.code, style: TextStyle(fontSize: 10, color: group.color, fontWeight: FontWeight.w600)),
+                              ),
+                              const SizedBox(width: 8),
+                            ],
                             Expanded(
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text(h.assetName, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
-                                  const SizedBox(height: 2),
-                                  Text(h.assetCode, style: const TextStyle(color: AppColors.textHint, fontSize: 12)),
+                                  Text(h.assetName, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15), overflow: TextOverflow.ellipsis),
+                                  if (h.assetCode.isNotEmpty && h.assetCode != 'DEPOSIT' && h.assetCode != 'WEALTH' && h.assetCode != 'unknown')
+                                    Text(h.assetCode, style: const TextStyle(color: AppColors.textHint, fontSize: 12)),
                                 ],
                               ),
                             ),
@@ -88,27 +98,57 @@ class CategoryGroupDetailPage extends ConsumerWidget {
                               crossAxisAlignment: CrossAxisAlignment.end,
                               children: [
                                 Text(FormatUtils.formatFullCurrency(mv), style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
-                                Text(
-                                  '${pnl >= 0 ? "+" : ""}${FormatUtils.formatFullCurrency(pnl)} (${FormatUtils.formatPercent(pnlPct)})',
-                                  style: TextStyle(fontSize: 12, color: pnl >= 0 ? AppColors.gain : AppColors.loss),
-                                ),
+                                if (dm != HoldingDisplayMode.deposit)
+                                  Text(
+                                    '${pnl >= 0 ? "+" : ""}${FormatUtils.formatCurrency(pnl)} (${FormatUtils.formatPercent(pnlPct)})',
+                                    style: TextStyle(fontSize: 12, color: pnl >= 0 ? AppColors.gain : AppColors.loss),
+                                  ),
                               ],
                             ),
                           ],
                         ),
-                        const Divider(height: 16),
-                        Row(
-                          children: [
-                            _InfoItem(label: '数量', value: FormatUtils.formatNumber(h.quantity)),
-                            _InfoItem(label: '现价', value: FormatUtils.formatPrice(price)),
-                            _InfoItem(label: '成本', value: FormatUtils.formatPrice(h.costPrice)),
-                            _InfoItem(
-                              label: '今日',
-                              value: '${todayChgPct >= 0 ? "+" : ""}${todayChgPct.toStringAsFixed(2)}%',
-                              color: todayChgPct >= 0 ? AppColors.gain : AppColors.loss,
-                            ),
-                          ],
-                        ),
+                        if (dm == HoldingDisplayMode.tradable) ...[
+                          const Divider(height: 16),
+                          Row(
+                            children: [
+                              _InfoItem(label: '数量', value: FormatUtils.formatNumber(h.quantity)),
+                              _InfoItem(label: '现价', value: FormatUtils.formatPrice(price)),
+                              _InfoItem(label: '成本', value: FormatUtils.formatPrice(h.costPrice)),
+                              _InfoItem(
+                                label: '今日',
+                                value: '${todayChgPct >= 0 ? "+" : ""}${todayChgPct.toStringAsFixed(2)}%',
+                                color: todayChgPct >= 0 ? AppColors.gain : AppColors.loss,
+                              ),
+                            ],
+                          ),
+                        ] else if (dm == HoldingDisplayMode.fixedIncome) ...[
+                          const Divider(height: 16),
+                          Row(
+                            children: [
+                              _InfoItem(label: '份额', value: h.quantity > 1 ? FormatUtils.formatNumber(h.quantity) : '-'),
+                              _InfoItem(label: '净值', value: h.currentPrice < 100 ? price.toStringAsFixed(4) : FormatUtils.formatPrice(price)),
+                              _InfoItem(label: '成本', value: FormatUtils.formatCurrency(cost)),
+                              _InfoItem(
+                                label: '收益',
+                                value: FormatUtils.formatChange(pnl),
+                                color: pnl >= 0 ? AppColors.gain : AppColors.loss,
+                              ),
+                            ],
+                          ),
+                        ] else if (dm == HoldingDisplayMode.wealth) ...[
+                          const Divider(height: 16),
+                          Row(
+                            children: [
+                              _InfoItem(label: '投入成本', value: FormatUtils.formatCurrency(cost)),
+                              _InfoItem(
+                                label: '累计收益',
+                                value: FormatUtils.formatChange(pnl),
+                                color: pnl >= 0 ? AppColors.gain : AppColors.loss,
+                              ),
+                            ],
+                          ),
+                        ],
+                        // deposit 不显示详细行
                       ],
                     ),
                   ),
@@ -156,7 +196,7 @@ class _SummaryCard extends StatelessWidget {
             Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                Text('$count 只', style: const TextStyle(color: AppColors.textSecondary, fontSize: 13)),
+                Text('$count 笔', style: const TextStyle(color: AppColors.textSecondary, fontSize: 13)),
                 const SizedBox(height: 4),
                 Text(
                   '盈亏 ${totalPnl >= 0 ? "+" : ""}${FormatUtils.formatCurrency(totalPnl)}',

@@ -121,8 +121,27 @@ class WebDavSyncService {
     }
   }
 
+  /// Web 端 MKCOL 创建目录
+  Future<void> _webMkcol(String remotePath) async {
+    final url = '$_proxyBase$remotePath';
+    debugPrint('[WebSync] MKCOL $url');
+    try {
+      await _webDio.request<dynamic>(url,
+          options: Options(
+            method: 'MKCOL',
+            headers: {'Authorization': _basicAuth},
+          ));
+    } catch (_) {
+      // 目录已存在返回 405/409 等，忽略
+    }
+  }
+
   Future<void> _ensureDirs() async {
-    if (kIsWeb) return; // 坚果云 PUT 自动建目录，Web 端跳过
+    if (kIsWeb) {
+      await _webMkcol(AppConstants.webdavBaseDir);
+      await _webMkcol(_familyDir);
+      return;
+    }
     try { await _nativeClient!.mkdir(AppConstants.webdavBaseDir); } catch (_) {}
     try { await _nativeClient!.mkdir(_familyDir); } catch (_) {}
   }
@@ -140,7 +159,8 @@ class WebDavSyncService {
     });
     final bytes = Uint8List.fromList(utf8.encode(meta));
     if (kIsWeb) {
-      await _webPut(_remoteMetaPath, bytes);
+      final ok = await _webPut(_remoteMetaPath, bytes);
+      if (!ok) throw Exception('上传元信息失败');
       return;
     }
     await _ensureDirs();
@@ -174,11 +194,12 @@ class WebDavSyncService {
     final jsonStr = await serializer.exportToJsonString(familyName);
     final encrypted = CryptoUtils.encryptData(jsonStr, familyId);
     final bytes = Uint8List.fromList(utf8.encode(encrypted));
+    await _ensureDirs();
     if (kIsWeb) {
-      await _webPut(_remoteFilePath, bytes);
+      final ok = await _webPut(_remoteFilePath, bytes);
+      if (!ok) throw Exception('上传数据失败');
       return;
     }
-    await _ensureDirs();
     await _nativeClient!.write(_remoteFilePath, bytes);
   }
 

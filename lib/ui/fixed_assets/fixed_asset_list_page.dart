@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/constants/app_constants.dart';
 import '../../core/utils/format_utils.dart';
 import '../../providers/database_provider.dart';
 import '../../providers/sync_provider.dart';
@@ -47,8 +48,10 @@ class FixedAssetListPage extends ConsumerWidget {
             itemCount: assets.length,
             itemBuilder: (context, index) {
               final a = assets[index];
-              final icon = a.type == 'realEstate' ? Icons.home : a.type == 'vehicle' ? Icons.directions_car : Icons.category;
-              final typeLabel = a.type == 'realEstate' ? '房产' : a.type == 'vehicle' ? '车辆' : '其他';
+              final assetType = FixedAssetType.values.firstWhere(
+                (e) => e.name == a.type, orElse: () => FixedAssetType.other);
+              final icon = assetType.icon;
+              final typeLabel = assetType.label;
               return Dismissible(
                 key: ValueKey(a.id),
                 direction: DismissDirection.endToStart,

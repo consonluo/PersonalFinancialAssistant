@@ -27,6 +27,21 @@ class _LoginFamilyPageState extends ConsumerState<LoginFamilyPage> {
   bool _obscurePassword = true;
 
   @override
+  void initState() {
+    super.initState();
+    _loadLastFamilyId();
+  }
+
+  Future<void> _loadLastFamilyId() async {
+    final prefs = await SharedPreferences.getInstance();
+    final lastId = prefs.getString('family_id');
+    if (lastId != null && lastId.isNotEmpty && mounted) {
+      // 去掉 FAM- 前缀，因为输入框已有固定前缀
+      _familyIdController.text = lastId.replaceFirst('FAM-', '');
+    }
+  }
+
+  @override
   void dispose() {
     _familyIdController.dispose();
     _passwordController.dispose();
@@ -69,9 +84,10 @@ class _LoginFamilyPageState extends ConsumerState<LoginFamilyPage> {
                     TextField(
                       controller: _familyIdController,
                       decoration: const InputDecoration(
-                        hintText: '例如：FAM-A3X9K2',
+                        hintText: '输入6位编码，如 A3X9K2',
                         labelText: '家庭账号 ID',
                         prefixIcon: Icon(Icons.vpn_key_outlined),
+                        prefixText: 'FAM-',
                       ),
                       textCapitalization: TextCapitalization.characters,
                       enabled: !_isLoading,
@@ -163,17 +179,20 @@ class _LoginFamilyPageState extends ConsumerState<LoginFamilyPage> {
 
   /// 使用家庭账号 ID + 密码登录
   Future<void> _loginWithFamilyId() async {
-    final familyId = _familyIdController.text.trim().toUpperCase();
+    final rawInput = _familyIdController.text.trim().toUpperCase().replaceFirst('FAM-', '');
     final password = _passwordController.text;
 
-    if (familyId.isEmpty) {
-      setState(() => _error = '请输入家庭账号 ID');
+    if (rawInput.isEmpty) {
+      setState(() => _error = '请输入家庭账号编码');
       return;
     }
-    if (!RegExp(r'^FAM-[A-Z0-9]{6}$').hasMatch(familyId)) {
-      setState(() => _error = '账号格式不正确，应为 FAM- 开头加 6 位字母数字');
+    if (!RegExp(r'^[A-Z0-9]{6}$').hasMatch(rawInput)) {
+      setState(() => _error = '编码格式不正确，应为 6 位字母数字');
       return;
     }
+
+    final familyId = 'FAM-$rawInput';
+
     if (password.isEmpty) {
       setState(() => _error = '请输入密码');
       return;

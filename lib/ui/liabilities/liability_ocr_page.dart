@@ -181,7 +181,7 @@ class _LiabilityOcrPageState extends ConsumerState<LiabilityOcrPage> {
 
 提取规则：
 1. 提取每笔负债的：名称(name)、类型(type)、总金额(totalAmount)、剩余金额(remainingAmount)、年化利率(interestRate)、月还款额(monthlyPayment)
-2. type 必须是：mortgage(房贷)/carLoan(车贷)/creditCard(信用卡)/loan(借款)/other(其他)
+2. type 必须是：mortgage(商业房贷)/housingFund(公积金房贷)/combinedLoan(组合贷)/carLoan(车贷)/renovationLoan(装修贷)/consumerLoan(消费贷)/creditCard(信用卡)/installment(分期付款)/businessLoan(经营贷)/personalLoan(亲友借款)/loan(其他借款)/other(其他)
 3. 利率为年化百分比数字（如 4.2 表示 4.2%）
 4. 缺失字段填 0
 

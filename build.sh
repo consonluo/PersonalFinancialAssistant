@@ -19,7 +19,7 @@ export $(grep -v '^#' "$ENV_FILE" | xargs)
 FLUTTER="${FLUTTER_BIN:-flutter}"
 
 PLATFORM="${1:-macos}"
-DART_DEFINES="--dart-define=WEBDAV_URL=$WEBDAV_URL --dart-define=WEBDAV_USER=$WEBDAV_USER --dart-define=WEBDAV_PASS=$WEBDAV_PASS --dart-define=CRYPTO_SALT=$CRYPTO_SALT"
+DART_DEFINES="--dart-define-from-file=$ENV_FILE"
 
 echo "🔨 Building for $PLATFORM (using: $FLUTTER)..."
 

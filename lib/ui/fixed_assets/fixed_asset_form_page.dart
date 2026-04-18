@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:uuid/uuid.dart';
 import 'package:drift/drift.dart' hide Column;
+import '../../core/constants/app_constants.dart';
 import '../../providers/database_provider.dart';
 import '../../providers/family_provider.dart';
 import '../../providers/sync_provider.dart';
@@ -21,15 +22,9 @@ class _FixedAssetFormPageState extends ConsumerState<FixedAssetFormPage> {
   final _nameController = TextEditingController();
   final _valueController = TextEditingController();
   final _notesController = TextEditingController();
-  String _type = 'realEstate';
+  FixedAssetType _type = FixedAssetType.realEstate;
   String? _selectedMemberId;
   bool _isEdit = false;
-
-  static const _typeOptions = [
-    {'value': 'realEstate', 'label': '房产', 'icon': Icons.home},
-    {'value': 'vehicle', 'label': '车辆', 'icon': Icons.directions_car},
-    {'value': 'other', 'label': '其他', 'icon': Icons.category},
-  ];
 
   @override
   void initState() {
@@ -50,7 +45,10 @@ class _FixedAssetFormPageState extends ConsumerState<FixedAssetFormPage> {
         _nameController.text = existing.name;
         _valueController.text = existing.estimatedValue.toStringAsFixed(2);
         _notesController.text = existing.notes;
-        _type = existing.type;
+        _type = FixedAssetType.values.firstWhere(
+          (e) => e.name == existing.type,
+          orElse: () => FixedAssetType.other,
+        );
         _selectedMemberId = existing.memberId;
       });
     }
@@ -79,25 +77,22 @@ class _FixedAssetFormPageState extends ConsumerState<FixedAssetFormPage> {
             const SizedBox(height: 16),
             const Text('资产类型', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
             const SizedBox(height: 8),
-            Row(
-              children: _typeOptions.map((opt) {
-                final selected = _type == opt['value'];
-                return Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 4),
-                    child: ChoiceChip(
-                      label: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(opt['icon'] as IconData, size: 16),
-                          const SizedBox(width: 4),
-                          Text(opt['label'] as String),
-                        ],
-                      ),
-                      selected: selected,
-                      onSelected: (_) => setState(() => _type = opt['value'] as String),
-                    ),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: FixedAssetType.values.map((opt) {
+                final selected = _type == opt;
+                return ChoiceChip(
+                  label: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(opt.icon, size: 16),
+                      const SizedBox(width: 4),
+                      Text(opt.label),
+                    ],
                   ),
+                  selected: selected,
+                  onSelected: (_) => setState(() => _type = opt),
                 );
               }).toList(),
             ),
@@ -133,7 +128,7 @@ class _FixedAssetFormPageState extends ConsumerState<FixedAssetFormPage> {
     final entry = FixedAssetsCompanion(
       id: Value(_isEdit ? widget.assetId! : const Uuid().v4()),
       memberId: Value(_selectedMemberId!),
-      type: Value(_type),
+      type: Value(_type.name),
       name: Value(_nameController.text.trim()),
       estimatedValue: Value(double.tryParse(_valueController.text) ?? 0),
       notes: Value(_notesController.text.trim()),

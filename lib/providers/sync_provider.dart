@@ -105,10 +105,27 @@ class AutoSyncManager {
 
   /// 上传同步
   Future<bool> syncUp() async {
-    final familyId = _ref.read(familyIdProvider);
-    if (familyId == null || familyId.isEmpty) return false;
+    var familyId = _ref.read(familyIdProvider);
+    var familyName = _ref.read(familyNameProvider);
 
-    final familyName = _ref.read(familyNameProvider);
+    // 内存状态可能还没从 SharedPreferences 加载完，主动读取
+    if (familyId == null || familyId.isEmpty || familyName.isEmpty) {
+      final prefs = await SharedPreferences.getInstance();
+      if (familyId == null || familyId.isEmpty) {
+        familyId = prefs.getString('family_id');
+        if (familyId != null && familyId.isNotEmpty) {
+          await _ref.read(familyIdProvider.notifier).setFamilyId(familyId);
+        }
+      }
+      if (familyName.isEmpty) {
+        familyName = prefs.getString('family_name') ?? '';
+        if (familyName.isNotEmpty) {
+          _ref.read(familyNameProvider.notifier).state = familyName;
+        }
+      }
+    }
+
+    if (familyId == null || familyId.isEmpty) return false;
     if (familyName.isEmpty) return false;
 
     _ref.read(syncStatusProvider.notifier).state = SyncStatus.syncing;

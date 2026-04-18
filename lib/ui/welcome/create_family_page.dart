@@ -12,6 +12,7 @@ import '../../core/utils/crypto_utils.dart';
 import '../../providers/database_provider.dart';
 import '../../providers/current_role_provider.dart';
 import '../../providers/sync_provider.dart';
+import '../../providers/family_provider.dart';
 import '../../data/database/app_database.dart';
 
 class CreateFamilyPage extends ConsumerStatefulWidget {
@@ -225,6 +226,11 @@ class _CreateFamilyPageState extends ConsumerState<CreateFamilyPage> {
       final now = DateTime.now();
 
       await db.clearAllData();
+      // 清除旧的用户配置（AI Key 等），避免新账号继承旧配置
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('zhipu_api_key');
+      await prefs.remove('gemini_api_key');
+      await prefs.remove('ai_provider');
 
       for (final m in validMembers) {
         await db.insertMember(FamilyMembersCompanion(
@@ -239,6 +245,14 @@ class _CreateFamilyPageState extends ConsumerState<CreateFamilyPage> {
       ref.read(familyNameProvider.notifier).state = familyName;
       ref.read(isDemoModeProvider.notifier).state = false;
       (await SharedPreferences.getInstance()).setString('family_name', familyName);
+
+      // 设置 currentRole 为第一个成员（确保 Dashboard 有数据）
+      final allMembers = await db.getAllMembers();
+      if (allMembers.isNotEmpty) {
+        await ref.read(currentRoleProvider.notifier).setRole(allMembers.first.id);
+      }
+      // 强制刷新数据源
+      ref.invalidate(familyMembersProvider);
 
       if (_localOnly) {
         // 本地模式：生成 ID 但不设密码、不同步
@@ -258,6 +272,8 @@ class _CreateFamilyPageState extends ConsumerState<CreateFamilyPage> {
         await ref.read(passwordHashProvider.notifier).setPasswordHash(passwordHash);
 
         setState(() => _statusMessage = '正在上传到云端...');
+        // 等待数据库刷盘（Web WASM 写入可能有延迟）
+        await Future.delayed(const Duration(milliseconds: 500));
         bool syncOk = false;
         try {
           syncOk = await ref.read(autoSyncProvider).syncUp();

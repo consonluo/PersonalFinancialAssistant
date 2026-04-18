@@ -1,3 +1,5 @@
+import 'package:flutter/material.dart';
+
 /// 应用常量定义
 class AppConstants {
   AppConstants._();
@@ -27,22 +29,39 @@ class AppConstants {
   static const String webdavBaseDir = '/FamilyFinance/';
 }
 
-/// 资产类型枚举
+/// 资产类型枚举 — 按金融行业惯例分类
 enum AssetType {
+  // ---- 股票 ----
   aStock('A股', 'A'),
   hkStock('港股', 'HK'),
   usStock('美股', 'US'),
+  // ---- 权益型基金 ----
   indexETF('指数ETF', 'ETF'),
   qdii('QDII基金', 'QDII'),
   dividendFund('红利基金', 'DIV'),
   nasdaqETF('纳指ETF', 'NDQ'),
+  mixedFund('混合基金', 'MIX'),
+  // ---- 固收类基金 ----
   bondFund('债券基金', 'BOND'),
   moneyFund('货币基金', 'MMF'),
-  mixedFund('混合基金', 'MIX'),
+  // ---- 银行理财 ----
   wealth('银行理财', 'WLT'),
-  deposit('存款', 'DEP'),
+  structuredDeposit('结构性存款', 'SD'),
+  // ---- 存款 ----
+  deposit('活期存款', 'DEP'),
+  fixedDeposit('定期存款', 'FD'),
+  largeDeposit('大额存单', 'LD'),
+  noticeDeposit('通知存款', 'ND'),
+  // ---- 低风险投资 ----
+  treasuryRepo('国债逆回购', 'TR'),
+  // ---- 贵金属 ----
+  gold('黄金', 'AU'),
+  // ---- 保险 ----
+  insurance('储蓄险/年金', 'INS'),
+  // ---- 固定资产 ----
   realEstate('房产', 'RE'),
   vehicle('车辆', 'VEH'),
+  // ---- 其他 ----
   other('其他', 'OTH');
 
   const AssetType(this.label, this.code);
@@ -53,7 +72,9 @@ enum AssetType {
 /// 账户类型枚举
 enum AccountType {
   securities('证券账户'),
-  bank('银行账户');
+  bank('银行账户'),
+  fund('基金账户'),
+  insurance('保险账户');
 
   const AccountType(this.label);
   final String label;
@@ -67,22 +88,49 @@ enum AccountSubType {
   checking('活期存款'),
   savings('定期存款'),
   wealthMgmt('理财产品'),
-  creditCard('信用卡');
+  creditCard('信用卡'),
+  thirdParty('第三方平台');  // 蚂蚁财富/天天基金等
 
   const AccountSubType(this.label);
   final String label;
 }
 
-/// 负债类型枚举
+/// 负债类型枚举 — 覆盖中国家庭常见负债
 enum LiabilityType {
-  mortgage('房贷'),
+  // ---- 住房类 ----
+  mortgage('商业房贷'),
+  housingFund('公积金房贷'),
+  combinedLoan('组合贷'),
+  // ---- 消费类 ----
   carLoan('车贷'),
+  renovationLoan('装修贷'),
+  consumerLoan('消费贷'),      // 花呗/借呗/白条等
   creditCard('信用卡'),
-  loan('借款'),
+  installment('分期付款'),      // 手机/家电等大额分期
+  // ---- 经营类 ----
+  businessLoan('经营贷'),
+  // ---- 其他 ----
+  personalLoan('亲友借款'),
+  loan('其他借款'),
   other('其他');
 
   const LiabilityType(this.label);
   final String label;
+}
+
+/// 固定资产类型枚举
+enum FixedAssetType {
+  realEstate('房产', Icons.home),
+  vehicle('车辆', Icons.directions_car),
+  gold('黄金/贵金属', Icons.diamond),
+  insurance('储蓄保险', Icons.health_and_safety),
+  collectible('收藏品/艺术品', Icons.palette),
+  equity('股权/合伙', Icons.business_center),
+  other('其他', Icons.category);
+
+  const FixedAssetType(this.label, this.icon);
+  final String label;
+  final IconData icon;
 }
 
 /// 同步方式枚举

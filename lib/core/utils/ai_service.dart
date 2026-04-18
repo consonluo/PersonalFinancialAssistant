@@ -1,7 +1,9 @@
 import 'dart:convert';
 import 'dart:async';
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'ocr_service.dart';
+import 'ai_service_web_stream.dart' if (dart.library.io) 'ai_service_native_stream.dart';
 
 /// AI 文本分析服务
 /// 复用智谱/Gemini API Key 进行文本对话分析
@@ -42,10 +44,51 @@ class AiService {
     }
     final provider = await OcrService.getProvider();
 
-    if (provider == 'zhipu') {
-      yield* _chatZhipuStream(apiKey, prompt);
+    if (kIsWeb) {
+      // Web 端使用 fetch API 实现真正的流式 SSE
+      yield* webFetchStream(
+        url: provider == 'zhipu' ? _zhipuApiUrl : '$_geminiApiBase/$_geminiTextModel:streamGenerateContent?alt=sse&key=$apiKey',
+        headers: provider == 'zhipu'
+            ? {'Content-Type': 'application/json', 'Authorization': 'Bearer $apiKey'}
+            : {'Content-Type': 'application/json'},
+        body: provider == 'zhipu'
+            ? jsonEncode({
+                'model': _zhipuTextModel,
+                'messages': [{'role': 'user', 'content': prompt}],
+                'stream': true,
+              })
+            : jsonEncode({
+                'contents': [{'parts': [{'text': prompt}]}],
+              }),
+        extractDelta: provider == 'zhipu' ? _extractZhipuDelta : _extractGeminiDelta,
+      );
     } else {
-      yield* _chatGeminiStream(apiKey, prompt);
+      // 原生端使用 Dio stream
+      if (provider == 'zhipu') {
+        yield* _chatZhipuStream(apiKey, prompt);
+      } else {
+        yield* _chatGeminiStream(apiKey, prompt);
+      }
+    }
+  }
+
+  /// 从智谱 SSE data JSON 中提取增量文本
+  static String? _extractZhipuDelta(String jsonStr) {
+    try {
+      final json = jsonDecode(jsonStr);
+      return json['choices']?[0]?['delta']?['content'] as String?;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// 从 Gemini SSE data JSON 中提取增量文本
+  static String? _extractGeminiDelta(String jsonStr) {
+    try {
+      final json = jsonDecode(jsonStr);
+      return json['candidates']?[0]?['content']?['parts']?[0]?['text'] as String?;
+    } catch (_) {
+      return null;
     }
   }
 

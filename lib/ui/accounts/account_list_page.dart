@@ -200,6 +200,9 @@ class AccountListPage extends ConsumerWidget {
               quantity: Value(existing.quantity),
               costPrice: Value(existing.costPrice),
               currentPrice: Value(existing.currentPrice),
+              tags: Value(existing.tags),
+              notes: Value(existing.notes),
+              createdAt: Value(existing.createdAt),
               updatedAt: Value(DateTime.now()),
             ));
           }
@@ -348,44 +351,60 @@ class _InstitutionTileState extends State<_InstitutionTile> {
             onTap: () => setState(() => _expanded = !_expanded),
             onLongPress: () => _deleteInstitution(context),
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-              child: Row(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: Column(
                 children: [
-                  Container(
-                    width: 40, height: 40,
-                    decoration: BoxDecoration(color: AppColors.primary.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(10)),
-                    child: const Icon(Icons.account_balance, color: AppColors.primary, size: 22),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                  // 第一行：机构名 + 展开箭头
+                  Row(
                     children: [
-                      Text(g.institution.isEmpty ? '未知机构' : g.institution, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
-                      const SizedBox(height: 2),
-                      Text('${g.categories.length}个分类 · ${g.holdingCount}只持仓', style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+                      Container(
+                        width: 36, height: 36,
+                        decoration: BoxDecoration(color: AppColors.primary.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(9)),
+                        child: const Icon(Icons.account_balance, color: AppColors.primary, size: 20),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(child: Text(
+                        g.institution.isEmpty ? '未知机构' : g.institution,
+                        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
+                        overflow: TextOverflow.ellipsis,
+                      )),
+                      AnimatedRotation(turns: _expanded ? 0.5 : 0, duration: const Duration(milliseconds: 200), child: const Icon(Icons.expand_more, color: AppColors.textHint)),
                     ],
-                  )),
-                  Text(FormatUtils.formatCurrency(g.totalMarketValue), style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
-                  const SizedBox(width: 4),
-                  // 截图导入按钮
-                  if (g.accountIds.isNotEmpty)
-                    IconButton(
-                      icon: const Icon(Icons.camera_alt_outlined, size: 20, color: AppColors.textSecondary),
-                      tooltip: '截图导入',
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                      onPressed: () => context.push('/ocr-import?accountId=${g.accountIds.first}'),
-                    ),
-                  // 删除账户按钮
-                  IconButton(
-                    icon: Icon(Icons.delete_outline, size: 20, color: Colors.red.shade300),
-                    tooltip: '长按或点此删除整个账户',
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                    onPressed: () => _deleteInstitution(context),
                   ),
-                  const SizedBox(width: 2),
-                  AnimatedRotation(turns: _expanded ? 0.5 : 0, duration: const Duration(milliseconds: 200), child: const Icon(Icons.expand_more, color: AppColors.textHint)),
+                  const SizedBox(height: 8),
+                  // 第二行：统计 + 金额 + 操作按钮
+                  Row(
+                    children: [
+                      const SizedBox(width: 46), // 对齐图标
+                      Text('${g.categories.length}个分类 · ${g.holdingCount}笔资产', style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
+                      const Spacer(),
+                      Text(FormatUtils.formatCurrency(g.totalMarketValue), style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+                      const SizedBox(width: 4),
+                      if (g.accountIds.isNotEmpty)
+                        IconButton(
+                          icon: const Icon(Icons.add_circle_outline, size: 18, color: AppColors.primary),
+                          tooltip: '添加持仓',
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                          onPressed: () => context.push('/holding-form?accountId=${g.accountIds.first}'),
+                        ),
+                      if (g.accountIds.isNotEmpty)
+                        IconButton(
+                          icon: const Icon(Icons.camera_alt_outlined, size: 18, color: AppColors.textSecondary),
+                          tooltip: '截图导入',
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                          onPressed: () => context.push('/ocr-import?accountId=${g.accountIds.first}'),
+                        ),
+                      IconButton(
+                        icon: Icon(Icons.delete_outline, size: 18, color: Colors.red.shade300),
+                        tooltip: '删除账户',
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                        onPressed: () => _deleteInstitution(context),
+                      ),
+                    ],
+                  ),
                 ],
               ),
             ),
@@ -414,23 +433,40 @@ class _CategorySubTileState extends State<_CategorySubTile> {
   bool _expanded = false;
 
   Future<void> _showQuickPriceUpdate(BuildContext context, dynamic holding) async {
-    final controller = TextEditingController(text: holding.currentPrice.toString());
-    final newPrice = await showDialog<double>(
+    final category = widget.catSub.category;
+    final displayMode = getDisplayMode(category);
+    final isDeposit = displayMode == HoldingDisplayMode.deposit;
+    final isWealth = displayMode == HoldingDisplayMode.wealth || displayMode == HoldingDisplayMode.fixedIncome;
+
+    // 对于存款/理财用总额，对于股票用单价
+    final initialValue = isDeposit || isWealth
+        ? (holding.quantity as double) * (holding.currentPrice as double)
+        : (holding.currentPrice as double);
+    final controller = TextEditingController(text: initialValue.toString());
+
+    final title = isDeposit ? '更新金额' : isWealth ? '更新总市值' : '更新现价';
+    final label = isDeposit ? '新金额' : isWealth ? '新总市值' : '新现价';
+
+    final newValue = await showDialog<double>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('更新现价 · ${holding.assetName}'),
+        title: Text('$title · ${holding.assetName}'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('成本价: ${FormatUtils.formatCurrency(holding.costPrice)}', style: const TextStyle(fontSize: 13, color: AppColors.textSecondary)),
-            Text('当前现价: ${FormatUtils.formatCurrency(holding.currentPrice)}', style: const TextStyle(fontSize: 13, color: AppColors.textSecondary)),
+            if (!isDeposit) ...[
+              Text('成本${isWealth ? "总额" : "价"}: ${FormatUtils.formatCurrency(isWealth ? (holding.quantity as double) * (holding.costPrice as double) : (holding.costPrice as double))}', style: const TextStyle(fontSize: 13, color: AppColors.textSecondary)),
+              Text('当前${isWealth ? "总市值" : "现价"}: ${FormatUtils.formatCurrency(initialValue)}', style: const TextStyle(fontSize: 13, color: AppColors.textSecondary)),
+            ] else ...[
+              Text('当前金额: ${FormatUtils.formatCurrency(initialValue)}', style: const TextStyle(fontSize: 13, color: AppColors.textSecondary)),
+            ],
             const SizedBox(height: 12),
             TextField(
               controller: controller,
               autofocus: true,
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              decoration: const InputDecoration(labelText: '新现价', border: OutlineInputBorder()),
+              decoration: InputDecoration(labelText: label, border: const OutlineInputBorder()),
             ),
           ],
         ),
@@ -447,7 +483,25 @@ class _CategorySubTileState extends State<_CategorySubTile> {
       ),
     );
     controller.dispose();
-    if (newPrice == null || !context.mounted) return;
+    if (newValue == null || !context.mounted) return;
+
+    // 计算实际存储值
+    double newPrice;
+    double newQuantity = holding.quantity as double;
+    double newCost = holding.costPrice as double;
+    if (isDeposit) {
+      newQuantity = 1;
+      newPrice = newValue;
+      newCost = newValue;
+    } else if (isWealth && (holding.quantity as double) <= 1) {
+      // 没有份额的理财，quantity=1
+      newPrice = newValue;
+    } else if (isWealth) {
+      // 有份额的理财，更新净值
+      newPrice = newValue / (holding.quantity as double);
+    } else {
+      newPrice = newValue;
+    }
 
     final db = ProviderScope.containerOf(context).read(databaseProvider);
     final sync = ProviderScope.containerOf(context).read(autoSyncProvider);
@@ -457,9 +511,12 @@ class _CategorySubTileState extends State<_CategorySubTile> {
       assetCode: Value(holding.assetCode as String),
       assetName: Value(holding.assetName as String),
       assetType: Value(holding.assetType as String),
-      quantity: Value(holding.quantity as double),
-      costPrice: Value(holding.costPrice as double),
+      quantity: Value(newQuantity),
+      costPrice: Value(isDeposit ? newCost : (holding.costPrice as double)),
       currentPrice: Value(newPrice),
+      tags: Value(holding.tags as String),
+      notes: Value(holding.notes as String),
+      createdAt: Value(holding.createdAt as DateTime),
       updatedAt: Value(DateTime.now()),
     ));
     try { await sync.syncUp(); } catch (_) {}
@@ -489,7 +546,7 @@ class _CategorySubTileState extends State<_CategorySubTile> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(cs.category.label, style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: cs.category.color)),
-                    Text('${cs.holdings.length}只', style: const TextStyle(fontSize: 11, color: AppColors.textSecondary)),
+                    Text('${cs.holdings.length}笔', style: const TextStyle(fontSize: 11, color: AppColors.textSecondary)),
                   ],
                 )),
                 Text(FormatUtils.formatCurrency(cs.totalMarketValue), style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
@@ -502,38 +559,151 @@ class _CategorySubTileState extends State<_CategorySubTile> {
         if (_expanded)
           ...cs.holdings.map((hs) {
             final h = hs.holding;
-            final mv = h.quantity * h.currentPrice;
-            final pnl = (h.currentPrice - h.costPrice) * h.quantity;
-            final pnlPct = h.costPrice != 0 ? (h.currentPrice - h.costPrice) / h.costPrice * 100 : 0.0;
             return InkWell(
               onTap: () => context.push('/holding-form?id=${h.id}&accountId=${h.accountId}'),
               onLongPress: () => _showQuickPriceUpdate(context, h),
               child: Padding(
-              padding: const EdgeInsets.only(left: 62, right: 16, bottom: 6),
-              child: Row(
-                children: [
-                  Expanded(child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(h.assetName, style: const TextStyle(fontSize: 13)),
-                      Text('${h.assetCode}  ${hs.memberName}', style: const TextStyle(fontSize: 11, color: AppColors.textHint)),
-                    ],
-                  )),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Text(FormatUtils.formatCurrency(mv), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
-                      Text(FormatUtils.formatPercent(pnlPct), style: TextStyle(fontSize: 11, color: pnl >= 0 ? AppColors.gain : AppColors.loss)),
-                    ],
-                  ),
-                  const SizedBox(width: 4),
-                  const Icon(Icons.chevron_right, size: 16, color: AppColors.textHint),
-                ],
+                padding: const EdgeInsets.only(left: 62, right: 16, bottom: 8, top: 2),
+                child: _buildHoldingItem(h, hs.memberName, cs.category),
               ),
-            ),
             );
           }),
         if (cs.holdings.isNotEmpty) const Divider(height: 1, indent: 20, endIndent: 20),
+      ],
+    );
+  }
+
+  /// 根据资产类型显示不同的持仓信息
+  Widget _buildHoldingItem(Holding h, String memberName, CategoryGroup category) {
+    final assetType = AssetType.values.where((e) => e.name == h.assetType).firstOrNull;
+    final displayMode = getDisplayMode(category);
+
+    if (displayMode == HoldingDisplayMode.deposit) {
+      // 存款：只显示名称 + 金额
+      final amount = h.quantity * h.currentPrice;
+      return Row(
+        children: [
+          Expanded(child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(h.assetName, style: const TextStyle(fontSize: 13), overflow: TextOverflow.ellipsis, maxLines: 1),
+              if (memberName.isNotEmpty)
+                Text(memberName, style: const TextStyle(fontSize: 11, color: AppColors.textHint)),
+            ],
+          )),
+          Text(FormatUtils.formatCurrency(amount), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+          const SizedBox(width: 4),
+          const Icon(Icons.chevron_right, size: 16, color: AppColors.textHint),
+        ],
+      );
+    }
+
+    if (displayMode == HoldingDisplayMode.wealth) {
+      // 银行理财：名称 + 总市值 + 总成本 + 收益额
+      final totalMv = h.quantity * h.currentPrice;
+      final totalCost = h.quantity * h.costPrice;
+      final pnl = totalMv - totalCost;
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(child: Text(h.assetName, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500), overflow: TextOverflow.ellipsis, maxLines: 1)),
+              Text(FormatUtils.formatCurrency(totalMv), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+              const SizedBox(width: 4),
+              const Icon(Icons.chevron_right, size: 16, color: AppColors.textHint),
+            ],
+          ),
+          const SizedBox(height: 2),
+          Row(
+            children: [
+              if (memberName.isNotEmpty)
+                Text('$memberName  ', style: const TextStyle(fontSize: 11, color: AppColors.textHint)),
+              const Spacer(),
+              Text('成本${FormatUtils.formatCurrency(totalCost)}  ', style: const TextStyle(fontSize: 11, color: AppColors.textHint)),
+              Text(
+                '${pnl >= 0 ? "+" : ""}${FormatUtils.formatCurrency(pnl)}',
+                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: pnl >= 0 ? AppColors.gain : AppColors.loss),
+              ),
+            ],
+          ),
+        ],
+      );
+    }
+
+    if (displayMode == HoldingDisplayMode.fixedIncome) {
+      // 固收基金：名称 + 份额 + 净值 + 总市值 + 收益额
+      final totalMv = h.quantity * h.currentPrice;
+      final totalCost = h.quantity * h.costPrice;
+      final pnl = totalMv - totalCost;
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(child: Text(h.assetName, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500), overflow: TextOverflow.ellipsis, maxLines: 1)),
+              Text(FormatUtils.formatCurrency(totalMv), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+              const SizedBox(width: 4),
+              const Icon(Icons.chevron_right, size: 16, color: AppColors.textHint),
+            ],
+          ),
+          const SizedBox(height: 2),
+          Row(
+            children: [
+              if (h.assetCode.isNotEmpty && h.assetCode != 'unknown' && h.assetCode != 'WEALTH')
+                Text('${h.assetCode}  ', style: const TextStyle(fontSize: 11, color: AppColors.textHint)),
+              if (assetType != null)
+                Text('${assetType.label}  ', style: const TextStyle(fontSize: 11, color: AppColors.textHint)),
+              if (memberName.isNotEmpty)
+                Text(memberName, style: const TextStyle(fontSize: 11, color: AppColors.textHint)),
+              const Spacer(),
+              if (h.quantity > 1)
+                Text('${FormatUtils.formatNumber(h.quantity)}份  净值${h.currentPrice.toStringAsFixed(4)}  ', style: const TextStyle(fontSize: 11, color: AppColors.textHint)),
+              Text(
+                '${pnl >= 0 ? "+" : ""}${FormatUtils.formatCurrency(pnl)}',
+                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: pnl >= 0 ? AppColors.gain : AppColors.loss),
+              ),
+            ],
+          ),
+        ],
+      );
+    }
+
+    // 股票/权益基金：代码 + 数量 + 成本价→现价 + 盈亏%
+    final mv = h.quantity * h.currentPrice;
+    final pnl = (h.currentPrice - h.costPrice) * h.quantity;
+    final pnlPct = h.costPrice != 0 ? (h.currentPrice - h.costPrice) / h.costPrice * 100 : 0.0;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(child: Text(h.assetName, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500), overflow: TextOverflow.ellipsis, maxLines: 1)),
+            Text(FormatUtils.formatCurrency(mv), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+            const SizedBox(width: 4),
+            const Icon(Icons.chevron_right, size: 16, color: AppColors.textHint),
+          ],
+        ),
+        const SizedBox(height: 2),
+        Row(
+          children: [
+            if (h.assetCode.isNotEmpty && h.assetCode != 'unknown')
+              Text('${h.assetCode}  ', style: const TextStyle(fontSize: 11, color: AppColors.textHint)),
+            if (assetType != null)
+              Text('${assetType.label}  ', style: const TextStyle(fontSize: 11, color: AppColors.textHint)),
+            if (memberName.isNotEmpty)
+              Text(memberName, style: const TextStyle(fontSize: 11, color: AppColors.textHint)),
+            const Spacer(),
+            Text(
+              '${FormatUtils.formatNumber(h.quantity)}股  ${FormatUtils.formatCurrency(h.costPrice)}→${FormatUtils.formatCurrency(h.currentPrice)}  ',
+              style: const TextStyle(fontSize: 11, color: AppColors.textHint),
+            ),
+            Text(
+              FormatUtils.formatPercent(pnlPct),
+              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: pnl >= 0 ? AppColors.gain : AppColors.loss),
+            ),
+          ],
+        ),
       ],
     );
   }

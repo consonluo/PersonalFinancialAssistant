@@ -6,6 +6,7 @@ import 'package:drift/drift.dart' hide Column;
 import '../../core/theme/app_colors.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/utils/format_utils.dart';
+import '../../core/utils/category_group.dart';
 import '../../core/utils/ai_service.dart';
 import '../../providers/holding_provider.dart';
 import '../../providers/database_provider.dart';
@@ -47,9 +48,12 @@ class HoldingListPage extends ConsumerWidget {
             itemCount: holdings.length,
             itemBuilder: (context, index) {
               final h = holdings[index];
+              final assetType = AssetType.values.where((e) => e.name == h.assetType).firstOrNull ?? AssetType.other;
+              final dm = getDisplayModeForAssetType(assetType);
               final mv = h.quantity * h.currentPrice;
-              final pnl = (h.currentPrice - h.costPrice) * h.quantity;
-              final pnlPct = h.costPrice != 0 ? (h.currentPrice - h.costPrice) / h.costPrice * 100 : 0.0;
+              final totalCost = h.quantity * h.costPrice;
+              final pnl = mv - totalCost;
+              final pnlPct = totalCost != 0 ? pnl / totalCost * 100 : 0.0;
               final isUp = pnl >= 0;
               return Dismissible(
                 key: ValueKey(h.id),
@@ -70,39 +74,77 @@ class HoldingListPage extends ConsumerWidget {
                       padding: const EdgeInsets.all(16),
                       child: Column(
                         children: [
+                          // 第一行：名称 + 市值/金额
                           Row(
                             children: [
+                              // 类型标签
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(color: AppColors.primary.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(4)),
+                                child: Text(assetType.code, style: const TextStyle(fontSize: 10, color: AppColors.primary, fontWeight: FontWeight.w600)),
+                              ),
+                              const SizedBox(width: 8),
                               Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(h.assetName, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
-                                    const SizedBox(height: 2),
-                                    Text('${h.assetCode} · ${h.assetType}', style: const TextStyle(color: AppColors.textHint, fontSize: 12)),
-                                  ],
-                                ),
+                                child: Text(h.assetName, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15), overflow: TextOverflow.ellipsis),
                               ),
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.end,
-                                children: [
-                                  Text(FormatUtils.formatFullCurrency(mv), style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
-                                  Text(
-                                    '${FormatUtils.formatChange(pnl)} (${FormatUtils.formatPercent(pnlPct)})',
-                                    style: TextStyle(color: isUp ? AppColors.gain : AppColors.loss, fontSize: 12),
-                                  ),
-                                ],
-                              ),
+                              Text(FormatUtils.formatFullCurrency(mv), style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
                             ],
                           ),
                           const SizedBox(height: 8),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text('持仓 ${FormatUtils.formatQuantity(h.quantity)}', style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
-                              Text('成本 ${h.costPrice.toStringAsFixed(2)}', style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
-                              Text('现价 ${h.currentPrice.toStringAsFixed(2)}', style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
-                            ],
-                          ),
+                          // 第二行：根据类型差异化
+                          if (dm == HoldingDisplayMode.deposit) ...[
+                            // 存款：只显示类型标签
+                            Row(children: [
+                              Text(assetType.label, style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+                              if (h.assetCode.isNotEmpty && h.assetCode != 'DEPOSIT' && h.assetCode != 'unknown')
+                                Text(' · ${h.assetCode}', style: const TextStyle(fontSize: 12, color: AppColors.textHint)),
+                            ]),
+                          ] else if (dm == HoldingDisplayMode.wealth) ...[
+                            // 银行理财：总成本 + 收益额
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text('投入成本 ${FormatUtils.formatCurrency(totalCost)}', style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+                                Text(
+                                  '收益 ${pnl >= 0 ? "+" : ""}${FormatUtils.formatCurrency(pnl)}',
+                                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: isUp ? AppColors.gain : AppColors.loss),
+                                ),
+                              ],
+                            ),
+                          ] else if (dm == HoldingDisplayMode.fixedIncome) ...[
+                            // 固收基金：代码 + 份额 + 净值 + 收益
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                if (h.assetCode.isNotEmpty && h.assetCode != 'unknown' && h.assetCode != 'WEALTH')
+                                  Text(h.assetCode, style: const TextStyle(fontSize: 12, color: AppColors.textHint)),
+                                if (h.quantity > 1)
+                                  Text('${FormatUtils.formatNumber(h.quantity)}份', style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+                                if (h.quantity > 1)
+                                  Text('净值 ${h.currentPrice.toStringAsFixed(4)}', style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+                                Text(
+                                  '收益 ${pnl >= 0 ? "+" : ""}${FormatUtils.formatCurrency(pnl)}',
+                                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: isUp ? AppColors.gain : AppColors.loss),
+                                ),
+                              ],
+                            ),
+                          ] else ...[
+                            // 股票/权益基金：代码 + 数量 + 成本→现价 + 盈亏%
+                            Row(
+                              children: [
+                                Text(h.assetCode, style: const TextStyle(fontSize: 12, color: AppColors.textHint)),
+                                const Spacer(),
+                                Text('${FormatUtils.formatQuantity(h.quantity)}股', style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+                                const SizedBox(width: 12),
+                                Text('${h.costPrice.toStringAsFixed(2)}→${h.currentPrice.toStringAsFixed(2)}', style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+                                const SizedBox(width: 8),
+                                Text(
+                                  FormatUtils.formatPercent(pnlPct),
+                                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: isUp ? AppColors.gain : AppColors.loss),
+                                ),
+                              ],
+                            ),
+                          ],
                           // 显示关联定投计划
                           Builder(builder: (_) {
                             final linkedPlans = plans.where((p) =>
@@ -270,6 +312,9 @@ class HoldingListPage extends ConsumerWidget {
               quantity: Value(existing.quantity),
               costPrice: Value(existing.costPrice),
               currentPrice: Value(existing.currentPrice),
+              tags: Value(existing.tags),
+              notes: Value(existing.notes),
+              createdAt: Value(existing.createdAt),
               updatedAt: Value(DateTime.now()),
             ));
           }

@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../core/utils/format_utils.dart';
+import '../../../core/utils/category_group.dart';
 import '../../../providers/member_detail_provider.dart';
 import '../../../providers/market_provider.dart';
 
@@ -118,11 +119,28 @@ class _HoldingsSection extends ConsumerWidget {
                 final mv = h.quantity * price;
                 final cost = h.quantity * h.costPrice;
                 final pnl = mv - cost;
-                final pnlPct =
-                    cost > 0 ? (mv - cost) / cost * 100 : 0.0;
+                final pnlPct = cost > 0 ? pnl / cost * 100 : 0.0;
                 final type = AssetType.values.firstWhere(
                     (e) => e.name == h.assetType,
                     orElse: () => AssetType.other);
+                final dm = getDisplayModeForAssetType(type);
+
+                String subtitle;
+                switch (dm) {
+                  case HoldingDisplayMode.deposit:
+                    subtitle = type.label;
+                  case HoldingDisplayMode.wealth:
+                    subtitle = '成本 ${FormatUtils.formatCurrency(cost)}  收益 ${pnl >= 0 ? "+" : ""}${FormatUtils.formatCurrency(pnl)}';
+                  case HoldingDisplayMode.fixedIncome:
+                    subtitle = h.quantity > 1
+                        ? '${h.assetCode} · ${FormatUtils.formatNumber(h.quantity)}份 × ${price.toStringAsFixed(4)}'
+                        : '${h.assetCode} · ${type.label}';
+                  case HoldingDisplayMode.tradable:
+                    final qtyStr = h.quantity == h.quantity.roundToDouble()
+                        ? h.quantity.toStringAsFixed(0)
+                        : h.quantity.toStringAsFixed(2);
+                    subtitle = '${h.assetCode} · ${qtyStr}股 × ¥${price.toStringAsFixed(2)}';
+                }
 
                 return Padding(
                   padding:
@@ -154,9 +172,9 @@ class _HoldingsSection extends ConsumerWidget {
                                 Text(h.assetName,
                                     style: const TextStyle(
                                         fontWeight: FontWeight.w600,
-                                        fontSize: 14)),
-                                Text(
-                                  '${h.assetCode} · ${h.quantity.toStringAsFixed(h.quantity == h.quantity.roundToDouble() ? 0 : 2)}份 × ¥${price.toStringAsFixed(2)}',
+                                        fontSize: 14),
+                                    overflow: TextOverflow.ellipsis),
+                                Text(subtitle,
                                   style: const TextStyle(
                                       fontSize: 11,
                                       color: AppColors.textSecondary),
@@ -171,14 +189,15 @@ class _HoldingsSection extends ConsumerWidget {
                                   style: const TextStyle(
                                       fontWeight: FontWeight.w600,
                                       fontSize: 14)),
-                              Text(
-                                '${pnl >= 0 ? "+" : ""}${FormatUtils.formatCurrency(pnl)} (${pnlPct.toStringAsFixed(1)}%)',
-                                style: TextStyle(
-                                    fontSize: 11,
-                                    color: pnl >= 0
-                                        ? AppColors.gain
-                                        : AppColors.loss),
-                              ),
+                              if (dm != HoldingDisplayMode.deposit)
+                                Text(
+                                  '${pnl >= 0 ? "+" : ""}${FormatUtils.formatCurrency(pnl)} (${pnlPct.toStringAsFixed(1)}%)',
+                                  style: TextStyle(
+                                      fontSize: 11,
+                                      color: pnl >= 0
+                                          ? AppColors.gain
+                                          : AppColors.loss),
+                                ),
                             ],
                           ),
                         ],
