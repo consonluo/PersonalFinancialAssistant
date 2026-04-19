@@ -69,7 +69,51 @@ class AssetClassifier {
       if (lowerName.contains(kw.toLowerCase())) return AssetType.mixedFund;
     }
 
+    // 存款（优先于理财匹配，因为结构性存款含"存款"二字）
+    if (_isDeposit(lowerName)) return _depositSubType(lowerName);
+
+    // 银行理财 / 储蓄险等低风险产品
+    if (_isWealthProduct(lowerName)) return AssetType.wealth;
+
     return null;
+  }
+
+  /// 判断是否为存款类产品
+  static bool _isDeposit(String lowerName) {
+    // 先排除结构性存款（归入理财）
+    if (lowerName.contains('结构')) return false;
+
+    const depositKeywords = [
+      '活期', '定期', '大额存单', '通知存款', '定存',
+      '存单', '存款', '零钱', '余额+', '朝朝',
+      '天天利', '日积月累', '薪金煲', '现金宝',
+    ];
+    for (final kw in depositKeywords) {
+      if (lowerName.contains(kw)) return true;
+    }
+    return false;
+  }
+
+  /// 细分存款子类型
+  static AssetType _depositSubType(String lowerName) {
+    if (lowerName.contains('定期') || lowerName.contains('定存') || lowerName.contains('存单'))
+      return AssetType.fixedDeposit;
+    if (lowerName.contains('大额')) return AssetType.largeDeposit;
+    if (lowerName.contains('通知')) return AssetType.noticeDeposit;
+    return AssetType.deposit; // 默认活期
+  }
+
+  /// 判断是否为银行理财类（非存款）
+  static bool _isWealthProduct(String lowerName) {
+    const wealthKeywords = [
+      '理财', '净值', '结构性', '资管', '集合',
+      '保险', '年金', '增额', '万能', '投连',
+      '国债逆回购', '逆回购', 'repo',
+    ];
+    for (final kw in wealthKeywords) {
+      if (lowerName.contains(kw)) return true;
+    }
+    return false;
   }
 
   /// 按代码前缀分类市场
