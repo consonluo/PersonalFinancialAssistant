@@ -1,8 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../data/database/app_database.dart';
 import '../data/models/asset_summary_model.dart';
 import '../core/constants/app_constants.dart';
-import 'database_provider.dart';
+import 'account_provider.dart';
 import 'holding_provider.dart';
 import 'market_provider.dart';
 
@@ -68,17 +67,25 @@ final assetSummaryProvider = Provider<FamilyAssetOverview>((ref) {
   );
 });
 
-/// 按成员的资产汇总
+/// 按成员的资产汇总 — 监听 allHoldingsProvider 确保持仓变化后自动更新
 final memberAssetProvider =
-    FutureProvider.family<double, String>((ref, memberId) async {
-  final db = ref.watch(databaseProvider);
-  final accounts = await db.getAccountsByMember(memberId);
+    Provider.family<double, String>((ref, memberId) {
+  final allHoldings = ref.watch(allHoldingsProvider).valueOrNull ?? [];
+  final accounts = ref.watch(allAccountsProvider).valueOrNull ?? [];
+  final marketData = ref.watch(marketDataProvider);
+
+  // 找出该成员的所有账户 ID
+  final memberAccountIds = accounts
+      .where((a) => a.memberId == memberId)
+      .map((a) => a.id)
+      .toSet();
+
   double total = 0;
-  for (final acc in accounts) {
-    final holdings = await db.getHoldingsByAccount(acc.id);
-    for (final h in holdings) {
-      total += h.quantity * h.currentPrice;
-    }
+  for (final h in allHoldings) {
+    if (!memberAccountIds.contains(h.accountId)) continue;
+    final mkt = marketData[h.assetCode];
+    final price = mkt?.price ?? h.currentPrice;
+    total += h.quantity * price;
   }
   return total;
 });

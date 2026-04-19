@@ -52,11 +52,7 @@ class MemberListPage extends ConsumerWidget {
                         ),
                         Consumer(builder: (_, ref, __) {
                           final asset = ref.watch(memberAssetProvider(m.id));
-                          return asset.when(
-                            data: (v) => Text(FormatUtils.formatCurrency(v), style: const TextStyle(fontWeight: FontWeight.w600)),
-                            loading: () => const Text('...'),
-                            error: (_, __) => const Text('-'),
-                          );
+                          return Text(FormatUtils.formatCurrency(asset), style: const TextStyle(fontWeight: FontWeight.w600));
                         }),
                         const SizedBox(width: 8),
                         const Icon(Icons.chevron_right, color: AppColors.textHint),

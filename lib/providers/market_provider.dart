@@ -52,9 +52,16 @@ class MarketDataNotifier extends StateNotifier<Map<String, MarketDataModel>> {
         case AssetType.usStock:
           usCodes.add(h.assetCode);
         case AssetType.deposit:
+        case AssetType.fixedDeposit:
+        case AssetType.largeDeposit:
+        case AssetType.noticeDeposit:
         case AssetType.realEstate:
         case AssetType.vehicle:
         case AssetType.wealth:
+        case AssetType.structuredDeposit:
+        case AssetType.treasuryRepo:
+        case AssetType.insurance:
+        case AssetType.gold:
         case AssetType.other:
           break; // 不需要行情
         default:

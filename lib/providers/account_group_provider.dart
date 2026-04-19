@@ -5,6 +5,7 @@ import '../data/database/app_database.dart';
 import 'account_provider.dart';
 import 'holding_provider.dart';
 import 'family_provider.dart';
+import 'market_provider.dart';
 
 /// 机构下按大分类聚合的数据
 class InstitutionGroup {
@@ -57,6 +58,7 @@ final accountGroupByMemberProvider = Provider.family<List<InstitutionGroup>, Str
   final accounts = ref.watch(allAccountsProvider).valueOrNull ?? [];
   final allHoldings = ref.watch(allHoldingsProvider).valueOrNull ?? [];
   final members = ref.watch(familyMembersProvider).valueOrNull ?? [];
+  final marketData = ref.watch(marketDataProvider);
 
   final memberNameMap = {for (final m in members) m.id: m.name};
   final accountMap = {for (final a in accounts) a.id: a};

@@ -18,16 +18,26 @@ enum MarketGroup {
 const _marketMapping = <AssetType, MarketGroup>{
   AssetType.aStock: MarketGroup.aStock,
   AssetType.indexETF: MarketGroup.aStock,
+  AssetType.dividendFund: MarketGroup.aStock,
+  AssetType.mixedFund: MarketGroup.aStock,
   AssetType.hkStock: MarketGroup.hkStock,
   AssetType.usStock: MarketGroup.usStock,
   AssetType.nasdaqETF: MarketGroup.usStock,
   AssetType.qdii: MarketGroup.usStock,
   AssetType.wealth: MarketGroup.bankWealth,
+  AssetType.structuredDeposit: MarketGroup.bankWealth,
+  AssetType.treasuryRepo: MarketGroup.bankWealth,
+  AssetType.insurance: MarketGroup.bankWealth,
   AssetType.deposit: MarketGroup.bankWealth,
+  AssetType.fixedDeposit: MarketGroup.bankWealth,
+  AssetType.largeDeposit: MarketGroup.bankWealth,
+  AssetType.noticeDeposit: MarketGroup.bankWealth,
   AssetType.moneyFund: MarketGroup.bankWealth,
-  AssetType.dividendFund: MarketGroup.aStock,
   AssetType.bondFund: MarketGroup.bankWealth,
-  AssetType.mixedFund: MarketGroup.aStock,
+  AssetType.gold: MarketGroup.bankWealth,
+  AssetType.realEstate: MarketGroup.bankWealth,
+  AssetType.vehicle: MarketGroup.bankWealth,
+  AssetType.other: MarketGroup.bankWealth,
 };
 
 class MarketGroupData {

@@ -59,16 +59,16 @@ class _MemberRow extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final assetAsync = ref.watch(memberAssetProvider(memberId));
+    final myAssetValue = ref.watch(memberAssetProvider(memberId));
     final allMembers = ref.watch(familyMembersProvider).valueOrNull ?? [];
 
     double maxAsset = 0;
     for (final m in allMembers) {
-      final v = ref.watch(memberAssetProvider(m.id)).valueOrNull ?? 0;
+      final v = ref.watch(memberAssetProvider(m.id));
       if (v > maxAsset) maxAsset = v;
     }
 
-    final myAsset = assetAsync.valueOrNull ?? 0;
+    final myAsset = myAssetValue;
     final ratio = maxAsset > 0 ? myAsset / maxAsset : 0.0;
 
     return Padding(
@@ -104,18 +104,12 @@ class _MemberRow extends ConsumerWidget {
             ),
           ),
           const SizedBox(width: 10),
-          assetAsync.when(
-            data: (total) => Text(
-              FormatUtils.formatCurrency(total),
-              style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.textPrimary),
-            ),
-            loading: () =>
-                const Text('...', style: TextStyle(fontSize: 12)),
-            error: (_, __) =>
-                const Text('-', style: TextStyle(fontSize: 12)),
+          Text(
+            FormatUtils.formatCurrency(myAsset),
+            style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: AppColors.textPrimary),
           ),
         ],
       ),
