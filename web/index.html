@@ -32,6 +32,10 @@
   <title>加财 - 智能家庭资产管理</title>
   <link rel="manifest" href="manifest.json">
 
+  <!-- 预加载关键资源，减少首屏等待 -->
+  <link rel="preload" href="flutter_bootstrap.js" as="script">
+  <link rel="modulepreload" href="main.dart.js">
+
   <style>
     /* 从源头禁止 iOS Safari 左滑返回手势：
        touch-action: pan-y 告诉浏览器只响应垂直滑动，
