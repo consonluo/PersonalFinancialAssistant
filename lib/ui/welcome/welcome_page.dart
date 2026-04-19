@@ -48,14 +48,13 @@ class _WelcomePageState extends ConsumerState<WelcomePage> {
         await Future.delayed(const Duration(milliseconds: 500));
       }
 
-      // 如果本地数据库为空但有 familyId，尝试从云端恢复数据
-      if (members.isEmpty) {
+      // 有 familyId 时，始终尝试从云端拉取最新数据（IndexedDB 是浏览器隔离的，
+      // 不同设备/浏览器的本地数据可能不同步）
+      if (familyId.isNotEmpty) {
         try {
           final sync = ref.read(autoSyncProvider);
-          final success = await sync.syncDown(familyId);
-          if (success) {
-            members = await db.getAllMembers();
-          }
+          await sync.syncDown(familyId);
+          members = await db.getAllMembers();
         } catch (_) {}
       }
 

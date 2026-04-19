@@ -36,11 +36,21 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
   @override
   void initState() {
     super.initState();
-    Future.microtask(() {
+    Future.microtask(() async {
       ref.read(marketDataProvider.notifier).startAutoRefresh();
       try {
         SnapshotService(ref.read(databaseProvider)).takeSnapshotIfNeeded();
       } catch (_) {}
+
+      // 启动时先从云端拉取最新数据，再上传本地变更
+      // 解决多设备/浏览器间数据同步问题
+      final familyId = ref.read(familyIdProvider);
+      if (familyId != null && familyId.isNotEmpty) {
+        Future.delayed(const Duration(seconds: 2), () async {
+          try { await ref.read(autoSyncProvider).syncDown(familyId); } catch (_) {}
+        });
+      }
+
       Future.delayed(const Duration(seconds: 10), () {
         try { ref.read(autoSyncProvider).triggerAutoSync(); } catch (_) {}
       });
