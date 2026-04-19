@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/api/eastmoney_api.dart';
 import '../data/api/sina_finance_api.dart';
@@ -51,6 +52,11 @@ class MarketDataNotifier extends StateNotifier<Map<String, MarketDataModel>> {
           hkCodes.add(h.assetCode);
         case AssetType.usStock:
           usCodes.add(h.assetCode);
+        case AssetType.gold:
+          // 黄金ETF(如518880)走基金接口，纸黄金/实物金无行情
+          if (RegExp(r'^\d{6}$').hasMatch(h.assetCode)) {
+            fundCodes.add(h.assetCode);
+          }
         case AssetType.deposit:
         case AssetType.fixedDeposit:
         case AssetType.largeDeposit:
@@ -61,7 +67,6 @@ class MarketDataNotifier extends StateNotifier<Map<String, MarketDataModel>> {
         case AssetType.structuredDeposit:
         case AssetType.treasuryRepo:
         case AssetType.insurance:
-        case AssetType.gold:
         case AssetType.other:
           break; // 不需要行情
         default:
@@ -88,10 +93,13 @@ class MarketDataNotifier extends StateNotifier<Map<String, MarketDataModel>> {
       results.addAll(r);
     }
 
-    // 更新状态
+    // 更新状态（同时存原始代码和去后缀的代码，确保匹配）
     final newState = Map<String, MarketDataModel>.from(state);
     for (final data in results) {
       newState[data.assetCode] = data;
+      // 美股/港股等可能持仓代码带后缀，API返回不带
+      final upper = data.assetCode.toUpperCase();
+      if (upper != data.assetCode) newState[upper] = data;
     }
     state = newState;
 
@@ -111,7 +119,10 @@ class MarketDataNotifier extends StateNotifier<Map<String, MarketDataModel>> {
       final priceMap = {for (final d in data) d.assetCode: d.price};
 
       for (final h in holdings) {
-        final newPrice = priceMap[h.assetCode];
+        // 精确匹配或去后缀匹配（美股代码可能带.US/.O/.N后缀）
+        final code = h.assetCode;
+        final normalizedCode = code.replaceAll(RegExp(r'\.(US|O|N|HK|SH|SZ|OF)$', caseSensitive: false), '').toUpperCase();
+        final newPrice = priceMap[code] ?? priceMap[normalizedCode];
         if (newPrice != null && newPrice > 0 && newPrice != h.currentPrice) {
           await db.updateHolding(HoldingsCompanion(
             id: Value(h.id),
@@ -129,7 +140,9 @@ class MarketDataNotifier extends StateNotifier<Map<String, MarketDataModel>> {
           ));
         }
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[MarketData] 更新持仓现价失败: $e');
+    }
   }
 
   Future<void> _updateDbCache(List<MarketDataModel> data) async {

@@ -245,13 +245,13 @@ class _HoldingFormPageState extends ConsumerState<HoldingFormPage> {
     );
   }
 
-  /// 是否支持自动更新行情（股票和基金类）
+  /// 是否支持自动更新行情（股票、基金、黄金ETF）
   static bool _canAutoUpdate(AssetType type) {
     return const {
       AssetType.aStock, AssetType.hkStock, AssetType.usStock,
       AssetType.indexETF, AssetType.qdii, AssetType.dividendFund,
       AssetType.nasdaqETF, AssetType.bondFund, AssetType.moneyFund,
-      AssetType.mixedFund,
+      AssetType.mixedFund, AssetType.gold,
     }.contains(type);
   }
 
