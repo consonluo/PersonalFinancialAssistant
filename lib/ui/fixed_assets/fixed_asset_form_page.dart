@@ -122,7 +122,14 @@ class _FixedAssetFormPageState extends ConsumerState<FixedAssetFormPage> {
   }
 
   Future<void> _save() async {
-    if (_nameController.text.trim().isEmpty || _selectedMemberId == null) return;
+    if (_nameController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('请输入资产名称')));
+      return;
+    }
+    if (_selectedMemberId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('请选择所属成员')));
+      return;
+    }
     final db = ref.read(databaseProvider);
     final now = DateTime.now();
     final entry = FixedAssetsCompanion(

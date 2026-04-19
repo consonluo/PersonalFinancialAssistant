@@ -34,6 +34,17 @@ class _InvestmentPlanFormPageState extends ConsumerState<InvestmentPlanFormPage>
     if (widget.planId != null) {
       _isEdit = true;
       _loadExisting();
+    } else {
+      _autoSelectAccount();
+    }
+  }
+
+  Future<void> _autoSelectAccount() async {
+    await Future.delayed(const Duration(milliseconds: 300));
+    if (!mounted || _selectedAccountId != null) return;
+    final accounts = ref.read(allAccountsProvider).valueOrNull ?? [];
+    if (accounts.isNotEmpty) {
+      setState(() => _selectedAccountId = accounts.first.id);
     }
   }
 

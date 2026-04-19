@@ -156,12 +156,14 @@ class AppDatabase extends _$AppDatabase {
         ..where((t) => t.snapshotDate.isBiggerOrEqualValue(start) & t.snapshotDate.isSmallerOrEqualValue(end))
         ..orderBy([(t) => OrderingTerm.asc(t.snapshotDate)]))
           .get();
-  Future<AssetSnapshot?> getSnapshotByDate(DateTime date) {
+  Future<AssetSnapshot?> getSnapshotByDate(DateTime date) async {
     final dayStart = DateTime(date.year, date.month, date.day);
     final dayEnd = dayStart.add(const Duration(days: 1));
-    return (select(assetSnapshots)
-      ..where((t) => t.snapshotDate.isBiggerOrEqualValue(dayStart) & t.snapshotDate.isSmallerThanValue(dayEnd)))
-        .getSingleOrNull();
+    final results = await (select(assetSnapshots)
+      ..where((t) => t.snapshotDate.isBiggerOrEqualValue(dayStart) & t.snapshotDate.isSmallerThanValue(dayEnd))
+      ..orderBy([(t) => OrderingTerm.desc(t.id)]))
+        .get();
+    return results.firstOrNull;
   }
   Future<int> insertSnapshot(AssetSnapshotsCompanion entry) =>
       into(assetSnapshots).insert(entry);
