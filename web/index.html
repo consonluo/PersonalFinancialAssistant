@@ -51,20 +51,20 @@
     };
 
     // 修复 iOS Safari 左滑返回导致双重导航：
-    // Safari 的左滑手势会触发 history.back()，Flutter GoRouter 也会响应 popstate，
-    // 导致连续 pop 两次。通过防抖拦截短时间内的重复 popstate 事件来修复。
+    // 在 popstate 事件中做防抖，阻止 Flutter 短时间内处理多次 pop
     (function() {
-      var lastPopTime = 0;
-      var origBack = history.back.bind(history);
-      history.back = function() {
-        var now = Date.now();
-        if (now - lastPopTime < 500) return; // 500ms 内忽略重复
-        lastPopTime = now;
-        origBack();
-      };
-      window.addEventListener('popstate', function() {
-        lastPopTime = Date.now();
-      });
+      var _popLock = false;
+      var _origDispatch = window.dispatchEvent.bind(window);
+      
+      // 拦截 popstate 事件的分发
+      window.addEventListener('popstate', function(e) {
+        if (_popLock) {
+          e.stopImmediatePropagation();
+          return;
+        }
+        _popLock = true;
+        setTimeout(function() { _popLock = false; }, 600);
+      }, true); // useCapture=true 确保最先执行
     })();
   </script>
   <script src="flutter_bootstrap.js" async></script>
