@@ -31,6 +31,17 @@
 
   <title>加财 - 智能家庭资产管理</title>
   <link rel="manifest" href="manifest.json">
+
+  <style>
+    /* 防止 iOS Safari 左滑返回手势触发浏览器 history.back 导致双重导航 */
+    html, body {
+      overscroll-behavior-x: none;
+      overflow: hidden;
+      position: fixed;
+      width: 100%;
+      height: 100%;
+    }
+  </style>
 </head>
 <body>
   <script>
@@ -38,6 +49,23 @@
     window.flutterConfiguration = {
       canvasKitBaseUrl: "/canvaskit/"
     };
+
+    // 修复 iOS Safari 左滑返回导致双重导航：
+    // Safari 的左滑手势会触发 history.back()，Flutter GoRouter 也会响应 popstate，
+    // 导致连续 pop 两次。通过防抖拦截短时间内的重复 popstate 事件来修复。
+    (function() {
+      var lastPopTime = 0;
+      var origBack = history.back.bind(history);
+      history.back = function() {
+        var now = Date.now();
+        if (now - lastPopTime < 500) return; // 500ms 内忽略重复
+        lastPopTime = now;
+        origBack();
+      };
+      window.addEventListener('popstate', function() {
+        lastPopTime = Date.now();
+      });
+    })();
   </script>
   <script src="flutter_bootstrap.js" async></script>
 </body>
