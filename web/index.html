@@ -33,13 +33,25 @@
   <link rel="manifest" href="manifest.json">
 
   <style>
-    /* 防止 iOS Safari 左滑返回手势触发浏览器 history.back 导致双重导航 */
+    /* 从源头禁止 iOS Safari 左滑返回手势：
+       touch-action: pan-y 告诉浏览器只响应垂直滑动，
+       水平滑动手势不会被解释为"返回导航" */
     html, body {
       overscroll-behavior-x: none;
       overflow: hidden;
       position: fixed;
       width: 100%;
       height: 100%;
+      touch-action: pan-y;
+      -webkit-touch-callout: none;
+      -webkit-user-select: none;
+      user-select: none;
+    }
+    /* 输入框等需要正常交互的元素恢复选择能力 */
+    input, textarea, select, [contenteditable] {
+      -webkit-user-select: auto;
+      user-select: auto;
+      touch-action: auto;
     }
   </style>
 </head>
@@ -50,26 +62,37 @@
       canvasKitBaseUrl: "/canvaskit/"
     };
 
-    // 完全禁止 Safari 左滑返回手势触发浏览器级 history.back
-    // Flutter 内部 GoRouter 已完整处理所有导航，不需要浏览器的后退机制
+    // 防止 iOS Safari 左滑返回导致双重导航
+    // 双重保险：CSS touch-action 已从源头阻止手势，这里防止其他方式触发的 popstate
     (function() {
-      // 阻止 pushState/replaceState 以外的任何方式触发 popstate
-      // Safari 手势返回会尝试调用 history.back()
-      history.pushState({}, '', location.href);
+      var _enabled = true;
+
+      // 拦截所有 popstate 事件，阻止浏览器级后退影响 Flutter
       window.addEventListener('popstate', function(e) {
-        // 立即 push 回来，抵消浏览器的后退
-        history.pushState({}, '', location.href);
+        if (!_enabled) return;
         e.preventDefault();
         e.stopPropagation();
+        e.stopImmediatePropagation();
+        // 不使用 pushState！pushState 会短暂改变 URL 触发 Flutter 重渲染
+        // 直接静默忽略即可，Flutter 内部 GoRouter 已完整处理所有导航
         return false;
-      });
-      // 禁用 iOS Safari 的滑动返回手势（通过 CSS + touch 事件）
-      document.addEventListener('touchstart', function(e) {
-        // 只在页面最左边缘且方向向右时才可能触发返回手势
-        if (e.touches[0].clientX < 15) {
-          // 不阻止正常交互，但标记为边缘触摸
-        }
-      }, { passive: true });
+      }, true);
+
+      // 让 Flutter 内部的路由跳转可以正常修改 history
+      // 通过标记位区分 Flutter 自己的 pushState 和浏览器手势触发的 popstate
+      var origPush = history.pushState.bind(history);
+      history.pushState = function() {
+        _enabled = false;
+        origPush.apply(this, arguments);
+        // 微任务后恢复保护
+        setTimeout(function() { _enabled = true; }, 0);
+      };
+      var origReplace = history.replaceState.bind(history);
+      history.replaceState = function() {
+        _enabled = false;
+        origReplace.apply(this, arguments);
+        setTimeout(function() { _enabled = true; }, 0);
+      };
     })();
   </script>
   <script src="flutter_bootstrap.js" async></script>
