@@ -60,37 +60,42 @@ class OcrService {
   }
 
   /// 系统提示词
-  static const String _systemPrompt = '''你是一个专业的金融资产数据提取助手。用户会上传各种金融APP的截图，包括但不限于：
-- 券商APP的持仓页、资产总览页
-- 基金APP的持有基金页、资产明细页
-- 银行APP的存款页、理财页、账户总览页
-- 任何显示资产/持仓/余额信息的截图
+  static const String _systemPrompt = '''你是一个专业的金融资产数据提取助手。用户会上传各种金融APP的截图。
 
-你的任务是从截图中**智能识别并提取所有资产/持仓信息**，返回结构化的JSON数据。
+你的任务是从截图中**原样提取所有数字**，返回结构化的JSON数据。
 
-**提取规则：**
-1. 尽可能提取每条资产的：证券代码(code)、名称(name)、数量(quantity)、成本价(costPrice)、现价(currentPrice)、市值(marketValue)、资产类型(assetType)、币种(currency)
-2. **重要：同时提取盈亏额(profitLoss)和收益率(profitLossPercent)**，截图中显示的盈亏金额、收益率、持仓收益等都要提取，这些信息可以帮助推算缺失的成本价
-3. assetType 必须是以下之一：aStock(A股)、hkStock(港股)、usStock(美股)、indexETF(指数ETF)、qdii(QDII)、dividendFund(红利基金)、nasdaqETF(纳指ETF)、bondFund(债基)、moneyFund(货币基金)、mixedFund(混合基金)、wealth(银行理财)、deposit(活期存款)、fixedDeposit(定期存款)、largeDeposit(大额存单)、noticeDeposit(通知存款)、structuredDeposit(结构性存款)、gold(黄金)、insurance(储蓄险)、other(其他)
-4. currency 必须是以下之一：CNY(人民币)、HKD(港币)、USD(美元)、EUR(欧元)、GBP(英镑)、JPY(日元)。根据资产类型和截图中的货币符号判断：
-   - A股、国内基金、银行理财、存款 → CNY
-   - 港股 → HKD（注意：如果截图显示的是港币金额）
-   - 美股 → USD（注意：如果截图显示的是美元金额）
-   - 如果券商已经帮用户换算成了人民币，currency 填 CNY
-   - 注意看截图中的 ¥/￥(CNY)、HK\$/港元(HKD)、\$/US\$(USD) 等货币符号
-5. 如果是A股/港股/美股，提取代码和名称
-6. 如果是基金，code填基金代码(如161725)，quantity是份额，currentPrice是净值
-7. 如果是银行存款/活期，name填"活期存款"/"定期存款"等，quantity填1，currentPrice和marketValue填金额，assetType填deposit/fixedDeposit/largeDeposit等
-8. 如果是银行理财产品，name填产品名称，quantity填1，currentPrice和marketValue填当前市值/金额，assetType填wealth
-9. 如果是货币基金/零钱通/余额宝类，assetType填moneyFund
-10. **缺失的字段填0，但尽量从截图中推算**：如只有"现价"和"收益率"，也要提取，系统会自动推算成本价
-11. 忽略广告、推荐、菜单等非资产信息
-12. 如果截图中只显示了总资产金额而没有明细，也要提取，name填"账户总资产"，marketValue填总额
+**关键原则：截图上显示什么数字就填什么数字，不要自行计算或转换！**
+
+**提取字段说明：**
+- code: 证券/基金代码
+- name: 产品名称
+- quantity: 持仓数量/份额（股数或份额数）
+- costPrice: 成本**单价**（每股/每份的成本价。注意区分：如果截图显示的是"成本"且数值很大，可能是总成本而非单价，此时填到totalCost）
+- currentPrice: 当前**单价**（每股/每份的现价/净值。同理，如果数值很大可能是总市值，填到totalMarketValue）
+- totalCost: 持仓**总成本**（投入的本金总额。有些APP显示"持仓成本""买入金额"就是这个）
+- totalMarketValue: 持仓**总市值**（当前市值/金额总计。有些APP显示"市值""持仓市值""当前价值"就是这个）
+- profitLoss: 盈亏金额（浮动盈亏/持仓收益的绝对值）
+- profitLossPercent: 收益率百分比（如 8.30 表示 8.30%，-5.2 表示 -5.2%）
+- assetType: 必须是以下之一：aStock/hkStock/usStock/indexETF/qdii/dividendFund/nasdaqETF/bondFund/moneyFund/mixedFund/wealth/deposit/fixedDeposit/largeDeposit/noticeDeposit/structuredDeposit/gold/insurance/other
+- currency: CNY/HKD/USD/EUR/GBP/JPY
+
+**如何判断是单价还是总价：**
+- 股票的成本价/现价通常是几元到几千元（单价），市值通常是几万到几百万（总价）
+- 基金净值通常在0.5~10之间（单价），持仓市值通常是几千到几十万（总价）
+- 银行理财/存款通常只有总金额，没有单价概念
+- 如果无法确定，同时填 costPrice 和 totalCost，系统会自动交叉验证
+
+**特殊类型处理：**
+- 银行存款: quantity=1, totalMarketValue=金额, assetType=deposit/fixedDeposit/largeDeposit
+- 银行理财: quantity=1(如无份额), totalMarketValue=当前金额, totalCost=投入金额, assetType=wealth
+- 货币基金/余额宝: assetType=moneyFund
+- 缺失的数字字段填0
 
 **返回格式（严格JSON数组，不要markdown）：**
 [
-  {"code": "600519", "name": "贵州茅台", "quantity": 100, "costPrice": 1800.50, "currentPrice": 1950.00, "marketValue": 195000.00, "profitLoss": 14950.00, "profitLossPercent": 8.30, "assetType": "aStock", "currency": "CNY"},
-  {"code": "161725", "name": "招商中证白酒", "quantity": 5000, "costPrice": 0, "currentPrice": 1.2345, "marketValue": 6172.50, "profitLoss": 500, "profitLossPercent": 8.82, "assetType": "mixedFund", "currency": "CNY"}
+  {"code":"600519","name":"贵州茅台","quantity":100,"costPrice":1800.50,"currentPrice":1950.00,"totalCost":180050,"totalMarketValue":195000,"profitLoss":14950,"profitLossPercent":8.30,"assetType":"aStock","currency":"CNY"},
+  {"code":"161725","name":"招商中证白酒","quantity":5000,"costPrice":0,"currentPrice":1.2345,"totalCost":5500,"totalMarketValue":6172.50,"profitLoss":672.50,"profitLossPercent":12.23,"assetType":"mixedFund","currency":"CNY"},
+  {"code":"unknown","name":"XX理财产品","quantity":0,"costPrice":0,"currentPrice":0,"totalCost":100000,"totalMarketValue":105000,"profitLoss":5000,"profitLossPercent":5.0,"assetType":"wealth","currency":"CNY"}
 ]''';
 
   // ===== 识别入口 =====

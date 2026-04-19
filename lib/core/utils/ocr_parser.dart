@@ -46,110 +46,177 @@ class OcrParser {
 
       final code = _getString(item, ['code', 'stockCode', 'assetCode', 'symbol']);
       final name = _getString(item, ['name', 'stockName', 'assetName']);
-      var quantity = _getDouble(item, ['quantity', 'qty', 'shares', 'amount']);
-      var costPrice = _getDouble(item, ['costPrice', 'cost', 'avgCost', 'buyPrice']);
-      var currentPrice = _getDouble(item, ['currentPrice', 'price', 'lastPrice', 'latestPrice']);
-      var marketValue = _getDouble(item, ['marketValue', 'value', 'totalValue']);
       final assetType = _getString(item, ['assetType', 'type', 'category']);
       final currency = _getString(item, ['currency', 'currencyCode', 'ccy']);
-      // 额外字段用于推算
-      final profitLoss = _getDouble(item, ['profitLoss', 'pnl', 'profit', 'gain', 'earnings']);
-      final profitLossPercent = _getDouble(item, ['profitLossPercent', 'pnlPercent', 'returnRate', 'yieldRate', 'profitPercent']);
 
       if (code.isEmpty && name.isEmpty) continue;
 
-      // ======== 智能推算缺失字段 ========
-      
-      // 1. 有现价和市值，推算数量
-      if (quantity <= 0 && currentPrice > 0 && marketValue > 0) {
-        quantity = marketValue / currentPrice;
+      // ======== 原始提取 ========
+      var qty = _getDouble(item, ['quantity', 'qty', 'shares', 'amount']);
+      var unitCost = _getDouble(item, ['costPrice', 'cost', 'avgCost', 'buyPrice']);
+      var unitPrice = _getDouble(item, ['currentPrice', 'price', 'lastPrice', 'latestPrice']);
+      var totalCost = _getDouble(item, ['totalCost', 'totalCostPrice', 'investAmount', 'holdCost']);
+      var totalMv = _getDouble(item, ['totalMarketValue', 'marketValue', 'value', 'totalValue']);
+      var pnl = _getDouble(item, ['profitLoss', 'pnl', 'profit', 'gain', 'earnings']);
+      var pnlPct = _getDouble(item, ['profitLossPercent', 'pnlPercent', 'returnRate', 'yieldRate', 'profitPercent']);
+
+      final warnings = <String>[];
+
+      // ======== 第一步：智能判断单价 vs 总价 ========
+      // 如果 costPrice 比 totalCost 大，说明 AI 把总价填到了单价字段
+      if (unitCost > 0 && totalCost > 0 && unitCost > totalCost * 0.9 && qty > 1) {
+        // costPrice 其实是总成本
+        final tmp = unitCost; unitCost = 0; totalCost = tmp;
       }
-      // 2. 有数量和现价，推算市值
-      if (marketValue <= 0 && quantity > 0 && currentPrice > 0) {
-        marketValue = quantity * currentPrice;
+      if (unitPrice > 0 && totalMv > 0 && unitPrice > totalMv * 0.9 && qty > 1) {
+        final tmp = unitPrice; unitPrice = 0; totalMv = tmp;
       }
-      // 3. 有数量和市值，推算现价
-      if (currentPrice <= 0 && quantity > 0 && marketValue > 0) {
-        currentPrice = marketValue / quantity;
-      }
-      // 4. 有现价和收益率，推算成本价：costPrice = currentPrice / (1 + rate/100)
-      if (costPrice <= 0 && currentPrice > 0 && profitLossPercent != 0) {
-        costPrice = currentPrice / (1 + profitLossPercent / 100);
-      }
-      // 5. 有现价和收益额+数量，推算成本价：costPrice = currentPrice - profitLoss/quantity
-      if (costPrice <= 0 && currentPrice > 0 && profitLoss != 0 && quantity > 0) {
-        costPrice = currentPrice - profitLoss / quantity;
-      }
-      // 6. 有市值和收益额，推算成本总额 → 再推成本价
-      if (costPrice <= 0 && marketValue > 0 && profitLoss != 0 && quantity > 0) {
-        final totalCost = marketValue - profitLoss;
-        if (totalCost > 0) costPrice = totalCost / quantity;
-      }
-      // 7. 没有成本价但有现价，成本价默认等于现价
-      if (costPrice <= 0 && currentPrice > 0) {
-        costPrice = currentPrice;
-      }
-      // 8. 存款/理财类：如果 quantity=0 但有市值，设 quantity=1
-      if (quantity <= 0 && marketValue > 0) {
-        final isDepositOrWealth = const {'deposit', 'wealth', 'moneyFund', 'fixedDeposit', 'largeDeposit', 'noticeDeposit', 'structuredDeposit'}.contains(assetType);
-        if (isDepositOrWealth || currentPrice <= 0) {
-          quantity = 1;
-          currentPrice = marketValue;
-          if (costPrice <= 0) costPrice = marketValue;
+      // 如果有数量且 costPrice 很大（远超单价合理范围），判断为总价
+      if (qty > 1 && unitCost > 0 && totalCost <= 0) {
+        if (_looksLikeTotalPrice(unitCost, qty, assetType)) {
+          totalCost = unitCost; unitCost = 0;
         }
       }
-      // 9. 确保 marketValue 有值
-      if (marketValue <= 0 && quantity > 0 && currentPrice > 0) {
-        marketValue = quantity * currentPrice;
+      if (qty > 1 && unitPrice > 0 && totalMv <= 0) {
+        if (_looksLikeTotalPrice(unitPrice, qty, assetType)) {
+          totalMv = unitPrice; unitPrice = 0;
+        }
       }
 
-      // ======== 数据合理性校验 ========
-      final warnings = <String>[];
-      
-      // 盈亏异常（超过200%或亏损超过90%）
-      if (costPrice > 0 && currentPrice > 0) {
-        final pnlPct = (currentPrice - costPrice) / costPrice * 100;
-        if (pnlPct > 200) warnings.add('盈利${pnlPct.toStringAsFixed(0)}%偏高');
-        if (pnlPct < -90) warnings.add('亏损${pnlPct.abs().toStringAsFixed(0)}%偏高');
-      }
-      // 市值异常（单只超过1亿）
-      if (marketValue > 100000000) {
-        warnings.add('市值${(marketValue / 10000).toStringAsFixed(0)}万，请确认');
-      }
-      // 数量异常（负数）
-      if (quantity < 0) {
-        warnings.add('数量为负');
-        quantity = quantity.abs();
-      }
-      // 价格异常（负数）
-      if (currentPrice < 0) { currentPrice = currentPrice.abs(); warnings.add('现价为负已修正'); }
-      if (costPrice < 0) { costPrice = costPrice.abs(); warnings.add('成本价为负已修正'); }
+      // ======== 第二步：从已知值推算缺失值 ========
+      // 总市值 ← 单价 × 数量
+      if (totalMv <= 0 && unitPrice > 0 && qty > 0) totalMv = unitPrice * qty;
+      // 总成本 ← 单价成本 × 数量
+      if (totalCost <= 0 && unitCost > 0 && qty > 0) totalCost = unitCost * qty;
+      // 单价 ← 总市值 / 数量
+      if (unitPrice <= 0 && totalMv > 0 && qty > 0) unitPrice = totalMv / qty;
+      // 单价成本 ← 总成本 / 数量
+      if (unitCost <= 0 && totalCost > 0 && qty > 0) unitCost = totalCost / qty;
+      // 数量 ← 总市值 / 单价
+      if (qty <= 0 && unitPrice > 0 && totalMv > 0) qty = totalMv / unitPrice;
+      // 总市值 ← 总成本 + 盈亏
+      if (totalMv <= 0 && totalCost > 0 && pnl != 0) totalMv = totalCost + pnl;
+      // 总成本 ← 总市值 - 盈亏
+      if (totalCost <= 0 && totalMv > 0 && pnl != 0) totalCost = totalMv - pnl;
 
-      // 根据 assetType 推断币种
+      // 从收益率推算成本
+      if (unitCost <= 0 && unitPrice > 0 && pnlPct != 0) {
+        unitCost = unitPrice / (1 + pnlPct / 100);
+      }
+      if (totalCost <= 0 && totalMv > 0 && pnlPct != 0) {
+        totalCost = totalMv / (1 + pnlPct / 100);
+      }
+
+      // 盈亏额 ← 总市值 - 总成本
+      if (pnl == 0 && totalMv > 0 && totalCost > 0) pnl = totalMv - totalCost;
+      // 收益率 ← (总市值 - 总成本) / 总成本 × 100
+      if (pnlPct == 0 && totalCost > 0 && totalMv > 0) pnlPct = (totalMv - totalCost) / totalCost * 100;
+
+      // 再次补全单价和总价
+      if (unitPrice <= 0 && totalMv > 0 && qty > 0) unitPrice = totalMv / qty;
+      if (unitCost <= 0 && totalCost > 0 && qty > 0) unitCost = totalCost / qty;
+      if (totalMv <= 0 && unitPrice > 0 && qty > 0) totalMv = unitPrice * qty;
+      if (totalCost <= 0 && unitCost > 0 && qty > 0) totalCost = unitCost * qty;
+
+      // ======== 第三步：存款/理财特殊处理 ========
+      final isDepositLike = const {'deposit', 'wealth', 'moneyFund', 'fixedDeposit',
+          'largeDeposit', 'noticeDeposit', 'structuredDeposit', 'insurance'}.contains(assetType);
+      if (qty <= 0 && (totalMv > 0 || unitPrice > 0)) {
+        if (isDepositLike) {
+          qty = 1;
+          if (totalMv > 0) { unitPrice = totalMv; }
+          else { totalMv = unitPrice; }
+          if (totalCost <= 0) { totalCost = totalMv; unitCost = unitPrice; }
+        }
+      }
+      // 没有成本价就默认等于现价
+      if (unitCost <= 0 && unitPrice > 0) unitCost = unitPrice;
+      if (totalCost <= 0 && totalMv > 0) totalCost = totalMv;
+      // 确保总市值有值
+      if (totalMv <= 0 && unitPrice > 0 && qty > 0) totalMv = unitPrice * qty;
+
+      // ======== 第四步：多维度交叉验证 ========
+
+      // 验证1: 总市值 ≈ 单价 × 数量
+      if (qty > 0 && unitPrice > 0 && totalMv > 0) {
+        final computed = unitPrice * qty;
+        final diff = (computed - totalMv).abs();
+        if (diff > totalMv * 0.05 && diff > 1) { // 偏差超过5%
+          // 信任总市值（截图直接显示），修正单价
+          unitPrice = totalMv / qty;
+          warnings.add('单价已按市值/数量修正');
+        }
+      }
+      // 验证2: 总成本 ≈ 单价成本 × 数量
+      if (qty > 0 && unitCost > 0 && totalCost > 0) {
+        final computed = unitCost * qty;
+        final diff = (computed - totalCost).abs();
+        if (diff > totalCost * 0.05 && diff > 1) {
+          unitCost = totalCost / qty;
+        }
+      }
+      // 验证3: 盈亏额 ≈ 总市值 - 总成本
+      if (totalMv > 0 && totalCost > 0 && pnl != 0) {
+        final computedPnl = totalMv - totalCost;
+        final diff = (computedPnl - pnl).abs();
+        if (diff > totalMv * 0.05 && diff > 10) {
+          warnings.add('盈亏与市值/成本不完全一致');
+        }
+      }
+      // 验证4: 收益率 ≈ (总市值 - 总成本) / 总成本 × 100
+      if (totalMv > 0 && totalCost > 0 && pnlPct != 0) {
+        final computedPct = (totalMv - totalCost) / totalCost * 100;
+        if ((computedPct - pnlPct).abs() > 2) { // 偏差超过2个百分点
+          // 收益率更可信（截图直接标注的），用收益率反推成本
+          totalCost = totalMv / (1 + pnlPct / 100);
+          if (qty > 0) unitCost = totalCost / qty;
+          warnings.add('成本已按收益率修正');
+        }
+      }
+
+      // ======== 第五步：异常检测 ========
+      if (unitCost > 0 && unitPrice > 0) {
+        final calcPnl = (unitPrice - unitCost) / unitCost * 100;
+        if (calcPnl > 500) warnings.add('盈利${calcPnl.toStringAsFixed(0)}%异常偏高');
+        if (calcPnl < -90) warnings.add('亏损${calcPnl.abs().toStringAsFixed(0)}%异常偏高');
+      }
+      if (totalMv > 100000000) warnings.add('市值${(totalMv / 10000).toStringAsFixed(0)}万，请确认');
+      if (qty < 0) { qty = qty.abs(); warnings.add('数量为负已修正'); }
+      if (unitPrice < 0) { unitPrice = unitPrice.abs(); warnings.add('现价为负已修正'); }
+      if (unitCost < 0) { unitCost = unitCost.abs(); warnings.add('成本价为负已修正'); }
+
+      // ======== 推断币种 ========
       String resolvedCurrency = currency;
       if (resolvedCurrency.isEmpty) {
-        if (assetType == 'hkStock') {
-          resolvedCurrency = 'HKD';
-        } else if (assetType == 'usStock') {
-          resolvedCurrency = 'USD';
-        } else {
-          resolvedCurrency = 'CNY';
-        }
+        resolvedCurrency = assetType == 'hkStock' ? 'HKD' : assetType == 'usStock' ? 'USD' : 'CNY';
       }
 
       results.add(ParsedHolding(
         code: code.isNotEmpty ? code : 'unknown',
         name: name.isNotEmpty ? name : code,
-        quantity: quantity,
-        costPrice: costPrice,
-        currentPrice: currentPrice,
-        marketValue: marketValue,
+        quantity: qty,
+        costPrice: unitCost,
+        currentPrice: unitPrice,
+        marketValue: totalMv,
         assetType: assetType.isNotEmpty ? assetType : '',
         currency: resolvedCurrency,
         warnings: warnings,
       ));
     }
     return results;
+  }
+
+  /// 判断一个价格是否像"总价"而非"单价"
+  static bool _looksLikeTotalPrice(double price, double qty, String assetType) {
+    if (qty <= 1) return false;
+    // 基金类：净值通常在 0.5~10 之间，如果 price > 100 且有份额，大概率是总价
+    final isFund = const {'indexETF', 'qdii', 'dividendFund', 'nasdaqETF',
+        'bondFund', 'moneyFund', 'mixedFund'}.contains(assetType);
+    if (isFund && price > 100 && qty > 10) return true;
+    // 通用：如果 price / qty 的比值在合理单价范围内，则 price 是总价
+    final unitGuess = price / qty;
+    if (unitGuess > 0.1 && unitGuess < 10000 && price > 1000) return true;
+    return false;
   }
 
   static String _getString(Map<String, dynamic> map, List<String> keys) {
