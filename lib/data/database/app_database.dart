@@ -167,6 +167,8 @@ class AppDatabase extends _$AppDatabase {
       into(assetSnapshots).insert(entry);
   Future<void> deleteOldSnapshots(DateTime before) =>
       (delete(assetSnapshots)..where((t) => t.snapshotDate.isSmallerThanValue(before))).go();
+  Future<void> deleteSnapshotById(int id) =>
+      (delete(assetSnapshots)..where((t) => t.id.equals(id))).go();
 
   // ===== Utility =====
   Future<void> clearAllData() async {

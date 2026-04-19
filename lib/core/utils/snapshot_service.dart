@@ -52,10 +52,8 @@ class SnapshotService {
           (totalAssets > 0 && (existing.totalAssets - totalAssets).abs() / totalAssets > 0.01);
       if (!needsUpdate) return; // 数据没变化，不更新
 
-      // 删除旧快照再插入新的（drift 不支持按非主键 update）
-      await (db.delete(db.assetSnapshots)
-            ..where((t) => t.id.equals(existing.id)))
-          .go();
+      // 删除旧快照再插入新的
+      await db.deleteSnapshotById(existing.id);
     }
 
     await db.insertSnapshot(AssetSnapshotsCompanion(
