@@ -46,20 +46,86 @@ class OcrParser {
 
       final code = _getString(item, ['code', 'stockCode', 'assetCode', 'symbol']);
       final name = _getString(item, ['name', 'stockName', 'assetName']);
-      final quantity = _getDouble(item, ['quantity', 'qty', 'shares', 'amount']);
-      final costPrice = _getDouble(item, ['costPrice', 'cost', 'avgCost', 'buyPrice']);
-      final currentPrice = _getDouble(item, ['currentPrice', 'price', 'lastPrice', 'latestPrice']);
-      final marketValue = _getDouble(item, ['marketValue', 'value', 'totalValue']);
+      var quantity = _getDouble(item, ['quantity', 'qty', 'shares', 'amount']);
+      var costPrice = _getDouble(item, ['costPrice', 'cost', 'avgCost', 'buyPrice']);
+      var currentPrice = _getDouble(item, ['currentPrice', 'price', 'lastPrice', 'latestPrice']);
+      var marketValue = _getDouble(item, ['marketValue', 'value', 'totalValue']);
       final assetType = _getString(item, ['assetType', 'type', 'category']);
       final currency = _getString(item, ['currency', 'currencyCode', 'ccy']);
+      // 额外字段用于推算
+      final profitLoss = _getDouble(item, ['profitLoss', 'pnl', 'profit', 'gain', 'earnings']);
+      final profitLossPercent = _getDouble(item, ['profitLossPercent', 'pnlPercent', 'returnRate', 'yieldRate', 'profitPercent']);
 
       if (code.isEmpty && name.isEmpty) continue;
 
-      final computedMv = marketValue > 0
-          ? marketValue
-          : (quantity > 0 && currentPrice > 0 ? quantity * currentPrice : 0.0);
+      // ======== 智能推算缺失字段 ========
+      
+      // 1. 有现价和市值，推算数量
+      if (quantity <= 0 && currentPrice > 0 && marketValue > 0) {
+        quantity = marketValue / currentPrice;
+      }
+      // 2. 有数量和现价，推算市值
+      if (marketValue <= 0 && quantity > 0 && currentPrice > 0) {
+        marketValue = quantity * currentPrice;
+      }
+      // 3. 有数量和市值，推算现价
+      if (currentPrice <= 0 && quantity > 0 && marketValue > 0) {
+        currentPrice = marketValue / quantity;
+      }
+      // 4. 有现价和收益率，推算成本价：costPrice = currentPrice / (1 + rate/100)
+      if (costPrice <= 0 && currentPrice > 0 && profitLossPercent != 0) {
+        costPrice = currentPrice / (1 + profitLossPercent / 100);
+      }
+      // 5. 有现价和收益额+数量，推算成本价：costPrice = currentPrice - profitLoss/quantity
+      if (costPrice <= 0 && currentPrice > 0 && profitLoss != 0 && quantity > 0) {
+        costPrice = currentPrice - profitLoss / quantity;
+      }
+      // 6. 有市值和收益额，推算成本总额 → 再推成本价
+      if (costPrice <= 0 && marketValue > 0 && profitLoss != 0 && quantity > 0) {
+        final totalCost = marketValue - profitLoss;
+        if (totalCost > 0) costPrice = totalCost / quantity;
+      }
+      // 7. 没有成本价但有现价，成本价默认等于现价
+      if (costPrice <= 0 && currentPrice > 0) {
+        costPrice = currentPrice;
+      }
+      // 8. 存款/理财类：如果 quantity=0 但有市值，设 quantity=1
+      if (quantity <= 0 && marketValue > 0) {
+        final isDepositOrWealth = const {'deposit', 'wealth', 'moneyFund', 'fixedDeposit', 'largeDeposit', 'noticeDeposit', 'structuredDeposit'}.contains(assetType);
+        if (isDepositOrWealth || currentPrice <= 0) {
+          quantity = 1;
+          currentPrice = marketValue;
+          if (costPrice <= 0) costPrice = marketValue;
+        }
+      }
+      // 9. 确保 marketValue 有值
+      if (marketValue <= 0 && quantity > 0 && currentPrice > 0) {
+        marketValue = quantity * currentPrice;
+      }
 
-      // 根据 assetType 推断币种（如果 AI 没返回）
+      // ======== 数据合理性校验 ========
+      final warnings = <String>[];
+      
+      // 盈亏异常（超过200%或亏损超过90%）
+      if (costPrice > 0 && currentPrice > 0) {
+        final pnlPct = (currentPrice - costPrice) / costPrice * 100;
+        if (pnlPct > 200) warnings.add('盈利${pnlPct.toStringAsFixed(0)}%偏高');
+        if (pnlPct < -90) warnings.add('亏损${pnlPct.abs().toStringAsFixed(0)}%偏高');
+      }
+      // 市值异常（单只超过1亿）
+      if (marketValue > 100000000) {
+        warnings.add('市值${(marketValue / 10000).toStringAsFixed(0)}万，请确认');
+      }
+      // 数量异常（负数）
+      if (quantity < 0) {
+        warnings.add('数量为负');
+        quantity = quantity.abs();
+      }
+      // 价格异常（负数）
+      if (currentPrice < 0) { currentPrice = currentPrice.abs(); warnings.add('现价为负已修正'); }
+      if (costPrice < 0) { costPrice = costPrice.abs(); warnings.add('成本价为负已修正'); }
+
+      // 根据 assetType 推断币种
       String resolvedCurrency = currency;
       if (resolvedCurrency.isEmpty) {
         if (assetType == 'hkStock') {
@@ -77,9 +143,10 @@ class OcrParser {
         quantity: quantity,
         costPrice: costPrice,
         currentPrice: currentPrice,
-        marketValue: computedMv,
+        marketValue: marketValue,
         assetType: assetType.isNotEmpty ? assetType : '',
         currency: resolvedCurrency,
+        warnings: warnings,
       ));
     }
     return results;
@@ -154,6 +221,7 @@ class ParsedHolding {
   final double marketValue;
   final String assetType; // AI 识别的资产类型
   final String currency; // 币种: CNY/HKD/USD/EUR/GBP/JPY
+  final List<String> warnings; // 数据异常警告
 
   const ParsedHolding({
     required this.code,
@@ -164,23 +232,29 @@ class ParsedHolding {
     required this.marketValue,
     this.assetType = '',
     this.currency = 'CNY',
+    this.warnings = const [],
   });
 
   ParsedHolding copyWith({
     String? code, String? name, double? quantity, double? costPrice,
     double? currentPrice, double? marketValue, String? assetType, String? currency,
+    List<String>? warnings,
   }) {
     return ParsedHolding(
       code: code ?? this.code, name: name ?? this.name,
       quantity: quantity ?? this.quantity, costPrice: costPrice ?? this.costPrice,
       currentPrice: currentPrice ?? this.currentPrice, marketValue: marketValue ?? this.marketValue,
       assetType: assetType ?? this.assetType, currency: currency ?? this.currency,
+      warnings: warnings ?? this.warnings,
     );
   }
 
   /// 是否需要汇率转换
   bool get needsCurrencyConversion => currency != 'CNY' && currency.isNotEmpty;
 
+  /// 是否有异常警告
+  bool get hasWarnings => warnings.isNotEmpty;
+
   @override
-  String toString() => 'ParsedHolding($code, $name, type=$assetType, currency=$currency, mv=$marketValue)';
+  String toString() => 'ParsedHolding($code, $name, type=$assetType, currency=$currency, mv=$marketValue${warnings.isNotEmpty ? ", warn=${warnings.join(";")}" : ""})';
 }

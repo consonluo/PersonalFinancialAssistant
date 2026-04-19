@@ -8,11 +8,12 @@ class SnapshotService {
 
   SnapshotService(this.db);
 
-  /// 记录今日资产快照（每天只记录一次）
+  /// 记录/更新今日资产快照
+  /// 如果今天已有快照但金额为0或数据有变化，会重新计算并覆盖
   Future<void> takeSnapshotIfNeeded() async {
     final today = DateTime.now();
+    final todayDate = DateTime(today.year, today.month, today.day);
     final existing = await db.getSnapshotByDate(today);
-    if (existing != null) return; // 今天已记录
 
     // 计算投资资产总额
     final holdings = await db.getAllHoldings();
@@ -20,6 +21,7 @@ class SnapshotService {
     final categoryMap = <String, double>{};
 
     for (final h in holdings) {
+      if (h.quantity == 0) continue; // 跳过已清仓的
       final mv = h.quantity * h.currentPrice;
       totalInvestment += mv;
       final type = h.assetType;
@@ -44,8 +46,20 @@ class SnapshotService {
     final totalAssets = totalInvestment + totalFixed;
     final netWorth = totalAssets - totalLiability;
 
+    if (existing != null) {
+      // 如果今天已有快照，但总资产为0或与当前计算值偏差超过1%，则覆盖更新
+      final needsUpdate = existing.totalAssets == 0 ||
+          (totalAssets > 0 && (existing.totalAssets - totalAssets).abs() / totalAssets > 0.01);
+      if (!needsUpdate) return; // 数据没变化，不更新
+
+      // 删除旧快照再插入新的（drift 不支持按非主键 update）
+      await (db.delete(db.assetSnapshots)
+            ..where((t) => t.id.equals(existing.id)))
+          .go();
+    }
+
     await db.insertSnapshot(AssetSnapshotsCompanion(
-      snapshotDate: Value(DateTime(today.year, today.month, today.day)),
+      snapshotDate: Value(todayDate),
       totalAssets: Value(totalAssets),
       totalLiabilities: Value(totalLiability),
       netWorth: Value(netWorth),

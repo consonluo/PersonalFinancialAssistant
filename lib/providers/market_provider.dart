@@ -10,6 +10,7 @@ import 'database_provider.dart';
 import 'holding_provider.dart';
 import '../core/constants/app_constants.dart';
 import '../core/utils/asset_classifier.dart';
+import '../core/utils/snapshot_service.dart';
 import 'package:drift/drift.dart';
 
 /// 行情数据缓存 Provider
@@ -107,7 +108,13 @@ class MarketDataNotifier extends StateNotifier<Map<String, MarketDataModel>> {
     _updateDbCache(results);
 
     // 自动更新持仓表中的现价
-    _updateHoldingPrices(results);
+    await _updateHoldingPrices(results);
+
+    // 价格更新后重新计算今日快照
+    try {
+      final db = _ref.read(databaseProvider);
+      await SnapshotService(db).takeSnapshotIfNeeded();
+    } catch (_) {}
   }
 
   /// 将最新行情价格写入持仓表的 currentPrice 字段

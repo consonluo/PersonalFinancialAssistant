@@ -340,6 +340,14 @@ class _OcrImportPageState extends ConsumerState<OcrImportPage> {
                                     '${r.code != "unknown" ? "${r.code} · " : ""}数量:${r.quantity} · 现价:${r.currentPrice}',
                                     style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
                                   ),
+                                  if (r.hasWarnings)
+                                    Padding(
+                                      padding: const EdgeInsets.only(top: 2),
+                                      child: Text(
+                                        '⚠ ${r.warnings.join("；")}',
+                                        style: TextStyle(fontSize: 10, color: Colors.orange.shade700),
+                                      ),
+                                    ),
                                 ],
                               ),
                             ),

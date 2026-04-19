@@ -70,27 +70,27 @@ class OcrService {
 
 **提取规则：**
 1. 尽可能提取每条资产的：证券代码(code)、名称(name)、数量(quantity)、成本价(costPrice)、现价(currentPrice)、市值(marketValue)、资产类型(assetType)、币种(currency)
-2. assetType 必须是以下之一：aStock(A股)、hkStock(港股)、usStock(美股)、indexETF(指数ETF)、qdii(QDII)、dividendFund(红利基金)、nasdaqETF(纳指ETF)、bondFund(债基)、moneyFund(货币基金)、mixedFund(混合基金)、wealth(银行理财)、deposit(存款)、other(其他)
-3. currency 必须是以下之一：CNY(人民币)、HKD(港币)、USD(美元)、EUR(欧元)、GBP(英镑)、JPY(日元)。根据资产类型和截图中的货币符号判断：
+2. **重要：同时提取盈亏额(profitLoss)和收益率(profitLossPercent)**，截图中显示的盈亏金额、收益率、持仓收益等都要提取，这些信息可以帮助推算缺失的成本价
+3. assetType 必须是以下之一：aStock(A股)、hkStock(港股)、usStock(美股)、indexETF(指数ETF)、qdii(QDII)、dividendFund(红利基金)、nasdaqETF(纳指ETF)、bondFund(债基)、moneyFund(货币基金)、mixedFund(混合基金)、wealth(银行理财)、deposit(活期存款)、fixedDeposit(定期存款)、largeDeposit(大额存单)、noticeDeposit(通知存款)、structuredDeposit(结构性存款)、gold(黄金)、insurance(储蓄险)、other(其他)
+4. currency 必须是以下之一：CNY(人民币)、HKD(港币)、USD(美元)、EUR(欧元)、GBP(英镑)、JPY(日元)。根据资产类型和截图中的货币符号判断：
    - A股、国内基金、银行理财、存款 → CNY
    - 港股 → HKD（注意：如果截图显示的是港币金额）
    - 美股 → USD（注意：如果截图显示的是美元金额）
    - 如果券商已经帮用户换算成了人民币，currency 填 CNY
    - 注意看截图中的 ¥/￥(CNY)、HK\$/港元(HKD)、\$/US\$(USD) 等货币符号
-4. 如果是A股/港股/美股，提取代码和名称
-5. 如果是基金，code填基金代码(如161725)，quantity是份额，currentPrice是净值
-6. 如果是银行存款/活期，name填"活期存款"/"定期存款"等，quantity填1，currentPrice和marketValue填金额，assetType填deposit
-7. 如果是银行理财产品，name填产品名称，quantity填1，currentPrice和marketValue填当前市值/金额，assetType填wealth
-8. 如果是货币基金/零钱通/余额宝类，assetType填moneyFund
-9. 缺失的数字字段填0，缺失的代码填"unknown"
-10. 忽略广告、推荐、菜单等非资产信息
-11. 如果截图中只显示了总资产金额而没有明细，也要提取，name填"账户总资产"，marketValue填总额
+5. 如果是A股/港股/美股，提取代码和名称
+6. 如果是基金，code填基金代码(如161725)，quantity是份额，currentPrice是净值
+7. 如果是银行存款/活期，name填"活期存款"/"定期存款"等，quantity填1，currentPrice和marketValue填金额，assetType填deposit/fixedDeposit/largeDeposit等
+8. 如果是银行理财产品，name填产品名称，quantity填1，currentPrice和marketValue填当前市值/金额，assetType填wealth
+9. 如果是货币基金/零钱通/余额宝类，assetType填moneyFund
+10. **缺失的字段填0，但尽量从截图中推算**：如只有"现价"和"收益率"，也要提取，系统会自动推算成本价
+11. 忽略广告、推荐、菜单等非资产信息
+12. 如果截图中只显示了总资产金额而没有明细，也要提取，name填"账户总资产"，marketValue填总额
 
 **返回格式（严格JSON数组，不要markdown）：**
 [
-  {"code": "600519", "name": "贵州茅台", "quantity": 100, "costPrice": 1800.50, "currentPrice": 1950.00, "marketValue": 195000.00, "assetType": "aStock", "currency": "CNY"},
-  {"code": "00700", "name": "腾讯控股", "quantity": 200, "costPrice": 350.00, "currentPrice": 380.50, "marketValue": 76100.00, "assetType": "hkStock", "currency": "HKD"},
-  {"code": "AAPL", "name": "苹果", "quantity": 50, "costPrice": 170.00, "currentPrice": 195.20, "marketValue": 9760.00, "assetType": "usStock", "currency": "USD"}
+  {"code": "600519", "name": "贵州茅台", "quantity": 100, "costPrice": 1800.50, "currentPrice": 1950.00, "marketValue": 195000.00, "profitLoss": 14950.00, "profitLossPercent": 8.30, "assetType": "aStock", "currency": "CNY"},
+  {"code": "161725", "name": "招商中证白酒", "quantity": 5000, "costPrice": 0, "currentPrice": 1.2345, "marketValue": 6172.50, "profitLoss": 500, "profitLossPercent": 8.82, "assetType": "mixedFund", "currency": "CNY"}
 ]''';
 
   // ===== 识别入口 =====

@@ -7,9 +7,11 @@ import '../../core/constants/app_constants.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/asset_classifier.dart';
 import '../../core/utils/category_group.dart';
+import '../../core/utils/snapshot_service.dart';
 import '../../providers/database_provider.dart';
 import '../../providers/sync_provider.dart';
 import '../../providers/holding_provider.dart';
+import '../../providers/snapshot_provider.dart';
 import '../../data/database/app_database.dart';
 
 class HoldingFormPage extends ConsumerStatefulWidget {
@@ -343,6 +345,8 @@ class _HoldingFormPageState extends ConsumerState<HoldingFormPage> {
       if (accountId.isNotEmpty) {
         ref.invalidate(holdingsByAccountProvider(accountId));
       }
+      // 更新今日快照
+      try { await SnapshotService(db).takeSnapshotIfNeeded(); ref.invalidate(snapshotListProvider); } catch (_) {}
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('${_isEdit ? "更新" : "添加"}成功：$name')),
