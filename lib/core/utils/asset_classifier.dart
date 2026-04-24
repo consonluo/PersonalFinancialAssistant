@@ -96,10 +96,10 @@ class AssetClassifier {
 
   /// 细分存款子类型
   static AssetType _depositSubType(String lowerName) {
-    if (lowerName.contains('定期') || lowerName.contains('定存') || lowerName.contains('存单'))
-      return AssetType.fixedDeposit;
     if (lowerName.contains('大额')) return AssetType.largeDeposit;
     if (lowerName.contains('通知')) return AssetType.noticeDeposit;
+    if (lowerName.contains('定期') || lowerName.contains('定存') || lowerName.contains('存单'))
+      return AssetType.fixedDeposit;
     return AssetType.deposit; // 默认活期
   }
 

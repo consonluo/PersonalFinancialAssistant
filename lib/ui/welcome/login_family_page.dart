@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -41,6 +42,7 @@ class _LoginFamilyPageState extends ConsumerState<LoginFamilyPage> {
     }
     final lastId = prefs.getString('family_id');
     if (lastId != null && lastId.isNotEmpty && mounted) {
+      // 显示完整 FAM-ID，让用户知道自己的账号
       _familyIdController.text = lastId;
     }
   }
@@ -201,16 +203,26 @@ class _LoginFamilyPageState extends ConsumerState<LoginFamilyPage> {
       String familyId;
 
       if (rawInput.startsWith('FAM-')) {
+        // 完整的家庭 ID 格式
         familyId = rawInput;
       } else if (RegExp(r'^[A-Z0-9]{6}$').hasMatch(rawInput)) {
-        // 可能是账号名或 FAM- 编码，先尝试账号名查找
-        setState(() => _loadingMessage = '正在查找账号...');
-        final lookupId = await ref.read(autoSyncProvider).lookupAccountName(rawInput);
-        if (lookupId != null && lookupId.isNotEmpty) {
-          familyId = lookupId;
-          await ref.read(accountNameProvider.notifier).setAccountName(rawInput);
-        } else {
-          familyId = 'FAM-$rawInput';
+        // 6位编码：先当作 FAM-ID 尝试，失败再查账号名
+        familyId = 'FAM-$rawInput';
+        setState(() => _loadingMessage = '正在验证账号...');
+        final meta = await ref.read(autoSyncProvider).getRemoteMeta(familyId);
+        if (meta == null) {
+          // FAM-ID 不存在，尝试作为自定义账号名查找（带超时）
+          setState(() => _loadingMessage = '正在查找账号名...');
+          final lookupId = await ref.read(autoSyncProvider)
+              .lookupAccountName(rawInput)
+              .timeout(const Duration(seconds: 5), onTimeout: () => null);
+          if (lookupId != null && lookupId.isNotEmpty) {
+            familyId = lookupId;
+            await ref.read(accountNameProvider.notifier).setAccountName(rawInput);
+          } else {
+            setState(() { _isLoading = false; _error = '未找到该账号，请检查输入是否正确'; });
+            return;
+          }
         }
       } else {
         setState(() { _isLoading = false; _error = '格式不正确，应为 6 位字母数字的账号名或 FAM- 开头的家庭 ID'; });
@@ -248,7 +260,6 @@ class _LoginFamilyPageState extends ConsumerState<LoginFamilyPage> {
       final newHash = CryptoUtils.hashPassword(password, familyId);
       await ref.read(passwordHashProvider.notifier).setPasswordHash(newHash);
 
-      // 保存远端元信息中的账号名
       final remoteAccountName = meta['accountName'] as String?;
       if (remoteAccountName != null && remoteAccountName.isNotEmpty) {
         await ref.read(accountNameProvider.notifier).setAccountName(remoteAccountName);
