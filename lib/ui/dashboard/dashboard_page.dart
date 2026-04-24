@@ -146,9 +146,11 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                 SliverToBoxAdapter(child: _CenterPad(pad: pad, child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(flex: 3, child: GestureDetector(
-                      onTap: () => context.push('/asset-trend'),
-                      child: TotalAssetCard(totalAssets: displayAssets, netWorth: netWorth, todayChange: displayTodayChange, todayChangePercent: displayTodayChangePct),
+                    Expanded(flex: 3, child: TotalAssetCard(
+                      totalAssets: displayAssets, netWorth: netWorth,
+                      todayChange: displayTodayChange, todayChangePercent: displayTodayChangePct,
+                      onTapTotal: () => context.push('/total-assets'),
+                      onTapToday: () => context.push('/today-change'),
                     )),
                     const SizedBox(width: 16),
                     const Expanded(flex: 2, child: MiniTrendChart()),
@@ -189,9 +191,11 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                 SliverToBoxAdapter(child: _CenterPad(pad: pad, child: const MemberAssetBar())),
               ] else ...[
                 // 窄屏：原有纵向布局
-                SliverToBoxAdapter(child: Padding(padding: EdgeInsets.symmetric(horizontal: pad), child: GestureDetector(
-                  onTap: () => context.push('/asset-trend'),
-                  child: TotalAssetCard(totalAssets: displayAssets, netWorth: netWorth, todayChange: displayTodayChange, todayChangePercent: displayTodayChangePct),
+                SliverToBoxAdapter(child: Padding(padding: EdgeInsets.symmetric(horizontal: pad), child: TotalAssetCard(
+                  totalAssets: displayAssets, netWorth: netWorth,
+                  todayChange: displayTodayChange, todayChangePercent: displayTodayChangePct,
+                  onTapTotal: () => context.push('/total-assets'),
+                  onTapToday: () => context.push('/today-change'),
                 ))),
                 const SliverToBoxAdapter(child: SizedBox(height: 12)),
                 const SliverToBoxAdapter(child: MiniTrendChart()),

@@ -32,6 +32,8 @@ import '../../ui/settings/settings_page.dart';
 import '../../ui/settings/data_manage_page.dart';
 
 import '../../ui/analysis/ai_analysis_page.dart';
+import '../../ui/dashboard/today_change_page.dart';
+import '../../ui/dashboard/total_assets_page.dart';
 
 final _rootNavigatorKey = GlobalKey<NavigatorState>();
 final _shellNavigatorKey = GlobalKey<NavigatorState>();
@@ -194,6 +196,16 @@ final GoRouter appRouter = GoRouter(
       path: '/asset-trend',
       parentNavigatorKey: _rootNavigatorKey,
       builder: (context, state) => const AssetTrendPage(),
+    ),
+    GoRoute(
+      path: '/today-change',
+      parentNavigatorKey: _rootNavigatorKey,
+      builder: (context, state) => const TodayChangePage(),
+    ),
+    GoRoute(
+      path: '/total-assets',
+      parentNavigatorKey: _rootNavigatorKey,
+      builder: (context, state) => const TotalAssetsPage(),
     ),
     GoRoute(
       path: '/investment-plans',
