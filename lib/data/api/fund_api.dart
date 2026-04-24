@@ -1,8 +1,10 @@
+import 'dart:convert';
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import '../models/market_data_model.dart';
 import 'market_api_client.dart';
 
-/// 天天基金 API - 基金净值查询
+/// 天天基金 API - 基金净值查询（估值接口 + 详情接口备用）
 class FundApi implements MarketApiClient {
   final Dio _dio;
 
@@ -17,31 +19,116 @@ class FundApi implements MarketApiClient {
   @override
   Future<List<MarketDataModel>> getQuotes(List<String> codes) async {
     final results = <MarketDataModel>[];
+    final failedCodes = <String>[];
+
     for (final code in codes) {
-      final result = await getQuote(code);
-      if (result != null) results.add(result);
+      final pureCode = code.replaceAll(RegExp(r'\.(OF|SZ|SH)$', caseSensitive: false), '');
+      if (!RegExp(r'^\d{6}$').hasMatch(pureCode)) continue;
+      try {
+        final result = await _getEstimate(pureCode);
+        if (result != null) {
+          results.add(result);
+        } else {
+          failedCodes.add(pureCode);
+        }
+      } catch (e) {
+        debugPrint('[FundApi] estimate($pureCode) failed: $e');
+        failedCodes.add(pureCode);
+      }
     }
+
+    // 对估值接口拿不到的基金，走详情接口批量获取
+    if (failedCodes.isNotEmpty) {
+      try {
+        final fallback = await _getFundInfo(failedCodes);
+        results.addAll(fallback);
+        debugPrint('[FundApi] fallback got ${fallback.length}/${failedCodes.length} for $failedCodes');
+      } catch (e) {
+        debugPrint('[FundApi] fallback failed: $e');
+      }
+    }
+
     return results;
   }
 
   @override
   Future<MarketDataModel?> getQuote(String code) async {
-    final pureCode = code.replaceAll(RegExp(r'\.(OF|SZ|SH)$', caseSensitive: false), '');
-    if (!RegExp(r'^\d{6}$').hasMatch(pureCode)) return null;
+    final results = await getQuotes([code]);
+    return results.isEmpty ? null : results.first;
+  }
 
-    // 使用天天基金实时估值接口
+  /// 天天基金实时估值接口（适用于权益类/混合型/债券型基金盘中估值）
+  Future<MarketDataModel?> _getEstimate(String pureCode) async {
     final url = 'https://fundgz.1234567.com.cn/js/$pureCode.js';
     final response = await _dio.get(url, options: Options(
       responseType: ResponseType.plain,
+      validateStatus: (status) => status != null && status < 500,
     ));
 
     if (response.statusCode != 200) return null;
 
     final text = response.data?.toString() ?? '';
-    return _parseResponse(pureCode, text);
+    return _parseEstimateResponse(pureCode, text);
   }
 
-  MarketDataModel? _parseResponse(String code, String text) {
+  /// 东方财富基金详情接口（支持货币基金、无估值的债基等）
+  Future<List<MarketDataModel>> _getFundInfo(List<String> codes) async {
+    final url = 'https://fundmobapi.eastmoney.com/FundMNewApi/FundMNFInfo';
+    final response = await _dio.get(url, queryParameters: {
+      'plat': 'Android',
+      'appType': 'ttjj',
+      'product': 'EFund',
+      'Version': '1',
+      'deviceid': '1',
+      'Fcodes': codes.join(','),
+    });
+
+    if (response.statusCode != 200) return [];
+
+    final data = response.data;
+    final rawData = data is String ? jsonDecode(data) : data;
+    final List<dynamic> items = rawData['Datas'] ?? [];
+    final now = DateTime.now();
+    final results = <MarketDataModel>[];
+
+    for (final item in items) {
+      final code = item['FCODE']?.toString() ?? '';
+      final name = item['SHORTNAME']?.toString() ?? code;
+      final navChgRt = item['NAVCHGRT']?.toString() ?? '--';
+      final gsz = double.tryParse(item['GSZ']?.toString() ?? '');
+      final gszzl = double.tryParse(item['GSZZL']?.toString() ?? '');
+      final dwjz = double.tryParse(item['DWJZ']?.toString() ?? '');
+      final nav = double.tryParse(item['NAV']?.toString() ?? '');
+
+      if (navChgRt == '--') {
+        // 货币基金：NAV 字段是万份收益，单位净值始终为 1.0
+        results.add(MarketDataModel(
+          assetCode: code,
+          name: name,
+          price: 1.0,
+          change: 0.0,
+          changePercent: (nav ?? 0) / 10000 * 100,
+          updatedAt: now,
+        ));
+      } else {
+        final chgPct = double.tryParse(navChgRt) ?? 0.0;
+        final price = gsz ?? dwjz ?? 0.0;
+        if (price <= 0) continue;
+        final prevPrice = chgPct != 0 ? price / (1 + chgPct / 100) : price;
+        results.add(MarketDataModel(
+          assetCode: code,
+          name: name,
+          price: price,
+          change: price - prevPrice,
+          changePercent: chgPct,
+          updatedAt: now,
+        ));
+      }
+    }
+    return results;
+  }
+
+  MarketDataModel? _parseEstimateResponse(String code, String text) {
     // 格式: jsonpgz({"fundcode":"000001","name":"xxx","jzrq":"2024-01-01",
     //        "dwjz":"1.0","gsz":"1.01","gszzl":"1.00%",...});
     final match = RegExp(r'\{[^}]+\}').firstMatch(text);
@@ -55,10 +142,10 @@ class FundApi implements MarketApiClient {
     }
 
     final name = fields['name'] ?? code;
-    final dwjz = double.tryParse(fields['dwjz'] ?? '') ?? 0; // 昨日/最新公布净值
-    final gszRaw = double.tryParse(fields['gsz'] ?? '') ?? 0; // 估算净值（盘中才有）
+    final dwjz = double.tryParse(fields['dwjz'] ?? '') ?? 0;
+    final gszRaw = double.tryParse(fields['gsz'] ?? '') ?? 0;
     final gszzl = double.tryParse(
-        (fields['gszzl'] ?? '0').replaceAll('%', '')) ?? 0; // 估算涨幅%
+        (fields['gszzl'] ?? '0').replaceAll('%', '')) ?? 0;
 
     final hasEstimate = gszRaw > 0 && gszzl != 0;
     final price = hasEstimate ? gszRaw : dwjz;

@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import '../models/market_data_model.dart';
 import 'market_api_client.dart';
 
@@ -18,8 +19,12 @@ class SinaFinanceApi implements MarketApiClient {
   Future<List<MarketDataModel>> getQuotes(List<String> codes) async {
     final results = <MarketDataModel>[];
     for (final code in codes) {
-      final result = await getQuote(code);
-      if (result != null) results.add(result);
+      try {
+        final result = await getQuote(code);
+        if (result != null) results.add(result);
+      } catch (e) {
+        debugPrint('[SinaApi] getQuote($code) failed: $e');
+      }
     }
     return results;
   }

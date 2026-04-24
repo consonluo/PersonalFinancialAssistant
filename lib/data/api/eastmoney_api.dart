@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import '../models/market_data_model.dart';
 import 'market_api_client.dart';
 
@@ -14,11 +15,14 @@ class EastMoneyApi implements MarketApiClient {
   @override
   Future<List<MarketDataModel>> getQuotes(List<String> codes) async {
     final results = <MarketDataModel>[];
-    // 分批请求，每批最多50个
     for (var i = 0; i < codes.length; i += 50) {
       final batch = codes.sublist(i, i + 50 > codes.length ? codes.length : i + 50);
-      final batchResults = await _fetchBatch(batch);
-      results.addAll(batchResults);
+      try {
+        final batchResults = await _fetchBatch(batch);
+        results.addAll(batchResults);
+      } catch (e) {
+        debugPrint('[EastMoneyApi] fetchBatch failed: $e');
+      }
     }
     return results;
   }

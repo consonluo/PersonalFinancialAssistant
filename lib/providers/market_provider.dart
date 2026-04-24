@@ -31,8 +31,19 @@ class MarketDataNotifier extends StateNotifier<Map<String, MarketDataModel>> {
 
   /// 刷新所有持仓的行情
   Future<void> refreshAll() async {
-    final holdingsAsync = _ref.read(allHoldingsProvider);
+    var holdingsAsync = _ref.read(allHoldingsProvider);
+    // StreamProvider 可能还没有数据，等待首次加载完成
+    if (holdingsAsync.isLoading || (!holdingsAsync.hasValue && !holdingsAsync.hasError)) {
+      debugPrint('[Market] holdings not ready, waiting...');
+      await Future.delayed(const Duration(seconds: 2));
+      holdingsAsync = _ref.read(allHoldingsProvider);
+      if (!holdingsAsync.hasValue) {
+        await Future.delayed(const Duration(seconds: 3));
+        holdingsAsync = _ref.read(allHoldingsProvider);
+      }
+    }
     final holdings = holdingsAsync.valueOrNull ?? [];
+    debugPrint('[Market] holdings count: ${holdings.length}');
     if (holdings.isEmpty) return;
 
     // 分类收集代码
@@ -83,9 +94,12 @@ class MarketDataNotifier extends StateNotifier<Map<String, MarketDataModel>> {
       }
     }
 
+    debugPrint('[Market] codes: A=${aCodes.length} HK=${hkCodes.length} US=${usCodes.length} Fund=${fundCodes.length}');
+    if (aCodes.isNotEmpty) debugPrint('[Market] aCodes: $aCodes');
+    if (fundCodes.isNotEmpty) debugPrint('[Market] fundCodes: $fundCodes');
+
     final results = <MarketDataModel>[];
 
-    // 并行请求
     final futures = <Future<List<MarketDataModel>>>[];
     if (aCodes.isNotEmpty || hkCodes.isNotEmpty) {
       futures.add(_eastMoneyApi.getQuotes([...aCodes, ...hkCodes]));
@@ -97,9 +111,13 @@ class MarketDataNotifier extends StateNotifier<Map<String, MarketDataModel>> {
       futures.add(_fundApi.getQuotes(fundCodes));
     }
 
-    final allResults = await Future.wait(futures);
+    final allResults = await Future.wait(futures, eagerError: false);
     for (final r in allResults) {
       results.addAll(r);
+    }
+    debugPrint('[Market] total results: ${results.length}');
+    for (final r in results) {
+      debugPrint('[Market]   ${r.assetCode} ${r.name}: price=${r.price} chg=${r.change} chg%=${r.changePercent}');
     }
 
     // 更新状态（同时存原始代码和去后缀的代码，确保匹配）
