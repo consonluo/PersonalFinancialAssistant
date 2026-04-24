@@ -49,6 +49,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     final isDemo = ref.watch(isDemoModeProvider);
     final familyName = ref.watch(familyNameProvider);
     final familyId = ref.watch(familyIdProvider);
+    final accountName = ref.watch(accountNameProvider);
     final currentRoleId = ref.watch(currentRoleProvider);
     final membersAsync = ref.watch(familyMembersProvider);
     final currentMemberName = membersAsync.whenOrNull(
@@ -90,6 +91,26 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                       },
                     ),
                   ),
+                ListTile(
+                  leading: Icon(Icons.badge,
+                      color: accountName != null && accountName.isNotEmpty
+                          ? AppColors.success
+                          : AppColors.textHint),
+                  title: const Text('自定义账号名'),
+                  subtitle: Text(
+                    accountName != null && accountName.isNotEmpty
+                        ? accountName
+                        : '未设置（点击设置）',
+                    style: TextStyle(
+                      fontWeight: accountName != null && accountName.isNotEmpty
+                          ? FontWeight.w600
+                          : FontWeight.normal,
+                      letterSpacing: accountName != null && accountName.isNotEmpty ? 1 : 0,
+                    ),
+                  ),
+                  trailing: const Icon(Icons.edit, size: 20),
+                  onTap: () => _showEditAccountNameDialog(context, accountName),
+                ),
                 if (currentMemberName != null)
                   ListTile(
                     leading: const Icon(Icons.person, color: AppColors.success),
@@ -325,6 +346,115 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     controller.dispose();
   }
 
+  Future<void> _showEditAccountNameDialog(
+      BuildContext context, String? currentName) async {
+    final controller = TextEditingController(text: currentName ?? '');
+    String? errorText;
+    bool isSaving = false;
+
+    await showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) {
+          return AlertDialog(
+            title: const Text('编辑账号名'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('6位字母或数字组合，可用于登录',
+                    style: TextStyle(
+                        fontSize: 13, color: AppColors.textSecondary)),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: controller,
+                  decoration: InputDecoration(
+                    hintText: '如 ABC123',
+                    errorText: errorText,
+                    counterText: '${controller.text.length}/6',
+                  ),
+                  maxLength: 6,
+                  textCapitalization: TextCapitalization.characters,
+                  enabled: !isSaving,
+                  onChanged: (v) {
+                    setDialogState(() {
+                      errorText = null;
+                      if (v.isNotEmpty &&
+                          !RegExp(r'^[A-Za-z0-9]*$').hasMatch(v)) {
+                        errorText = '只能包含字母和数字';
+                      }
+                    });
+                  },
+                ),
+                if (isSaving)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 8),
+                    child: Row(children: [
+                      SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2)),
+                      SizedBox(width: 8),
+                      Text('正在验证并保存...', style: TextStyle(fontSize: 13)),
+                    ]),
+                  ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('取消'),
+              ),
+              ElevatedButton(
+                onPressed: isSaving
+                    ? null
+                    : () async {
+                        final name = controller.text.trim().toUpperCase();
+                        if (name.isEmpty) {
+                          setDialogState(() => errorText = '请输入账号名');
+                          return;
+                        }
+                        if (!RegExp(r'^[A-Za-z0-9]{6}$').hasMatch(name)) {
+                          setDialogState(
+                              () => errorText = '必须为6位字母或数字组合');
+                          return;
+                        }
+                        if (name == currentName?.toUpperCase()) {
+                          Navigator.pop(ctx);
+                          return;
+                        }
+
+                        setDialogState(() {
+                          isSaving = true;
+                          errorText = null;
+                        });
+
+                        final ok = await ref
+                            .read(autoSyncProvider)
+                            .setAccountName(name, oldName: currentName);
+
+                        if (!ctx.mounted) return;
+                        if (ok) {
+                          Navigator.pop(ctx);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('账号名已更新为 $name')));
+                        } else {
+                          setDialogState(() {
+                            isSaving = false;
+                            errorText = '该账号名已被使用，请更换';
+                          });
+                        }
+                      },
+                child: const Text('保存'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+    controller.dispose();
+  }
+
   Future<void> _logout(BuildContext context) async {
     final confirm = await showDialog<bool>(
       context: context,
@@ -355,6 +485,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     await ref.read(currentRoleProvider.notifier).clearRole();
     await ref.read(syncConfigProvider.notifier).clearConfig();
     await ref.read(passwordHashProvider.notifier).clear();
+    await ref.read(accountNameProvider.notifier).clear();
     (await SharedPreferences.getInstance()).remove('family_name');
 
     ref.invalidate(allHoldingsProvider);

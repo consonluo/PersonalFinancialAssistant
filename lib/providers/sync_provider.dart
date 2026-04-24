@@ -133,8 +133,10 @@ class AutoSyncManager {
     try {
       final db = _ref.read(databaseProvider);
       final passwordHash = _ref.read(passwordHashProvider);
+      final accountName = _ref.read(accountNameProvider);
       final service = WebDavSyncService(db: db, familyId: familyId);
-      await service.syncUp(familyName, passwordHash: passwordHash);
+      await service.syncUp(familyName,
+          passwordHash: passwordHash, accountName: accountName);
 
       final now = DateTime.now();
       _ref.read(syncStatusProvider.notifier).state = SyncStatus.success;
@@ -192,6 +194,41 @@ class AutoSyncManager {
     } catch (_) {
       return false;
     }
+  }
+
+  /// 检查账号名是否可用
+  Future<bool> isAccountNameAvailable(String name) async {
+    final familyId = _ref.read(familyIdProvider);
+    if (familyId == null || familyId.isEmpty) return false;
+    final db = _ref.read(databaseProvider);
+    final service = WebDavSyncService(db: db, familyId: familyId);
+    return service.isAccountNameAvailable(name);
+  }
+
+  /// 设置账号名（含唯一性校验、云端注册）
+  Future<bool> setAccountName(String name, {String? oldName}) async {
+    final familyId = _ref.read(familyIdProvider);
+    if (familyId == null || familyId.isEmpty) return false;
+    final db = _ref.read(databaseProvider);
+    final service = WebDavSyncService(db: db, familyId: familyId);
+
+    final available = await service.isAccountNameAvailable(name);
+    if (!available) return false;
+
+    if (oldName != null && oldName.isNotEmpty) {
+      await service.unregisterAccountName(oldName);
+    }
+    final ok = await service.registerAccountName(name);
+    if (ok) {
+      await _ref.read(accountNameProvider.notifier).setAccountName(name);
+      triggerAutoSync();
+    }
+    return ok;
+  }
+
+  /// 通过账号名查找 familyId
+  Future<String?> lookupAccountName(String name) {
+    return WebDavSyncService.lookupAccountName(name);
   }
 
   void dispose() {

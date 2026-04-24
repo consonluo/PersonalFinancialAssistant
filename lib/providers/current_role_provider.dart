@@ -43,6 +43,39 @@ class FamilyIdNotifier extends StateNotifier<String?> {
   }
 }
 
+/// 自定义账号名（6位字母数字，可用于登录）
+final accountNameProvider =
+    StateNotifierProvider<AccountNameNotifier, String?>((ref) {
+  return AccountNameNotifier();
+});
+
+class AccountNameNotifier extends StateNotifier<String?> {
+  AccountNameNotifier() : super(null) {
+    _load();
+  }
+
+  Future<void> _load() async {
+    final prefs = await SharedPreferences.getInstance();
+    state = prefs.getString('account_name');
+  }
+
+  Future<void> setAccountName(String name) async {
+    state = name.toUpperCase();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('account_name', name.toUpperCase());
+  }
+
+  Future<void> clear() async {
+    state = null;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('account_name');
+  }
+
+  static bool isValidFormat(String name) {
+    return RegExp(r'^[A-Za-z0-9]{6}$').hasMatch(name);
+  }
+}
+
 class CurrentRoleNotifier extends StateNotifier<String?> {
   CurrentRoleNotifier() : super(null) {
     _load();

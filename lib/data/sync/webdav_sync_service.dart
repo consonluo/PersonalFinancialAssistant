@@ -150,11 +150,14 @@ class WebDavSyncService {
   Future<void> uploadMeta({
     required String familyName,
     required String passwordHash,
+    String? accountName,
   }) async {
     final meta = jsonEncode({
       'familyId': familyId,
       'familyName': familyName,
       'passwordHash': passwordHash,
+      if (accountName != null && accountName.isNotEmpty)
+        'accountName': accountName,
       'updatedAt': DateTime.now().toIso8601String(),
     });
     final bytes = Uint8List.fromList(utf8.encode(meta));
@@ -165,6 +168,103 @@ class WebDavSyncService {
     }
     await _ensureDirs();
     await _nativeClient!.write(_remoteMetaPath, bytes);
+  }
+
+  // ========== 账号名索引 ==========
+
+  static String _nameIndexPath(String name) =>
+      '${AppConstants.webdavBaseDir}_name_${name.toUpperCase()}.json';
+
+  /// 检查账号名是否可用（不存在或属于当前家庭）
+  Future<bool> isAccountNameAvailable(String name) async {
+    final path = _nameIndexPath(name);
+    try {
+      Uint8List? bytes;
+      if (kIsWeb) {
+        bytes = await _webGet(path);
+      } else {
+        try {
+          final raw = await _nativeClient!.read(path);
+          bytes = Uint8List.fromList(raw);
+        } catch (_) {
+          bytes = null;
+        }
+      }
+      if (bytes == null) return true;
+      final data = jsonDecode(utf8.decode(bytes)) as Map<String, dynamic>;
+      return data['familyId'] == familyId;
+    } catch (_) {
+      return true;
+    }
+  }
+
+  /// 注册账号名索引
+  Future<bool> registerAccountName(String name) async {
+    final available = await isAccountNameAvailable(name);
+    if (!available) return false;
+
+    final path = _nameIndexPath(name);
+    final content = jsonEncode({
+      'familyId': familyId,
+      'updatedAt': DateTime.now().toIso8601String(),
+    });
+    final bytes = Uint8List.fromList(utf8.encode(content));
+
+    if (kIsWeb) {
+      return await _webPut(path, bytes);
+    }
+    await _ensureDirs();
+    await _nativeClient!.write(path, bytes);
+    return true;
+  }
+
+  /// 注销旧账号名索引
+  Future<void> unregisterAccountName(String name) async {
+    final path = _nameIndexPath(name);
+    try {
+      if (kIsWeb) {
+        final url = '$_proxyBase$path';
+        await _webDio.delete<dynamic>(url,
+            options: Options(headers: {'Authorization': _basicAuth}));
+      } else {
+        await _nativeClient!.remove(path);
+      }
+    } catch (_) {}
+  }
+
+  /// 通过账号名查找 familyId
+  static Future<String?> lookupAccountName(String name) async {
+    final path = _nameIndexPath(name);
+    try {
+      if (kIsWeb) {
+        final url = '$_proxyBase$path';
+        final resp = await _webDio.get<ResponseBody>(url,
+            options: Options(
+              headers: {'Authorization': _basicAuth},
+              responseType: ResponseType.stream,
+            ));
+        if (resp.statusCode != 200 || resp.data == null) return null;
+        final chunks = <int>[];
+        await for (final chunk in resp.data!.stream) {
+          chunks.addAll(chunk);
+        }
+        final data = jsonDecode(utf8.decode(Uint8List.fromList(chunks)))
+            as Map<String, dynamic>;
+        return data['familyId'] as String?;
+      } else {
+        final client = webdav.newClient(
+          AppConstants.webdavUrl,
+          user: AppConstants.webdavUser,
+          password: AppConstants.webdavPass,
+        );
+        final raw = await client.read(path);
+        final data = jsonDecode(utf8.decode(Uint8List.fromList(raw)))
+            as Map<String, dynamic>;
+        return data['familyId'] as String?;
+      }
+    } catch (_) {
+      return null;
+    }
   }
 
   /// 下载元信息
@@ -225,14 +325,21 @@ class WebDavSyncService {
   }
 
   /// 同步上传（数据 + 元信息）
-  Future<void> syncUp(String familyName, {String? passwordHash}) async {
+  Future<void> syncUp(String familyName,
+      {String? passwordHash, String? accountName}) async {
     await upload(familyName);
     if (passwordHash != null && passwordHash.isNotEmpty) {
-      await uploadMeta(familyName: familyName, passwordHash: passwordHash);
+      await uploadMeta(
+          familyName: familyName,
+          passwordHash: passwordHash,
+          accountName: accountName);
     } else {
       final existingMeta = await downloadMeta();
       final existingHash = existingMeta?['passwordHash'] as String? ?? '';
-      await uploadMeta(familyName: familyName, passwordHash: existingHash);
+      await uploadMeta(
+          familyName: familyName,
+          passwordHash: existingHash,
+          accountName: accountName);
     }
   }
 

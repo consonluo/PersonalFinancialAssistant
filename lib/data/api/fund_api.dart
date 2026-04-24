@@ -47,7 +47,6 @@ class FundApi implements MarketApiClient {
     final match = RegExp(r'\{[^}]+\}').firstMatch(text);
     if (match == null) return null;
 
-    // 简单JSON解析
     final jsonStr = match.group(0)!;
     final fields = <String, String>{};
 
@@ -56,19 +55,24 @@ class FundApi implements MarketApiClient {
     }
 
     final name = fields['name'] ?? code;
-    final dwjz = double.tryParse(fields['dwjz'] ?? '') ?? 0; // 单位净值
-    final gsz = double.tryParse(fields['gsz'] ?? '') ?? dwjz; // 估算净值
+    final dwjz = double.tryParse(fields['dwjz'] ?? '') ?? 0; // 昨日/最新公布净值
+    final gszRaw = double.tryParse(fields['gsz'] ?? '') ?? 0; // 估算净值（盘中才有）
     final gszzl = double.tryParse(
-        (fields['gszzl'] ?? '0').replaceAll('%', '')) ?? 0; // 估算涨幅
+        (fields['gszzl'] ?? '0').replaceAll('%', '')) ?? 0; // 估算涨幅%
 
-    final change = dwjz > 0 ? gsz - dwjz : 0.0;
+    final hasEstimate = gszRaw > 0 && gszzl != 0;
+    final price = hasEstimate ? gszRaw : dwjz;
+    final change = hasEstimate ? gszRaw - dwjz : 0.0;
+    final changePercent = hasEstimate ? gszzl : 0.0;
+
+    if (price <= 0) return null;
 
     return MarketDataModel(
       assetCode: code,
       name: name,
-      price: gsz > 0 ? gsz : dwjz,
+      price: price,
       change: change,
-      changePercent: gszzl,
+      changePercent: changePercent,
       updatedAt: DateTime.now(),
     );
   }

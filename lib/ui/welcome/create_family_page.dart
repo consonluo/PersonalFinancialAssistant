@@ -26,18 +26,21 @@ class _CreateFamilyPageState extends ConsumerState<CreateFamilyPage> {
   final _familyNameController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
+  final _accountNameController = TextEditingController();
   final _members = <_MemberInput>[_MemberInput()];
   bool _isCreating = false;
   String _statusMessage = '';
   bool _obscurePassword = true;
   bool _obscureConfirm = true;
   bool _localOnly = false;
+  String? _accountNameError;
 
   @override
   void dispose() {
     _familyNameController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
+    _accountNameController.dispose();
     super.dispose();
   }
 
@@ -89,6 +92,30 @@ class _CreateFamilyPageState extends ConsumerState<CreateFamilyPage> {
             const SizedBox(height: 16),
 
             if (!_localOnly) ...[
+              const Text('自定义账号名', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+              const SizedBox(height: 4),
+              Text('6位字母或数字组合，可用于登录（选填）',
+                  style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _accountNameController,
+                decoration: InputDecoration(
+                  hintText: '如 abc123',
+                  errorText: _accountNameError,
+                  counterText: '${_accountNameController.text.length}/6',
+                ),
+                maxLength: 6,
+                textCapitalization: TextCapitalization.characters,
+                onChanged: (v) {
+                  setState(() {
+                    _accountNameError = null;
+                    if (v.isNotEmpty && !RegExp(r'^[A-Za-z0-9]*$').hasMatch(v)) {
+                      _accountNameError = '只能包含字母和数字';
+                    }
+                  });
+                },
+              ),
+              const SizedBox(height: 16),
               const Text('设置密码', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
               const SizedBox(height: 4),
               Text('其他设备登录时需要输入密码', style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
@@ -201,6 +228,14 @@ class _CreateFamilyPageState extends ConsumerState<CreateFamilyPage> {
     }
 
     if (!_localOnly) {
+      final accountName = _accountNameController.text.trim();
+      if (accountName.isNotEmpty) {
+        if (!RegExp(r'^[A-Za-z0-9]{6}$').hasMatch(accountName)) {
+          ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('账号名必须为6位字母或数字组合')));
+          return;
+        }
+      }
       final password = _passwordController.text;
       if (password.length < 6) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('密码至少6位')));
@@ -271,8 +306,27 @@ class _CreateFamilyPageState extends ConsumerState<CreateFamilyPage> {
         final passwordHash = CryptoUtils.hashPassword(password, familyId);
         await ref.read(passwordHashProvider.notifier).setPasswordHash(passwordHash);
 
+        // 处理自定义账号名
+        final accountName = _accountNameController.text.trim().toUpperCase();
+        if (accountName.isNotEmpty) {
+          setState(() => _statusMessage = '正在检查账号名...');
+          final ok = await ref
+              .read(autoSyncProvider)
+              .setAccountName(accountName);
+          if (!ok && mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('账号名已被使用，请更换')),
+            );
+            setState(() {
+              _isCreating = false;
+              _statusMessage = '';
+              _accountNameError = '该账号名已被使用';
+            });
+            return;
+          }
+        }
+
         setState(() => _statusMessage = '正在上传到云端...');
-        // 等待数据库刷盘（Web WASM 写入可能有延迟）
         await Future.delayed(const Duration(milliseconds: 500));
         bool syncOk = false;
         try {
@@ -291,7 +345,7 @@ class _CreateFamilyPageState extends ConsumerState<CreateFamilyPage> {
         }
 
         if (!mounted) return;
-        await _showFamilyIdDialog(familyId);
+        await _showFamilyIdDialog(familyId, accountName: accountName);
       }
     } catch (e) {
       setState(() { _isCreating = false; _statusMessage = ''; });
@@ -301,7 +355,8 @@ class _CreateFamilyPageState extends ConsumerState<CreateFamilyPage> {
     }
   }
 
-  Future<void> _showFamilyIdDialog(String familyId) async {
+  Future<void> _showFamilyIdDialog(String familyId,
+      {String accountName = ''}) async {
     await showDialog(
       context: context,
       barrierDismissible: false,
@@ -323,23 +378,41 @@ class _CreateFamilyPageState extends ConsumerState<CreateFamilyPage> {
               decoration: BoxDecoration(
                 color: AppColors.primary.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
+                border: Border.all(
+                    color: AppColors.primary.withValues(alpha: 0.3)),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(familyId, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w700, color: AppColors.primary, letterSpacing: 2)),
+                  Text(familyId,
+                      style: const TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.primary,
+                          letterSpacing: 2)),
                   const SizedBox(width: 8),
                   IconButton(
-                    icon: const Icon(Icons.copy, size: 20, color: AppColors.primary),
+                    icon: const Icon(Icons.copy,
+                        size: 20, color: AppColors.primary),
                     onPressed: () {
                       Clipboard.setData(ClipboardData(text: familyId));
-                      ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('已复制到剪贴板')));
+                      ScaffoldMessenger.of(ctx).showSnackBar(
+                          const SnackBar(content: Text('已复制到剪贴板')));
                     },
                   ),
                 ],
               ),
             ),
+            if (accountName.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Text('自定义账号名：$accountName',
+                  style: const TextStyle(
+                      fontSize: 14, fontWeight: FontWeight.w600)),
+              const SizedBox(height: 4),
+              Text('登录时可使用账号名代替家庭 ID',
+                  style: TextStyle(
+                      fontSize: 12, color: AppColors.textSecondary)),
+            ],
             const SizedBox(height: 16),
             Container(
               padding: const EdgeInsets.all(12),
@@ -347,14 +420,18 @@ class _CreateFamilyPageState extends ConsumerState<CreateFamilyPage> {
                 color: AppColors.warning.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: const Row(
+              child: Row(
                 children: [
-                  Icon(Icons.warning_amber, color: AppColors.warning, size: 20),
-                  SizedBox(width: 8),
+                  const Icon(Icons.warning_amber,
+                      color: AppColors.warning, size: 20),
+                  const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      '请妥善保存此账号 ID 和密码！\n其他设备登录时需要输入账号 ID + 密码。',
-                      style: TextStyle(fontSize: 12, color: AppColors.warning),
+                      accountName.isNotEmpty
+                          ? '请妥善保存账号名和密码！\n其他设备登录时输入账号名或 ID + 密码。'
+                          : '请妥善保存此账号 ID 和密码！\n其他设备登录时需要输入账号 ID + 密码。',
+                      style: const TextStyle(
+                          fontSize: 12, color: AppColors.warning),
                     ),
                   ),
                 ],

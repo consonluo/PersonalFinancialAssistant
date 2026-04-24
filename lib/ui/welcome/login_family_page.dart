@@ -34,10 +34,14 @@ class _LoginFamilyPageState extends ConsumerState<LoginFamilyPage> {
 
   Future<void> _loadLastFamilyId() async {
     final prefs = await SharedPreferences.getInstance();
+    final accountName = prefs.getString('account_name');
+    if (accountName != null && accountName.isNotEmpty && mounted) {
+      _familyIdController.text = accountName;
+      return;
+    }
     final lastId = prefs.getString('family_id');
     if (lastId != null && lastId.isNotEmpty && mounted) {
-      // 去掉 FAM- 前缀，因为输入框已有固定前缀
-      _familyIdController.text = lastId.replaceFirst('FAM-', '');
+      _familyIdController.text = lastId;
     }
   }
 
@@ -84,10 +88,10 @@ class _LoginFamilyPageState extends ConsumerState<LoginFamilyPage> {
                     TextField(
                       controller: _familyIdController,
                       decoration: const InputDecoration(
-                        hintText: '输入6位编码，如 A3X9K2',
-                        labelText: '家庭账号 ID',
+                        hintText: '输入账号名或6位家庭编码',
+                        labelText: '账号名 / 家庭 ID',
                         prefixIcon: Icon(Icons.vpn_key_outlined),
-                        prefixText: 'FAM-',
+                        helperText: '可输入自定义账号名或 FAM- 开头的家庭 ID',
                       ),
                       textCapitalization: TextCapitalization.characters,
                       enabled: !_isLoading,
@@ -177,22 +181,15 @@ class _LoginFamilyPageState extends ConsumerState<LoginFamilyPage> {
     );
   }
 
-  /// 使用家庭账号 ID + 密码登录
+  /// 使用家庭账号 ID 或账号名 + 密码登录
   Future<void> _loginWithFamilyId() async {
-    final rawInput = _familyIdController.text.trim().toUpperCase().replaceFirst('FAM-', '');
+    final rawInput = _familyIdController.text.trim().toUpperCase();
     final password = _passwordController.text;
 
     if (rawInput.isEmpty) {
-      setState(() => _error = '请输入家庭账号编码');
+      setState(() => _error = '请输入账号名或家庭 ID');
       return;
     }
-    if (!RegExp(r'^[A-Z0-9]{6}$').hasMatch(rawInput)) {
-      setState(() => _error = '编码格式不正确，应为 6 位字母数字');
-      return;
-    }
-
-    final familyId = 'FAM-$rawInput';
-
     if (password.isEmpty) {
       setState(() => _error = '请输入密码');
       return;
@@ -201,16 +198,33 @@ class _LoginFamilyPageState extends ConsumerState<LoginFamilyPage> {
     setState(() { _isLoading = true; _error = null; _loadingMessage = '正在验证账号...'; });
 
     try {
-      // 先从云端下载元信息验证密码
+      String familyId;
+
+      if (rawInput.startsWith('FAM-')) {
+        familyId = rawInput;
+      } else if (RegExp(r'^[A-Z0-9]{6}$').hasMatch(rawInput)) {
+        // 可能是账号名或 FAM- 编码，先尝试账号名查找
+        setState(() => _loadingMessage = '正在查找账号...');
+        final lookupId = await ref.read(autoSyncProvider).lookupAccountName(rawInput);
+        if (lookupId != null && lookupId.isNotEmpty) {
+          familyId = lookupId;
+          await ref.read(accountNameProvider.notifier).setAccountName(rawInput);
+        } else {
+          familyId = 'FAM-$rawInput';
+        }
+      } else {
+        setState(() { _isLoading = false; _error = '格式不正确，应为 6 位字母数字的账号名或 FAM- 开头的家庭 ID'; });
+        return;
+      }
+
       setState(() => _loadingMessage = '正在验证密码...');
       final meta = await ref.read(autoSyncProvider).getRemoteMeta(familyId);
 
       if (meta == null) {
-        setState(() { _isLoading = false; _error = '未找到该家庭账号的数据，请检查 ID 是否正确'; });
+        setState(() { _isLoading = false; _error = '未找到该账号的数据，请检查输入是否正确'; });
         return;
       }
 
-      // 验证密码
       final storedHash = meta['passwordHash'] as String? ?? '';
       if (storedHash.isNotEmpty) {
         final inputHash = CryptoUtils.hashPassword(password, familyId);
@@ -220,7 +234,6 @@ class _LoginFamilyPageState extends ConsumerState<LoginFamilyPage> {
         }
       }
 
-      // 密码验证通过，下载数据
       setState(() => _loadingMessage = '正在下载数据...');
       final success = await ref.read(autoSyncProvider).syncDown(familyId);
 
@@ -229,24 +242,23 @@ class _LoginFamilyPageState extends ConsumerState<LoginFamilyPage> {
         return;
       }
 
-      // 保存登录状态
       await ref.read(familyIdProvider.notifier).setFamilyId(familyId);
       await ref.read(syncConfigProvider.notifier).setFamilyId(familyId);
 
-      // 用当前输入的密码重新生成哈希并保存（确保一致性）
       final newHash = CryptoUtils.hashPassword(password, familyId);
       await ref.read(passwordHashProvider.notifier).setPasswordHash(newHash);
 
-      // 注意：不在登录后立即 syncUp 全量数据，因为 importAll 刚写入的 API Key
-      // 在某些平台（特别是 Web）可能还未刷盘，syncUp 的 exportAll 会读到空值覆盖云端数据。
-      // Dashboard 的 triggerAutoSync 会在数据稳定后自动同步。
+      // 保存远端元信息中的账号名
+      final remoteAccountName = meta['accountName'] as String?;
+      if (remoteAccountName != null && remoteAccountName.isNotEmpty) {
+        await ref.read(accountNameProvider.notifier).setAccountName(remoteAccountName);
+      }
 
       final familyName = meta['familyName'] as String? ?? '我的家庭';
       ref.read(familyNameProvider.notifier).state = familyName;
       ref.read(isDemoModeProvider.notifier).state = false;
       (await SharedPreferences.getInstance()).setString('family_name', familyName);
 
-      // 自动选择第一个成员作为当前角色（确保自动登录可用）
       final db = ref.read(databaseProvider);
       final members = await db.getAllMembers();
       if (members.isNotEmpty) {

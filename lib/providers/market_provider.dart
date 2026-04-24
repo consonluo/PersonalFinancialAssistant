@@ -54,8 +54,16 @@ class MarketDataNotifier extends StateNotifier<Map<String, MarketDataModel>> {
         case AssetType.usStock:
           usCodes.add(h.assetCode);
         case AssetType.gold:
-          // 黄金ETF(如518880)走基金接口，纸黄金/实物金无行情
-          if (RegExp(r'^\d{6}$').hasMatch(h.assetCode)) {
+          if (_isExchangeListedETF(h.assetCode)) {
+            aCodes.add(h.assetCode);
+          } else if (RegExp(r'^\d{6}$').hasMatch(h.assetCode)) {
+            fundCodes.add(h.assetCode);
+          }
+        case AssetType.indexETF:
+        case AssetType.nasdaqETF:
+          if (_isExchangeListedETF(h.assetCode)) {
+            aCodes.add(h.assetCode);
+          } else {
             fundCodes.add(h.assetCode);
           }
         case AssetType.deposit:
@@ -69,7 +77,7 @@ class MarketDataNotifier extends StateNotifier<Map<String, MarketDataModel>> {
         case AssetType.treasuryRepo:
         case AssetType.insurance:
         case AssetType.other:
-          break; // 不需要行情
+          break;
         default:
           fundCodes.add(h.assetCode);
       }
@@ -115,6 +123,18 @@ class MarketDataNotifier extends StateNotifier<Map<String, MarketDataModel>> {
       final db = _ref.read(databaseProvider);
       await SnapshotService(db).takeSnapshotIfNeeded();
     } catch (_) {}
+  }
+
+  /// 判断是否为交易所上市ETF（走股票行情接口而非基金净值接口）
+  static bool _isExchangeListedETF(String code) {
+    final pure = code.replaceAll(
+        RegExp(r'\.(SH|SZ|OF)$', caseSensitive: false), '');
+    if (!RegExp(r'^\d{6}$').hasMatch(pure)) return false;
+    return pure.startsWith('51') ||
+        pure.startsWith('15') ||
+        pure.startsWith('56') ||
+        pure.startsWith('52') ||
+        pure.startsWith('58');
   }
 
   /// 将最新行情价格写入持仓表的 currentPrice 字段

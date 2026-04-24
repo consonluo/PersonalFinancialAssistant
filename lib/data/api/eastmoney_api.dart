@@ -65,12 +65,12 @@ class EastMoneyApi implements MarketApiClient {
   String _toSecId(String code) {
     final pureCode = code.replaceAll(RegExp(r'\.(SH|SZ|HK)$', caseSensitive: false), '');
 
-    // A股
+    // A股 + 交易所ETF
     if (RegExp(r'^\d{6}$').hasMatch(pureCode)) {
-      if (pureCode.startsWith('6') || pureCode.startsWith('9')) {
-        return '1.$pureCode'; // 上海
+      if (pureCode.startsWith('5') || pureCode.startsWith('6') || pureCode.startsWith('9')) {
+        return '1.$pureCode'; // 上海（含51x/56x/58x ETF）
       }
-      return '0.$pureCode'; // 深圳
+      return '0.$pureCode'; // 深圳（含159xxx ETF）
     }
 
     // 港股

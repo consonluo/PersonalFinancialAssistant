@@ -34,6 +34,12 @@ class AssetClassifier {
   static AssetType? _classifyByName(String name) {
     final lowerName = name.toLowerCase();
 
+    // 存款优先检测（避免"现金宝""余额+"等被误判为货币基金）
+    if (_isDeposit(lowerName)) return _depositSubType(lowerName);
+
+    // 银行理财 / 储蓄险等低风险产品（优先于基金，避免"净值型理财"被误判）
+    if (_isWealthProduct(lowerName)) return AssetType.wealth;
+
     // 货币基金
     for (final kw in MarketConstants.classifyKeywords['moneyFund']!) {
       if (lowerName.contains(kw.toLowerCase())) return AssetType.moneyFund;
@@ -69,12 +75,6 @@ class AssetClassifier {
       if (lowerName.contains(kw.toLowerCase())) return AssetType.mixedFund;
     }
 
-    // 存款（优先于理财匹配，因为结构性存款含"存款"二字）
-    if (_isDeposit(lowerName)) return _depositSubType(lowerName);
-
-    // 银行理财 / 储蓄险等低风险产品
-    if (_isWealthProduct(lowerName)) return AssetType.wealth;
-
     return null;
   }
 
@@ -105,8 +105,10 @@ class AssetClassifier {
 
   /// 判断是否为银行理财类（非存款）
   static bool _isWealthProduct(String lowerName) {
+    // 已被存款匹配的不再判断为理财
+    if (_isDeposit(lowerName)) return false;
     const wealthKeywords = [
-      '理财', '净值', '结构性', '资管', '集合',
+      '理财', '结构性', '资管', '集合',
       '保险', '年金', '增额', '万能', '投连',
       '国债逆回购', '逆回购', 'repo',
     ];
