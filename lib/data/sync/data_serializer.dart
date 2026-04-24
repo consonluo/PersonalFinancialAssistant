@@ -1,7 +1,10 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../database/app_database.dart';
 import 'package:drift/drift.dart';
+import '../../core/constants/app_constants.dart';
+import '../../core/utils/asset_classifier.dart';
 
 /// 数据序列化器：SQLite 全量数据 ↔ JSON
 class DataSerializer {
@@ -117,14 +120,24 @@ class DataSerializer {
       ));
     }
 
-    // 导入持仓
+    // 导入持仓（导入时自动纠正 assetType 为 "other" 的记录）
     for (final h in (data['holdings'] as List? ?? [])) {
+      final code = h['assetCode'] as String;
+      final name = h['assetName'] as String;
+      var type = h['assetType'] as String;
+      if (type == AssetType.other.name) {
+        final better = AssetClassifier.classify(code, name);
+        if (better != AssetType.other) {
+          debugPrint('[Import] reclassified "$name" ($code): other → ${better.name}');
+          type = better.name;
+        }
+      }
       await db.insertHolding(HoldingsCompanion(
         id: Value(h['id'] as String),
         accountId: Value(h['accountId'] as String),
-        assetCode: Value(h['assetCode'] as String),
-        assetName: Value(h['assetName'] as String),
-        assetType: Value(h['assetType'] as String),
+        assetCode: Value(code),
+        assetName: Value(name),
+        assetType: Value(type),
         quantity: Value((h['quantity'] as num).toDouble()),
         costPrice: Value((h['costPrice'] as num).toDouble()),
         currentPrice: Value((h['currentPrice'] as num).toDouble()),

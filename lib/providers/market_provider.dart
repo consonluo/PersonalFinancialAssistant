@@ -162,6 +162,9 @@ class MarketDataNotifier extends StateNotifier<Map<String, MarketDataModel>> {
     // 自动更新持仓表中的现价
     await _updateHoldingPrices(results);
 
+    // 自动纠正分类：将 assetType 为 "other" 但分类器能识别的持仓重新分类
+    await _reclassifyMistyped();
+
     // 价格更新后重新计算今日快照
     try {
       final db = _ref.read(databaseProvider);
@@ -213,6 +216,46 @@ class MarketDataNotifier extends StateNotifier<Map<String, MarketDataModel>> {
       }
     } catch (e) {
       debugPrint('[MarketData] 更新持仓现价失败: $e');
+    }
+  }
+
+  /// 自动纠正分类错误的持仓（assetType 为 "other" 但名称/代码能识别出正确类型）
+  Future<void> _reclassifyMistyped() async {
+    try {
+      final db = _ref.read(databaseProvider);
+      final holdings = _ref.read(allHoldingsProvider).valueOrNull ?? [];
+      var fixed = 0;
+
+      for (final h in holdings) {
+        final currentType = AssetType.values.firstWhere(
+          (e) => e.name == h.assetType, orElse: () => AssetType.other,
+        );
+        if (currentType != AssetType.other) continue;
+
+        final better = AssetClassifier.classify(h.assetCode, h.assetName);
+        if (better != AssetType.other) {
+          await db.updateHolding(HoldingsCompanion(
+            id: Value(h.id),
+            accountId: Value(h.accountId),
+            assetCode: Value(h.assetCode),
+            assetName: Value(h.assetName),
+            assetType: Value(better.name),
+            quantity: Value(h.quantity),
+            costPrice: Value(h.costPrice),
+            currentPrice: Value(h.currentPrice),
+            tags: Value(h.tags),
+            notes: Value(h.notes),
+            createdAt: Value(h.createdAt),
+            updatedAt: Value(h.updatedAt),
+          ));
+          fixed++;
+          debugPrint('[Market] reclassified "${h.assetName}" (${h.assetCode}): other → ${better.name}');
+        }
+      }
+      final otherCount = holdings.where((h) => h.assetType == AssetType.other.name).length;
+      debugPrint('[Market] reclassify: scanned ${holdings.length} holdings, $otherCount typed "other", fixed $fixed');
+    } catch (e) {
+      debugPrint('[Market] reclassify error: $e');
     }
   }
 
