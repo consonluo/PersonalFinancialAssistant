@@ -244,10 +244,10 @@ class AiService {
     }
   }
 
-  /// 智能分类持仓（非流式，返回 JSON）
-  static Future<String> classifyHoldings(List<Map<String, dynamic>> holdings) async {
+  /// 构建「智能分类持仓」提示词（供预览编辑）
+  static String buildClassifyHoldingsPrompt(List<Map<String, dynamic>> holdings) {
     final holdingsJson = jsonEncode(holdings);
-    final prompt = '''你是一个专业的金融资产分类专家。请对以下持仓数据进行智能分类。
+    return '''你是一个专业的金融资产分类专家。请对以下持仓数据进行智能分类。
 
 当前持仓数据：
 $holdingsJson
@@ -262,34 +262,26 @@ aStock(A股)、hkStock(港股)、usStock(美股)、indexFund(指数基金-被动
 
 返回严格JSON数组（不要markdown），每条包含 id 和新的 assetType：
 [{"id": "原始id", "assetType": "新类型", "reason": "分类理由"}]''';
+  }
 
-    return chat(prompt);
+  /// 智能分类持仓（非流式，返回 JSON）
+  static Future<String> classifyHoldings(
+    List<Map<String, dynamic>> holdings, {
+    String? promptOverride,
+  }) async {
+    return chat(promptOverride ?? buildClassifyHoldingsPrompt(holdings));
   }
 
   /// 智能分类持仓（流式）
-  static Stream<String> classifyHoldingsStream(List<Map<String, dynamic>> holdings) {
-    final holdingsJson = jsonEncode(holdings);
-    final prompt = '''你是一个专业的金融资产分类专家。请对以下持仓数据进行智能分类。
-
-当前持仓数据：
-$holdingsJson
-
-请对每条持仓重新判断资产类型（按产品形态分，不按投资标的），assetType 必须是以下之一：
-aStock(A股)、hkStock(港股)、usStock(美股)、indexFund(指数基金-被动跟踪)、activeFund(主动基金)、bondFund(债券基金)、moneyFund(货币基金)、wealth(银行理财)、deposit(活期存款)、fixedDeposit(定期存款)、largeDeposit(大额存单)、other(其他)
-
-分类原则：
-- ETF/LOF/指数增强/被动跟踪任何指数 → indexFund
-- 主动管理的股票型/混合型/QDII权益 → activeFund
-- "红利ETF""纳指ETF" → indexFund；"红利主题""某某精选" → activeFund
-
-返回严格JSON数组（不要markdown），每条包含 id 和新的 assetType：
-[{"id": "原始id", "assetType": "新类型", "reason": "分类理由"}]''';
-
-    return chatStream(prompt);
+  static Stream<String> classifyHoldingsStream(
+    List<Map<String, dynamic>> holdings, {
+    String? promptOverride,
+  }) {
+    return chatStream(promptOverride ?? buildClassifyHoldingsPrompt(holdings));
   }
 
-  /// 资产健康度分析 Prompt
-  static String _buildAnalyzePrompt({
+  /// 构建「家庭资产健康度分析」提示词（供预览编辑）
+  static String buildAnalyzePortfolioPrompt({
     required List<Map<String, dynamic>> holdings,
     required double totalAssets,
     required double totalLiability,
@@ -344,14 +336,16 @@ ${holdings.map((h) => '- ${h['name']}(${h['code']}) 类型:${h['type']} 市值:�
     required double totalLiability,
     required List<Map<String, dynamic>> categories,
     List<Map<String, dynamic>>? investmentPlans,
+    String? promptOverride,
   }) async {
-    return chat(_buildAnalyzePrompt(
-      holdings: holdings,
-      totalAssets: totalAssets,
-      totalLiability: totalLiability,
-      categories: categories,
-      investmentPlans: investmentPlans,
-    ));
+    return chat(promptOverride ??
+        buildAnalyzePortfolioPrompt(
+          holdings: holdings,
+          totalAssets: totalAssets,
+          totalLiability: totalLiability,
+          categories: categories,
+          investmentPlans: investmentPlans,
+        ));
   }
 
   /// 资产健康度分析（流式）
@@ -361,14 +355,16 @@ ${holdings.map((h) => '- ${h['name']}(${h['code']}) 类型:${h['type']} 市值:�
     required double totalLiability,
     required List<Map<String, dynamic>> categories,
     List<Map<String, dynamic>>? investmentPlans,
+    String? promptOverride,
   }) {
-    return chatStream(_buildAnalyzePrompt(
-      holdings: holdings,
-      totalAssets: totalAssets,
-      totalLiability: totalLiability,
-      categories: categories,
-      investmentPlans: investmentPlans,
-    ));
+    return chatStream(promptOverride ??
+        buildAnalyzePortfolioPrompt(
+          holdings: holdings,
+          totalAssets: totalAssets,
+          totalLiability: totalLiability,
+          categories: categories,
+          investmentPlans: investmentPlans,
+        ));
   }
 }
 

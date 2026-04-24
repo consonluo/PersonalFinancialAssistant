@@ -8,6 +8,8 @@ import '../../core/constants/app_constants.dart';
 import '../../core/utils/format_utils.dart';
 import '../../core/utils/category_group.dart';
 import '../../core/utils/ai_service.dart';
+import '../../core/utils/ai_prompt_prefs.dart';
+import '../widgets/ai_prompt_preview_dialog.dart';
 import '../../providers/holding_provider.dart';
 import '../../providers/database_provider.dart';
 import '../../providers/sync_provider.dart';
@@ -234,11 +236,27 @@ class HoldingListPage extends ConsumerWidget {
       'quantity': h.quantity, 'currentPrice': h.currentPrice,
     }).toList();
 
+    String? promptOverride;
+    if (await AiPromptPrefs.getPreviewPromptBeforeRun()) {
+      final initial = AiService.buildClassifyHoldingsPrompt(holdingsData);
+      if (!context.mounted) return;
+      promptOverride = await showAiPromptPreviewDialog(
+        context,
+        title: 'AI 智能分类 — 提示词',
+        initialPrompt: initial,
+        confirmLabel: '确认并开始分类',
+      );
+      if (promptOverride == null) return;
+    }
+
     // 使用流式弹窗实时展示 AI 返回
     final result = await showDialog<String>(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => _StreamingClassifyDialog(holdingsData: holdingsData),
+      builder: (ctx) => _StreamingClassifyDialog(
+        holdingsData: holdingsData,
+        promptOverride: promptOverride,
+      ),
     );
 
     if (result == null || !context.mounted) return;
@@ -331,7 +349,8 @@ class HoldingListPage extends ConsumerWidget {
 /// 流式分类进度弹窗
 class _StreamingClassifyDialog extends StatefulWidget {
   final List<Map<String, dynamic>> holdingsData;
-  const _StreamingClassifyDialog({required this.holdingsData});
+  final String? promptOverride;
+  const _StreamingClassifyDialog({required this.holdingsData, this.promptOverride});
 
   @override
   State<_StreamingClassifyDialog> createState() => _StreamingClassifyDialogState();
@@ -355,7 +374,10 @@ class _StreamingClassifyDialogState extends State<_StreamingClassifyDialog> {
       _error = null;
     });
 
-    AiService.classifyHoldingsStream(widget.holdingsData).listen(
+    AiService.classifyHoldingsStream(
+      widget.holdingsData,
+      promptOverride: widget.promptOverride,
+    ).listen(
       (delta) {
         if (mounted) setState(() => _content += delta);
       },

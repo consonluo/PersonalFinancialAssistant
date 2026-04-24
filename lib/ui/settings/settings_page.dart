@@ -15,6 +15,7 @@ import '../../providers/account_provider.dart';
 import '../../providers/family_provider.dart';
 import '../../providers/liability_provider.dart';
 import '../../providers/investment_plan_provider.dart';
+import '../../core/utils/ai_prompt_prefs.dart';
 
 class SettingsPage extends ConsumerStatefulWidget {
   const SettingsPage({super.key});
@@ -27,6 +28,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   String? _apiKey;
   String _provider = 'zhipu';
   bool _apiKeyLoaded = false;
+  bool _previewAiPromptBeforeRun = false;
 
   @override
   void initState() {
@@ -37,10 +39,12 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   Future<void> _loadConfig() async {
     final key = await OcrService.getApiKey();
     final provider = await OcrService.getProvider();
+    final preview = await AiPromptPrefs.getPreviewPromptBeforeRun();
     setState(() {
       _apiKey = key;
       _provider = provider;
       _apiKeyLoaded = true;
+      _previewAiPromptBeforeRun = preview;
     });
   }
 
@@ -145,6 +149,19 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               ),
               trailing: const Icon(Icons.chevron_right),
               onTap: () => _showApiKeyDialog(context),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Card(
+            child: SwitchListTile(
+              secondary: const Icon(Icons.edit_note_outlined, color: AppColors.info),
+              title: const Text('AI 分析前预览提示词'),
+              subtitle: const Text('开启后：首页 AI 分析、持仓智能分类、分析页「按标的」分类会先弹出可编辑提示词，确认后再调用模型'),
+              value: _previewAiPromptBeforeRun,
+              onChanged: (v) async {
+                await AiPromptPrefs.setPreviewPromptBeforeRun(v);
+                if (mounted) setState(() => _previewAiPromptBeforeRun = v);
+              },
             ),
           ),
           const SizedBox(height: 16),

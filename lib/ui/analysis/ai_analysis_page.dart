@@ -47,15 +47,18 @@ class _AiAnalysisPageState extends State<AiAnalysisPage> {
     });
 
     final params = widget.streamParams!;
-    final stream = AiService.analyzePortfolioStream(
-      holdings: List<Map<String, dynamic>>.from(params['holdings']),
-      totalAssets: params['totalAssets'] as double,
-      totalLiability: params['totalLiability'] as double,
-      categories: List<Map<String, dynamic>>.from(params['categories']),
-      investmentPlans: params['investmentPlans'] != null
-          ? List<Map<String, dynamic>>.from(params['investmentPlans'])
-          : null,
-    );
+    final override = params['promptOverride'] as String?;
+    final Stream<String> stream = (override != null && override.trim().isNotEmpty)
+        ? AiService.chatStream(override.trim())
+        : AiService.analyzePortfolioStream(
+            holdings: List<Map<String, dynamic>>.from(params['holdings']),
+            totalAssets: params['totalAssets'] as double,
+            totalLiability: params['totalLiability'] as double,
+            categories: List<Map<String, dynamic>>.from(params['categories']),
+            investmentPlans: params['investmentPlans'] != null
+                ? List<Map<String, dynamic>>.from(params['investmentPlans'])
+                : null,
+          );
 
     _subscription = stream.listen(
       (delta) {

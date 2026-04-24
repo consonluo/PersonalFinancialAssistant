@@ -7,6 +7,9 @@ import '../../core/utils/category_group.dart';
 import '../../providers/asset_summary_provider.dart';
 import '../../providers/analysis_dimension_provider.dart';
 import '../../providers/target_classification_provider.dart';
+import '../../providers/holding_provider.dart';
+import '../../core/utils/ai_prompt_prefs.dart';
+import '../widgets/ai_prompt_preview_dialog.dart';
 
 class AnalysisPage extends ConsumerWidget {
   const AnalysisPage({super.key});
@@ -464,7 +467,30 @@ class _TargetTab extends ConsumerWidget {
                       const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
                     else
                       FilledButton.tonal(
-                        onPressed: () => ref.read(targetClassificationProvider.notifier).classify(),
+                        onPressed: () async {
+                          final notifier = ref.read(targetClassificationProvider.notifier);
+                          final holdings = ref.read(allHoldingsProvider).valueOrNull ?? [];
+                          if (holdings.isEmpty) return;
+                          final list = holdings.map((h) => {
+                            'id': h.id,
+                            'code': h.assetCode,
+                            'name': h.assetName,
+                            'type': h.assetType,
+                          }).toList();
+                          String? override;
+                          if (await AiPromptPrefs.getPreviewPromptBeforeRun()) {
+                            if (!context.mounted) return;
+                            override = await showAiPromptPreviewDialog(
+                              context,
+                              title: 'AI 标的分类 — 提示词',
+                              initialPrompt: TargetClassificationNotifier.buildTargetClassificationPrompt(list),
+                              confirmLabel: '确认并开始分类',
+                            );
+                            if (override == null) return;
+                          }
+                          if (!context.mounted) return;
+                          await notifier.classify(promptOverride: override);
+                        },
                         child: Text(state.groups.isEmpty ? '开始分类' : '重新分类'),
                       ),
                   ],

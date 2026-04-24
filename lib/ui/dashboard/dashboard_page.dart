@@ -16,6 +16,9 @@ import '../../providers/database_provider.dart';
 import '../../providers/sync_provider.dart';
 import '../../providers/investment_plan_provider.dart';
 import '../../data/models/asset_summary_model.dart';
+import '../../core/utils/ai_prompt_prefs.dart';
+import '../../core/utils/ai_service.dart';
+import '../../ui/widgets/ai_prompt_preview_dialog.dart';
 import 'widgets/total_asset_card.dart';
 import 'widgets/mini_trend_chart.dart';
 import 'widgets/member_asset_bar.dart';
@@ -247,8 +250,8 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
     );
   }
 
-  void _showAiAnalysis(BuildContext context, List<AssetSummaryModel> categories,
-      double totalAssets, double totalLiability) {
+  Future<void> _showAiAnalysis(BuildContext context, List<AssetSummaryModel> categories,
+      double totalAssets, double totalLiability) async {
     final holdingsData = (ref.read(allHoldingsProvider).valueOrNull ?? []).map((h) {
       final mv = h.quantity * h.currentPrice;
       final pnl = h.costPrice > 0 ? ((h.currentPrice - h.costPrice) / h.costPrice * 100) : 0.0;
@@ -272,12 +275,33 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
       'frequency': p.frequency, 'isActive': p.isActive,
     }).toList();
 
+    String? promptOverride;
+    if (await AiPromptPrefs.getPreviewPromptBeforeRun()) {
+      final initial = AiService.buildAnalyzePortfolioPrompt(
+        holdings: holdingsData,
+        totalAssets: totalAssets,
+        totalLiability: totalLiability,
+        categories: categoryData,
+        investmentPlans: plansData,
+      );
+      if (!context.mounted) return;
+      promptOverride = await showAiPromptPreviewDialog(
+        context,
+        title: 'AI 资产分析 — 提示词',
+        initialPrompt: initial,
+        confirmLabel: '确认并开始分析',
+      );
+      if (promptOverride == null) return;
+    }
+
+    if (!context.mounted) return;
     context.push('/ai-analysis?title=AI 资产分析', extra: <String, dynamic>{
       'holdings': holdingsData,
       'totalAssets': totalAssets,
       'totalLiability': totalLiability,
       'categories': categoryData,
       'investmentPlans': plansData,
+      if (promptOverride != null) 'promptOverride': promptOverride,
     });
   }
 }
