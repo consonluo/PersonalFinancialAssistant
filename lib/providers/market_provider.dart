@@ -13,6 +13,7 @@ import '../core/constants/app_constants.dart';
 import '../core/utils/asset_classifier.dart';
 import '../core/utils/snapshot_service.dart';
 import 'snapshot_provider.dart';
+import 'sync_provider.dart';
 import 'package:drift/drift.dart';
 
 /// 行情数据缓存 Provider
@@ -168,13 +169,16 @@ class MarketDataNotifier extends StateNotifier<Map<String, MarketDataModel>> {
     // 自动纠正分类：将 assetType 为 "other" 但分类器能识别的持仓重新分类
     await _reclassifyMistyped();
 
-    // 价格更新后重新计算今日快照；若本次从接口拿到了最新行情，则强制覆盖今日点（不受 1% 阈值限制）
+    // 价格更新后重新计算今日快照；若本次从接口拿到了最新行情，则强制覆盖今日点（不受 1% 阈值限制），并防抖上传 WebDAV（含 assetSnapshots，便于多设备看历史走势）
     try {
       final db = _ref.read(databaseProvider);
       final gotLiveQuotes = fetchedCodes.isNotEmpty;
       await SnapshotService(db).takeSnapshotIfNeeded(forceUpdateToday: gotLiveQuotes);
       if (gotLiveQuotes) {
         _ref.invalidate(snapshotListProvider);
+        try {
+          _ref.read(autoSyncProvider).triggerAutoSync();
+        } catch (_) {}
       }
     } catch (_) {}
   }
