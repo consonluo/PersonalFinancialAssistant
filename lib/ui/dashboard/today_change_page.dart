@@ -306,7 +306,7 @@ class _HoldingTile extends StatelessWidget {
                   Expanded(child: Align(
                     alignment: Alignment.centerRight,
                     child: Text(
-                      FormatUtils.formatRelativeTime(item.updatedAt!),
+                      _formatDataTime(item.updatedAt!),
                       style: const TextStyle(fontSize: 10, color: AppColors.textHint),
                     ),
                   )),
@@ -329,5 +329,25 @@ class _HoldingTile extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  String _formatDataTime(DateTime dt) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final dataDay = DateTime(dt.year, dt.month, dt.day);
+    final diff = today.difference(dataDay).inDays;
+
+    if (diff == 0) {
+      // 今天的数据：交易时间内显示"实时"，收盘后显示"今日 HH:mm"
+      if (dt.hour >= 9 && dt.hour < 15 && now.hour >= 9 && now.hour < 16) {
+        return '实时';
+      }
+      return '今日 ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+    }
+    if (diff == 1) return '昨日';
+    if (diff == 2 && dataDay.weekday == DateTime.friday) return '上周五';
+    if (diff == 3 && dataDay.weekday == DateTime.friday) return '上周五';
+    if (diff <= 7) return '$diff天前';
+    return '${dt.month}/${dt.day}';
   }
 }

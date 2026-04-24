@@ -88,7 +88,8 @@ class FundApi implements MarketApiClient {
     final data = response.data;
     final rawData = data is String ? jsonDecode(data) : data;
     final List<dynamic> items = rawData['Datas'] ?? [];
-    final now = DateTime.now();
+    final expansion = rawData['Expansion'] as Map<String, dynamic>?;
+    final fsrq = expansion?['FSRQ']?.toString();
     final results = <MarketDataModel>[];
 
     for (final item in items) {
@@ -99,16 +100,17 @@ class FundApi implements MarketApiClient {
       final gszzl = double.tryParse(item['GSZZL']?.toString() ?? '');
       final dwjz = double.tryParse(item['DWJZ']?.toString() ?? '');
       final nav = double.tryParse(item['NAV']?.toString() ?? '');
+      final pdate = item['PDATE']?.toString() ?? fsrq;
+      final dataTime = pdate != null ? (DateTime.tryParse(pdate) ?? DateTime.now()) : DateTime.now();
 
       if (navChgRt == '--') {
-        // 货币基金：NAV 字段是万份收益，单位净值始终为 1.0
         results.add(MarketDataModel(
           assetCode: code,
           name: name,
           price: 1.0,
           change: 0.0,
           changePercent: (nav ?? 0) / 10000 * 100,
-          updatedAt: now,
+          updatedAt: dataTime,
         ));
       } else {
         final chgPct = double.tryParse(navChgRt) ?? 0.0;
@@ -121,7 +123,7 @@ class FundApi implements MarketApiClient {
           price: price,
           change: price - prevPrice,
           changePercent: chgPct,
-          updatedAt: now,
+          updatedAt: dataTime,
         ));
       }
     }
@@ -130,7 +132,7 @@ class FundApi implements MarketApiClient {
 
   MarketDataModel? _parseEstimateResponse(String code, String text) {
     // 格式: jsonpgz({"fundcode":"000001","name":"xxx","jzrq":"2024-01-01",
-    //        "dwjz":"1.0","gsz":"1.01","gszzl":"1.00%",...});
+    //        "dwjz":"1.0","gsz":"1.01","gszzl":"1.00%","gztime":"2024-01-02 15:00"});
     final match = RegExp(r'\{[^}]+\}').firstMatch(text);
     if (match == null) return null;
 
@@ -154,13 +156,25 @@ class FundApi implements MarketApiClient {
 
     if (price <= 0) return null;
 
+    // 使用 gztime（估值时间）或 jzrq（净值日期）作为数据时间
+    DateTime dataTime;
+    final gztime = fields['gztime'];
+    final jzrq = fields['jzrq'];
+    if (gztime != null && gztime.isNotEmpty) {
+      dataTime = DateTime.tryParse(gztime.replaceFirst(' ', 'T')) ?? DateTime.now();
+    } else if (jzrq != null && jzrq.isNotEmpty) {
+      dataTime = DateTime.tryParse(jzrq) ?? DateTime.now();
+    } else {
+      dataTime = DateTime.now();
+    }
+
     return MarketDataModel(
       assetCode: code,
       name: name,
       price: price,
       change: change,
       changePercent: changePercent,
-      updatedAt: DateTime.now(),
+      updatedAt: dataTime,
     );
   }
 }

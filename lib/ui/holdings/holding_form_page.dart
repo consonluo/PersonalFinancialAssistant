@@ -81,7 +81,10 @@ class _HoldingFormPageState extends ConsumerState<HoldingFormPage> {
     }
   }
 
+  bool _typeManuallySet = false;
+
   void _autoClassify() {
+    if (_isEdit || _typeManuallySet) return;
     final code = _codeController.text.trim();
     final name = _nameController.text.trim();
     if (code.isNotEmpty || name.isNotEmpty) {
@@ -116,7 +119,7 @@ class _HoldingFormPageState extends ConsumerState<HoldingFormPage> {
                   value: _assetType,
                   decoration: const InputDecoration(labelText: '资产类型'),
                   items: AssetType.values.map((t) => DropdownMenuItem(value: t, child: Text(t.label))).toList(),
-                  onChanged: (v) => setState(() => _assetType = v ?? AssetType.other),
+                  onChanged: (v) => setState(() { _assetType = v ?? AssetType.other; _typeManuallySet = true; }),
                 ),
                 const SizedBox(height: 8),
                 // 输入模式提示

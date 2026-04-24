@@ -40,7 +40,7 @@ class EastMoneyApi implements MarketApiClient {
     final url = 'https://push2.eastmoney.com/api/qt/ulist.np/get';
     final response = await _dio.get(url, queryParameters: {
       'fltt': 2,
-      'fields': 'f2,f3,f4,f12,f14,f5',
+      'fields': 'f2,f3,f4,f5,f12,f14,f86',
       'secids': secIds,
     });
 
@@ -52,8 +52,11 @@ class EastMoneyApi implements MarketApiClient {
     }
 
     final List<dynamic> items = data['data']['diff'];
-    final now = DateTime.now();
     return items.map((item) {
+      final ts = item['f86'] as int?;
+      final updatedAt = ts != null && ts > 0
+          ? DateTime.fromMillisecondsSinceEpoch(ts * 1000)
+          : _lastTradingDay();
       return MarketDataModel(
         assetCode: item['f12']?.toString() ?? '',
         name: item['f14']?.toString() ?? '',
@@ -61,9 +64,20 @@ class EastMoneyApi implements MarketApiClient {
         changePercent: (item['f3'] as num?)?.toDouble() ?? 0,
         change: (item['f4'] as num?)?.toDouble() ?? 0,
         volume: (item['f5'] as num?)?.toDouble() ?? 0,
-        updatedAt: now,
+        updatedAt: updatedAt,
       );
     }).toList();
+  }
+
+  static DateTime _lastTradingDay() {
+    var d = DateTime.now();
+    if (d.hour < 9 || (d.hour == 9 && d.minute < 30)) {
+      d = d.subtract(const Duration(days: 1));
+    }
+    while (d.weekday == DateTime.saturday || d.weekday == DateTime.sunday) {
+      d = d.subtract(const Duration(days: 1));
+    }
+    return DateTime(d.year, d.month, d.day, 15, 0);
   }
 
   String _toSecId(String code) {

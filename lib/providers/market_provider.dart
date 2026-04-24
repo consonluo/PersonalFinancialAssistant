@@ -116,22 +116,48 @@ class MarketDataNotifier extends StateNotifier<Map<String, MarketDataModel>> {
       results.addAll(r);
     }
     debugPrint('[Market] total results: ${results.length}');
-    for (final r in results) {
-      debugPrint('[Market]   ${r.assetCode} ${r.name}: price=${r.price} chg=${r.change} chg%=${r.changePercent}');
+
+    // API 获取的代码集合
+    final fetchedCodes = results.map((r) => r.assetCode).toSet();
+    final allRequestedCodes = {...aCodes, ...hkCodes, ...usCodes, ...fundCodes};
+    final missingCodes = allRequestedCodes.difference(fetchedCodes);
+
+    // 对 API 失败的代码从数据库缓存回退
+    if (missingCodes.isNotEmpty) {
+      try {
+        final db = _ref.read(databaseProvider);
+        final cached = await db.getAllMarketCache();
+        for (final c in cached) {
+          if (missingCodes.contains(c.assetCode)) {
+            results.add(MarketDataModel(
+              assetCode: c.assetCode,
+              name: c.name ?? c.assetCode,
+              price: c.price ?? 0,
+              change: c.change ?? 0,
+              changePercent: c.changePercent ?? 0,
+              volume: c.volume ?? 0,
+              updatedAt: c.updatedAt ?? DateTime.now(),
+            ));
+          }
+        }
+        debugPrint('[Market] cache fallback: ${missingCodes.length} missing, recovered ${results.length - fetchedCodes.length}');
+      } catch (e) {
+        debugPrint('[Market] cache fallback error: $e');
+      }
     }
 
-    // 更新状态（同时存原始代码和去后缀的代码，确保匹配）
+    // 更新状态
     final newState = Map<String, MarketDataModel>.from(state);
     for (final data in results) {
       newState[data.assetCode] = data;
-      // 美股/港股等可能持仓代码带后缀，API返回不带
       final upper = data.assetCode.toUpperCase();
       if (upper != data.assetCode) newState[upper] = data;
     }
     state = newState;
 
-    // 更新数据库缓存
-    _updateDbCache(results);
+    // 仅将新获取的数据更新到缓存（不用缓存覆盖缓存）
+    final freshResults = results.where((r) => fetchedCodes.contains(r.assetCode)).toList();
+    _updateDbCache(freshResults);
 
     // 自动更新持仓表中的现价
     await _updateHoldingPrices(results);
