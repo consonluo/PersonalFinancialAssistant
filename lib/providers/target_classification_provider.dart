@@ -109,8 +109,28 @@ ${jsonEncode(holdingList)}
 - 名称含"港股通""港股""恒生"的一律归"港股"
 - 如果某个预定义分类没有对应持仓，则不输出该分类
 
-返回严格JSON（不要markdown不要注释），格式：
-{"groups":[{"name":"分类名","description":"一句话描述","holdings":[{"id":"持仓id","reason":"归类理由"}]}]}''';
+输出要求（必须遵守，否则解析失败）：
+- 只输出一个 JSON 对象，不要 markdown 代码块、不要前后解释文字
+- 每个 holdings 项的 reason 不超过 10 个字，description 不超过 20 个字，以控制总长度
+
+返回格式示例：
+{"groups":[{"name":"分类名","description":"短描述","holdings":[{"id":"持仓uuid","reason":"短理由"}]}]}''';
+  }
+
+  static Map<String, dynamic> _parseGroupsJson(String raw) {
+    var s = raw
+        .replaceAll(RegExp(r'```json\s*'), '')
+        .replaceAll(RegExp(r'```\s*'), '')
+        .trim();
+    final m = RegExp(r'```(?:json)?\s*([\s\S]*?)\s*```', caseSensitive: false).firstMatch(s);
+    if (m != null) s = m.group(1)!.trim();
+    final start = s.indexOf('{');
+    final end = s.lastIndexOf('}');
+    if (start < 0 || end <= start) {
+      throw FormatException('响应中未找到 JSON 对象');
+    }
+    s = s.substring(start, end + 1);
+    return jsonDecode(s) as Map<String, dynamic>;
   }
 
   TargetClassificationNotifier(this._ref) : super(const TargetClassificationState()) {
@@ -207,17 +227,13 @@ ${jsonEncode(holdingList)}
 
       final prompt = promptOverride ?? buildTargetClassificationPrompt(holdingList);
 
-      final buffer = StringBuffer();
-      await for (final chunk in AiService.chatStream(prompt)) {
-        buffer.write(chunk);
-        state = state.copyWith(streamText: buffer.toString());
-      }
+      // 标的分类必须得到完整可解析 JSON；流式拼接易截断、且逐 token 刷新 UI 会造成卡顿
+      final response = await AiService.chat(prompt).timeout(
+        const Duration(seconds: 180),
+        onTimeout: () => throw AiException('请求超时，请检查网络或稍后再试'),
+      );
 
-      final raw = buffer.toString()
-          .replaceAll(RegExp(r'```json\s*'), '')
-          .replaceAll(RegExp(r'```\s*'), '')
-          .trim();
-      final parsed = jsonDecode(raw) as Map<String, dynamic>;
+      final parsed = _parseGroupsJson(response);
 
       final now = DateTime.now();
       parsed['updatedAt'] = now.toIso8601String();
@@ -233,7 +249,10 @@ ${jsonEncode(holdingList)}
       state = state.copyWith(isLoading: false, error: e.message);
     } catch (e) {
       debugPrint('[TargetClassify] error: $e');
-      state = state.copyWith(isLoading: false, error: 'AI 分类失败：$e');
+      state = state.copyWith(
+        isLoading: false,
+        error: 'AI 分类失败：$e\n若持仓较多，可在设置中精简提示词后重试。',
+      );
     }
   }
 }

@@ -523,26 +523,20 @@ class _TargetTab extends ConsumerWidget {
             ),
           ),
         ],
-        if (state.isLoading && state.streamText.isNotEmpty) ...[
+        if (state.isLoading) ...[
           const SizedBox(height: 8),
           Card(
             child: Padding(
               padding: const EdgeInsets.all(12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              child: Row(
                 children: [
-                  const Row(children: [
-                    SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 1.5)),
-                    SizedBox(width: 8),
-                    Text('AI 正在分析...', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-                  ]),
-                  const SizedBox(height: 8),
-                  Text(
-                    state.streamText.length > 300
-                        ? '...${state.streamText.substring(state.streamText.length - 300)}'
-                        : state.streamText,
-                    style: const TextStyle(fontSize: 11, color: AppColors.textSecondary, fontFamily: 'monospace'),
-                    maxLines: 8, overflow: TextOverflow.ellipsis,
+                  const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Text(
+                      '正在请求 AI…\n完整 JSON 返回后一次性解析展示（避免流式截断导致失败）',
+                      style: TextStyle(fontSize: 12, color: AppColors.textSecondary, height: 1.35),
+                    ),
                   ),
                 ],
               ),
