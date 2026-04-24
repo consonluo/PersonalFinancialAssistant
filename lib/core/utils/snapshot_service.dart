@@ -9,8 +9,11 @@ class SnapshotService {
   SnapshotService(this.db);
 
   /// 记录/更新今日资产快照
-  /// 如果今天已有快照但金额为0或数据有变化，会重新计算并覆盖
-  Future<void> takeSnapshotIfNeeded() async {
+  ///
+  /// [forceUpdateToday] 为 true 时：只要今日已有快照则一律用当前持仓/负债重算并覆盖
+  /// （用于行情接口成功拉取到最新净值/现价后，把当日资产总额写进走势图）
+  /// 默认 false：仅在无今日快照、或总资为 0、或与当前值偏差超过 1% 时更新
+  Future<void> takeSnapshotIfNeeded({bool forceUpdateToday = false}) async {
     final today = DateTime.now();
     final todayDate = DateTime(today.year, today.month, today.day);
     final existing = await db.getSnapshotByDate(today);
@@ -47,12 +50,11 @@ class SnapshotService {
     final netWorth = totalAssets - totalLiability;
 
     if (existing != null) {
-      // 如果今天已有快照，但总资产为0或与当前计算值偏差超过1%，则覆盖更新
-      final needsUpdate = existing.totalAssets == 0 ||
-          (totalAssets > 0 && (existing.totalAssets - totalAssets).abs() / totalAssets > 0.01);
-      if (!needsUpdate) return; // 数据没变化，不更新
-
-      // 删除旧快照再插入新的
+      if (!forceUpdateToday) {
+        final needsUpdate = existing.totalAssets == 0 ||
+            (totalAssets > 0 && (existing.totalAssets - totalAssets).abs() / totalAssets > 0.01);
+        if (!needsUpdate) return;
+      }
       await db.deleteSnapshotById(existing.id);
     }
 
