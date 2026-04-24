@@ -6,9 +6,6 @@ import '../core/utils/ai_service.dart';
 import 'holding_provider.dart';
 import 'market_provider.dart';
 
-/// AI 标的分类 — 按投资标的（而非产品形态）对持仓进行聚合
-/// 例如：科技/成长、红利/价值、纳斯达克、沪深300、货币/现金 等
-
 class TargetGroup {
   final String name;
   final String description;
@@ -51,12 +48,14 @@ class TargetClassificationState {
   final List<TargetGroup> groups;
   final bool isLoading;
   final String? error;
+  final String streamText;
   final DateTime? lastUpdated;
 
   const TargetClassificationState({
     this.groups = const [],
     this.isLoading = false,
     this.error,
+    this.streamText = '',
     this.lastUpdated,
   });
 
@@ -64,11 +63,13 @@ class TargetClassificationState {
     List<TargetGroup>? groups,
     bool? isLoading,
     String? error,
+    String? streamText,
     DateTime? lastUpdated,
   }) => TargetClassificationState(
     groups: groups ?? this.groups,
     isLoading: isLoading ?? this.isLoading,
     error: error,
+    streamText: streamText ?? this.streamText,
     lastUpdated: lastUpdated ?? this.lastUpdated,
   );
 }
@@ -153,7 +154,7 @@ class TargetClassificationNotifier extends StateNotifier<TargetClassificationSta
 
   Future<void> classify() async {
     if (state.isLoading) return;
-    state = state.copyWith(isLoading: true, error: null);
+    state = state.copyWith(isLoading: true, error: null, streamText: '');
 
     try {
       final holdings = _ref.read(allHoldingsProvider).valueOrNull ?? [];
@@ -169,27 +170,50 @@ class TargetClassificationNotifier extends StateNotifier<TargetClassificationSta
         'type': h.assetType,
       }).toList();
 
-      final prompt = '''你是专业的投资组合分析师。请按照**投资标的/策略**对以下持仓进行分类聚合。
+      final prompt = '''你是专业的投资组合分析师。请严格按照下列预定义标的分类对持仓进行归类。
 
 持仓列表：
 ${jsonEncode(holdingList)}
 
-分类维度（按实际投资标的，不按产品形态）：
-- 例如：宽基指数（沪深300/中证500）、科技/半导体、消费、医药、新能源、纳斯达克/美股、红利/高股息、债券固收、货币现金、银行理财、黄金贵金属、房产 等
-- 如果某只基金跟踪特定指数，按该指数的标的归类（如"纳指ETF"归入"纳斯达克"，"红利ETF"归入"红利/高股息"）
-- 同一只持仓只能归入一个分类
-- 存款/理财按其性质归类（活期存款→货币现金，理财→银行理财）
+===== 标的分类规则（必须严格遵守） =====
 
-返回严格JSON（不要markdown），格式如下：
-{"groups":[{"name":"分类名","description":"一句话描述该分类的特征","holdings":[{"id":"持仓id","reason":"归类理由"}]}]}''';
+预定义分类（只能用这些名称，不要自创）：
+1. "纳斯达克" — 所有跟踪纳斯达克100/纳指相关的基金和ETF（包括QDII纳指联接）
+2. "红利/高股息" — 所有红利、高股息、红利低波、红利质量主题
+3. "港股" — 所有港股通ETF、港股主题基金
+4. "A股宽基" — 跟踪沪深300/中证500/中证1000/上证50/A500等宽基指数
+5. "消费" — 消费主题（含白酒）
+6. "科技/成长" — 科技、半导体、新能源、AI、成长主题
+7. "全球/海外" — QDII全球配置、海外市场（非纳指的海外基金）
+8. "自由现金流" — 自由现金流策略主题
+9. "债券固收" — 债券基金、纯债、信用债
+10. "货币现金" — 货币基金、现金管理
+11. "银行理财" — 银行理财产品
+12. "存款" — 活期/定期存款、大额存单
+13. "其他" — 无法归入以上分类的
 
-      final result = await AiService.chat(prompt);
+关键规则：
+- 同一标的的所有产品必须归入同一分类（如所有纳指相关产品都归"纳斯达克"，不能分散到"宽基"或"海外"）
+- 名称含"纳指""纳斯达克""NASDAQ"的一律归"纳斯达克"
+- 名称含"红利""高股息""分红"的一律归"红利/高股息"
+- 名称含"港股通""港股""恒生"的一律归"港股"
+- 如果某个预定义分类没有对应持仓，则不输出该分类
 
-      final cleaned = result
+返回严格JSON（不要markdown不要注释），格式：
+{"groups":[{"name":"分类名","description":"一句话描述","holdings":[{"id":"持仓id","reason":"归类理由"}]}]}''';
+
+      final buffer = StringBuffer();
+      await for (final chunk in AiService.chatStream(prompt)) {
+        buffer.write(chunk);
+        if (!mounted) return;
+        state = state.copyWith(streamText: buffer.toString());
+      }
+
+      final raw = buffer.toString()
           .replaceAll(RegExp(r'```json\s*'), '')
           .replaceAll(RegExp(r'```\s*'), '')
           .trim();
-      final parsed = jsonDecode(cleaned) as Map<String, dynamic>;
+      final parsed = jsonDecode(raw) as Map<String, dynamic>;
 
       final now = DateTime.now();
       parsed['updatedAt'] = now.toIso8601String();

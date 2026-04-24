@@ -1,6 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/constants/app_constants.dart';
-import '../data/database/app_database.dart';
 import 'holding_provider.dart';
 import 'market_provider.dart';
 
@@ -8,34 +7,58 @@ import 'market_provider.dart';
 enum MarketGroup {
   aStock('A股市场'),
   hkStock('港股市场'),
-  usStock('美股市场'),
+  usStock('美股/海外'),
   bankWealth('银行/理财');
 
   const MarketGroup(this.label);
   final String label;
 }
 
-const _marketMapping = <AssetType, MarketGroup>{
-  AssetType.aStock: MarketGroup.aStock,
-  AssetType.indexFund: MarketGroup.aStock,
-  AssetType.activeFund: MarketGroup.aStock,
-  AssetType.hkStock: MarketGroup.hkStock,
-  AssetType.usStock: MarketGroup.usStock,
-  AssetType.wealth: MarketGroup.bankWealth,
-  AssetType.structuredDeposit: MarketGroup.bankWealth,
-  AssetType.treasuryRepo: MarketGroup.bankWealth,
-  AssetType.insurance: MarketGroup.bankWealth,
-  AssetType.deposit: MarketGroup.bankWealth,
-  AssetType.fixedDeposit: MarketGroup.bankWealth,
-  AssetType.largeDeposit: MarketGroup.bankWealth,
-  AssetType.noticeDeposit: MarketGroup.bankWealth,
-  AssetType.moneyFund: MarketGroup.bankWealth,
-  AssetType.bondFund: MarketGroup.bankWealth,
-  AssetType.gold: MarketGroup.bankWealth,
-  AssetType.realEstate: MarketGroup.bankWealth,
-  AssetType.vehicle: MarketGroup.bankWealth,
-  AssetType.other: MarketGroup.bankWealth,
-};
+/// 根据 AssetType + 持仓名称判断所属市场
+MarketGroup _resolveMarket(AssetType type, String name) {
+  switch (type) {
+    case AssetType.aStock:
+      return MarketGroup.aStock;
+    case AssetType.hkStock:
+      return MarketGroup.hkStock;
+    case AssetType.usStock:
+      return MarketGroup.usStock;
+    case AssetType.indexFund:
+    case AssetType.activeFund:
+      return _fundMarketByName(name);
+    case AssetType.wealth:
+    case AssetType.structuredDeposit:
+    case AssetType.treasuryRepo:
+    case AssetType.insurance:
+    case AssetType.deposit:
+    case AssetType.fixedDeposit:
+    case AssetType.largeDeposit:
+    case AssetType.noticeDeposit:
+    case AssetType.moneyFund:
+    case AssetType.bondFund:
+    case AssetType.gold:
+    case AssetType.realEstate:
+    case AssetType.vehicle:
+    case AssetType.other:
+      return MarketGroup.bankWealth;
+  }
+}
+
+/// 根据基金名称判断投资市场
+MarketGroup _fundMarketByName(String name) {
+  final n = name.toLowerCase();
+  // 港股关键词
+  if (n.contains('港股') || n.contains('恒生') || n.contains('香港') || n.contains('港股通')) {
+    return MarketGroup.hkStock;
+  }
+  // 美股/海外关键词
+  if (n.contains('纳指') || n.contains('纳斯达克') || n.contains('nasdaq') ||
+      n.contains('标普') || n.contains('s&p') || n.contains('美国') || n.contains('美股') ||
+      n.contains('qdii') || n.contains('海外') || n.contains('全球') || n.contains('国际')) {
+    return MarketGroup.usStock;
+  }
+  return MarketGroup.aStock;
+}
 
 class MarketGroupData {
   final MarketGroup market;
@@ -131,9 +154,8 @@ final marketGroupProvider = Provider<List<MarketGroupData>>((ref) {
   double grandTotal = 0;
 
   for (final h in holdings) {
-    final type = AssetType.values.where((e) => e.name == h.assetType).firstOrNull ?? AssetType.other;
-    final market = _marketMapping[type];
-    if (market == null) continue;
+    final type = AssetType.parse(h.assetType);
+    final market = _resolveMarket(type, h.assetName);
 
     final mkt = marketData[h.assetCode];
     final price = mkt?.price ?? h.currentPrice;
@@ -224,7 +246,7 @@ final assetTypeGroupProvider = Provider<List<AssetTypeGroupData>>((ref) {
 
   final result = <AssetTypeGroupData>[];
   for (final entry in typeMap.entries) {
-    final type = AssetType.values.where((e) => e.name == entry.key).firstOrNull ?? AssetType.other;
+    final type = AssetType.parse(entry.key);
     final items = entry.value;
     final totalMv = items.fold(0.0, (s, a) => s + a.totalMarketValue);
     final totalPnl = items.fold(0.0, (s, a) => s + a.totalPnl);

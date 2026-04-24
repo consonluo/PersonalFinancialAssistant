@@ -497,6 +497,32 @@ class _TargetTab extends ConsumerWidget {
             ),
           ),
         ],
+        if (state.isLoading && state.streamText.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Row(children: [
+                    SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 1.5)),
+                    SizedBox(width: 8),
+                    Text('AI 正在分析...', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                  ]),
+                  const SizedBox(height: 8),
+                  Text(
+                    state.streamText.length > 300
+                        ? '...${state.streamText.substring(state.streamText.length - 300)}'
+                        : state.streamText,
+                    style: const TextStyle(fontSize: 11, color: AppColors.textSecondary, fontFamily: 'monospace'),
+                    maxLines: 8, overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
         if (state.groups.isEmpty && !state.isLoading && state.error == null) ...[
           const SizedBox(height: 40),
           const Center(child: Column(
