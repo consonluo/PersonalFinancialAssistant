@@ -8,7 +8,8 @@ enum CategoryGroup {
   aStock('A股', Icons.candlestick_chart, Color(0xFFE53935)),
   hkStock('港股', Icons.show_chart, Color(0xFFFF7043)),
   usStock('美股', Icons.stacked_line_chart, Color(0xFF5C6BC0)),
-  equityFund('权益基金', Icons.trending_up, AppColors.info),       // 指数ETF/QDII/红利/纳指/混合
+  indexFund('指数基金', Icons.trending_up, AppColors.info),        // 被动指数：ETF/LOF/指数增强
+  activeFund('主动基金', Icons.auto_awesome, Color(0xFF7E57C2)),   // 主动管理：混合/QDII权益
   fixedIncome('固收基金', Icons.shield, Color(0xFF26A69A)),         // 债券基金/货币基金
   wealth('银行理财', Icons.account_balance, AppColors.warning),     // 银行理财产品
   deposit('现金存款', Icons.savings, AppColors.success),            // 活期/定期存款
@@ -26,12 +27,9 @@ const _groupMapping = <AssetType, CategoryGroup>{
   AssetType.aStock: CategoryGroup.aStock,
   AssetType.hkStock: CategoryGroup.hkStock,
   AssetType.usStock: CategoryGroup.usStock,
-  // 权益型基金
-  AssetType.indexETF: CategoryGroup.equityFund,
-  AssetType.qdii: CategoryGroup.equityFund,
-  AssetType.dividendFund: CategoryGroup.equityFund,
-  AssetType.nasdaqETF: CategoryGroup.equityFund,
-  AssetType.mixedFund: CategoryGroup.equityFund,
+  // 基金
+  AssetType.indexFund: CategoryGroup.indexFund,
+  AssetType.activeFund: CategoryGroup.activeFund,
   // 固收型基金
   AssetType.bondFund: CategoryGroup.fixedIncome,
   AssetType.moneyFund: CategoryGroup.fixedIncome,
@@ -70,7 +68,8 @@ HoldingDisplayMode getDisplayMode(CategoryGroup group) {
     case CategoryGroup.aStock:
     case CategoryGroup.hkStock:
     case CategoryGroup.usStock:
-    case CategoryGroup.equityFund:
+    case CategoryGroup.indexFund:
+    case CategoryGroup.activeFund:
       return HoldingDisplayMode.tradable;
     case CategoryGroup.fixedIncome:
       return HoldingDisplayMode.fixedIncome;

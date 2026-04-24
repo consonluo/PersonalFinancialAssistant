@@ -210,8 +210,8 @@ class OcrParser {
   static bool _looksLikeTotalPrice(double price, double qty, String assetType) {
     if (qty <= 1) return false;
     // 基金类：净值通常在 0.5~10 之间，如果 price > 100 且有份额，大概率是总价
-    final isFund = const {'indexETF', 'qdii', 'dividendFund', 'nasdaqETF',
-        'bondFund', 'moneyFund', 'mixedFund'}.contains(assetType);
+    final isFund = const {'indexFund', 'activeFund',
+        'bondFund', 'moneyFund'}.contains(assetType);
     if (isFund && price > 100 && qty > 10) return true;
     // 通用：如果 price / qty 的比值在合理单价范围内，则 price 是总价
     final unitGuess = price / qty;

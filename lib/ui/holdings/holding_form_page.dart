@@ -254,9 +254,8 @@ class _HoldingFormPageState extends ConsumerState<HoldingFormPage> {
   static bool _canAutoUpdate(AssetType type) {
     return const {
       AssetType.aStock, AssetType.hkStock, AssetType.usStock,
-      AssetType.indexETF, AssetType.qdii, AssetType.dividendFund,
-      AssetType.nasdaqETF, AssetType.bondFund, AssetType.moneyFund,
-      AssetType.mixedFund, AssetType.gold,
+      AssetType.indexFund, AssetType.activeFund,
+      AssetType.bondFund, AssetType.moneyFund, AssetType.gold,
     }.contains(type);
   }
 

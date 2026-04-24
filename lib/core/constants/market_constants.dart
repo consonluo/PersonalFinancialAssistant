@@ -59,12 +59,14 @@ class MarketConstants {
 
   // ===== 分类关键词 =====
   static const Map<String, List<String>> classifyKeywords = {
-    'dividendFund': ['红利', '高股息', '分红'],
     'bondFund': ['债券', '债基', '利率债', '信用债', '纯债', '短债'],
     'moneyFund': ['货币', '现金', '余额', '零钱'],
-    'nasdaqETF': ['纳指', '纳斯达克', 'NASDAQ', 'QQQ'],
-    'qdii': ['QDII', 'qdii', '海外', '全球'],
-    'indexETF': ['ETF', 'etf', '指数', '沪深300', '中证500', '上证50'],
-    'mixedFund': ['混合', '平衡', '灵活配置'],
+    'indexFund': [
+      'ETF', 'etf', 'LOF', 'lof', '指数', '被动', '跟踪',
+      '沪深300', '中证500', '中证1000', '上证50', '创业板指',
+      '科创50', '国证', '恒生',
+      '纳指', '纳斯达克', 'NASDAQ', 'QQQ', '标普', 'S&P',
+    ],
+    'activeFund': ['混合', '平衡', '灵活配置', '成长', '精选', '优选', '策略'],
   };
 }

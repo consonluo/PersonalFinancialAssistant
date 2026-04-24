@@ -29,19 +29,15 @@ class AppConstants {
   static const String webdavBaseDir = '/FamilyFinance/';
 }
 
-/// 资产类型枚举 — 按金融行业惯例分类
+/// 资产类型枚举 — 按产品形态分类（不按投资标的）
 enum AssetType {
   // ---- 股票 ----
   aStock('A股', 'A'),
   hkStock('港股', 'HK'),
   usStock('美股', 'US'),
-  // ---- 权益型基金 ----
-  indexETF('指数ETF', 'ETF'),
-  qdii('QDII基金', 'QDII'),
-  dividendFund('红利基金', 'DIV'),
-  nasdaqETF('纳指ETF', 'NDQ'),
-  mixedFund('混合基金', 'MIX'),
-  // ---- 固收类基金 ----
+  // ---- 基金（按运作方式） ----
+  indexFund('指数基金', 'IDX'),   // 被动指数：ETF/LOF/指数增强/纳指ETF/红利ETF 等
+  activeFund('主动基金', 'ACT'),  // 主动管理：混合/股票型/QDII权益/红利主题 等
   bondFund('债券基金', 'BOND'),
   moneyFund('货币基金', 'MMF'),
   // ---- 银行理财 ----
@@ -67,6 +63,24 @@ enum AssetType {
   const AssetType(this.label, this.code);
   final String label;
   final String code;
+
+  /// 旧枚举名 → 新枚举的迁移映射
+  static const Map<String, String> legacyNameMap = {
+    'indexETF': 'indexFund',
+    'nasdaqETF': 'indexFund',
+    'dividendFund': 'indexFund',
+    'qdii': 'activeFund',
+    'mixedFund': 'activeFund',
+  };
+
+  /// 安全解析（支持旧名称自动迁移）
+  static AssetType parse(String name) {
+    final migrated = legacyNameMap[name] ?? name;
+    return AssetType.values.firstWhere(
+      (e) => e.name == migrated,
+      orElse: () => AssetType.other,
+    );
+  }
 }
 
 /// 账户类型枚举

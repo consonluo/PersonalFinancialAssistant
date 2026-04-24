@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../data/api/eastmoney_api.dart';
 import '../data/api/sina_finance_api.dart';
 import '../data/api/fund_api.dart';
@@ -70,8 +71,7 @@ class MarketDataNotifier extends StateNotifier<Map<String, MarketDataModel>> {
           } else if (RegExp(r'^\d{6}$').hasMatch(h.assetCode)) {
             fundCodes.add(h.assetCode);
           }
-        case AssetType.indexETF:
-        case AssetType.nasdaqETF:
+        case AssetType.indexFund:
           if (_isExchangeListedETF(h.assetCode)) {
             aCodes.add(h.assetCode);
           } else {
@@ -83,14 +83,16 @@ class MarketDataNotifier extends StateNotifier<Map<String, MarketDataModel>> {
         case AssetType.noticeDeposit:
         case AssetType.realEstate:
         case AssetType.vehicle:
+        case AssetType.activeFund:
+        case AssetType.bondFund:
+        case AssetType.moneyFund:
+          fundCodes.add(h.assetCode);
         case AssetType.wealth:
         case AssetType.structuredDeposit:
         case AssetType.treasuryRepo:
         case AssetType.insurance:
         case AssetType.other:
           break;
-        default:
-          fundCodes.add(h.assetCode);
       }
     }
 
@@ -219,27 +221,51 @@ class MarketDataNotifier extends StateNotifier<Map<String, MarketDataModel>> {
     }
   }
 
-  /// 自动纠正分类错误的持仓（assetType 为 "other" 但名称/代码能识别出正确类型）
+  static const _classifierVersion = 3; // 每次分类器规则变更时递增
+
+  /// 自动纠正分类：旧类型名迁移 + "other" 类型重新识别 + 版本化全量重分类
   Future<void> _reclassifyMistyped() async {
     try {
       final db = _ref.read(databaseProvider);
       final holdings = _ref.read(allHoldingsProvider).valueOrNull ?? [];
       var fixed = 0;
 
-      for (final h in holdings) {
-        final currentType = AssetType.values.firstWhere(
-          (e) => e.name == h.assetType, orElse: () => AssetType.other,
-        );
-        if (currentType != AssetType.other) continue;
+      // 检查分类器版本，版本变更时对所有持仓重新跑分类器
+      final prefs = await SharedPreferences.getInstance();
+      final storedVersion = prefs.getInt('classifier_version') ?? 0;
+      final fullRescan = storedVersion < _classifierVersion;
 
-        final better = AssetClassifier.classify(h.assetCode, h.assetName);
-        if (better != AssetType.other) {
+      for (final h in holdings) {
+        String? newType;
+
+        // 1) 旧枚举名迁移（indexETF→indexFund 等）
+        final legacy = AssetType.legacyNameMap[h.assetType];
+        if (legacy != null) {
+          final better = AssetClassifier.classify(h.assetCode, h.assetName);
+          newType = (better != AssetType.other) ? better.name : legacy;
+        }
+
+        // 2) "other" 类型尝试自动识别
+        if (newType == null && h.assetType == AssetType.other.name) {
+          final better = AssetClassifier.classify(h.assetCode, h.assetName);
+          if (better != AssetType.other) newType = better.name;
+        }
+
+        // 3) 分类器版本升级 → 全量重新分类
+        if (newType == null && fullRescan) {
+          final better = AssetClassifier.classify(h.assetCode, h.assetName);
+          if (better != AssetType.other && better.name != h.assetType) {
+            newType = better.name;
+          }
+        }
+
+        if (newType != null && newType != h.assetType) {
           await db.updateHolding(HoldingsCompanion(
             id: Value(h.id),
             accountId: Value(h.accountId),
             assetCode: Value(h.assetCode),
             assetName: Value(h.assetName),
-            assetType: Value(better.name),
+            assetType: Value(newType),
             quantity: Value(h.quantity),
             costPrice: Value(h.costPrice),
             currentPrice: Value(h.currentPrice),
@@ -249,11 +275,12 @@ class MarketDataNotifier extends StateNotifier<Map<String, MarketDataModel>> {
             updatedAt: Value(h.updatedAt),
           ));
           fixed++;
-          debugPrint('[Market] reclassified "${h.assetName}" (${h.assetCode}): other → ${better.name}');
+          debugPrint('[Market] reclassified "${h.assetName}": ${h.assetType} → $newType');
         }
       }
-      final otherCount = holdings.where((h) => h.assetType == AssetType.other.name).length;
-      debugPrint('[Market] reclassify: scanned ${holdings.length} holdings, $otherCount typed "other", fixed $fixed');
+
+      if (fullRescan) await prefs.setInt('classifier_version', _classifierVersion);
+      debugPrint('[Market] reclassify: scanned ${holdings.length}, fixed $fixed${fullRescan ? ' (full rescan v$_classifierVersion)' : ''}');
     } catch (e) {
       debugPrint('[Market] reclassify error: $e');
     }

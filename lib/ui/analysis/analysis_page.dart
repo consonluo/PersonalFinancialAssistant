@@ -6,6 +6,7 @@ import '../../core/utils/format_utils.dart';
 import '../../core/utils/category_group.dart';
 import '../../providers/asset_summary_provider.dart';
 import '../../providers/analysis_dimension_provider.dart';
+import '../../providers/target_classification_provider.dart';
 
 class AnalysisPage extends ConsumerWidget {
   const AnalysisPage({super.key});
@@ -13,15 +14,18 @@ class AnalysisPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return DefaultTabController(
-      length: 3,
+      length: 4,
       child: Scaffold(
         appBar: AppBar(
           title: const Text('资产分析'),
           bottom: const TabBar(
+            isScrollable: true,
+            tabAlignment: TabAlignment.start,
             tabs: [
               Tab(text: '按分类'),
               Tab(text: '按市场'),
               Tab(text: '按品种'),
+              Tab(text: '按标的'),
             ],
           ),
         ),
@@ -33,6 +37,7 @@ class AnalysisPage extends ConsumerWidget {
                 _CategoryTab(),
                 _MarketTab(),
                 _AssetTab(),
+                _TargetTab(),
               ],
             ),
           ),
@@ -413,6 +418,228 @@ class _StatChip extends StatelessWidget {
           Text(label, style: TextStyle(color: Colors.white.withValues(alpha: 0.8), fontSize: 12)),
           const SizedBox(height: 4),
           Text(value, style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700)),
+        ],
+      ),
+    );
+  }
+}
+
+// ======== 按标的 Tab（AI 驱动） ========
+
+class _TargetTab extends ConsumerWidget {
+  const _TargetTab();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final state = ref.watch(targetClassificationProvider);
+
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 36, height: 36,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF7E57C2).withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Icon(Icons.psychology, size: 20, color: Color(0xFF7E57C2)),
+                    ),
+                    const SizedBox(width: 12),
+                    const Expanded(child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('AI 标的分类', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
+                        Text('按投资标的/策略对持仓进行智能聚合', style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+                      ],
+                    )),
+                    if (state.isLoading)
+                      const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                    else
+                      FilledButton.tonal(
+                        onPressed: () => ref.read(targetClassificationProvider.notifier).classify(),
+                        child: Text(state.groups.isEmpty ? '开始分类' : '重新分类'),
+                      ),
+                  ],
+                ),
+                if (state.lastUpdated != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Text(
+                      '上次更新：${_formatTime(state.lastUpdated!)}',
+                      style: const TextStyle(fontSize: 11, color: AppColors.textHint),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+        if (state.error != null) ...[
+          const SizedBox(height: 8),
+          Card(
+            color: AppColors.error.withValues(alpha: 0.08),
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Row(
+                children: [
+                  const Icon(Icons.error_outline, color: AppColors.error, size: 18),
+                  const SizedBox(width: 8),
+                  Expanded(child: Text(state.error!, style: const TextStyle(fontSize: 13, color: AppColors.error))),
+                ],
+              ),
+            ),
+          ),
+        ],
+        if (state.groups.isEmpty && !state.isLoading && state.error == null) ...[
+          const SizedBox(height: 40),
+          const Center(child: Column(
+            children: [
+              Icon(Icons.psychology_outlined, size: 48, color: AppColors.textHint),
+              SizedBox(height: 12),
+              Text('点击「开始分类」让 AI 分析持仓标的', style: TextStyle(color: AppColors.textSecondary)),
+              SizedBox(height: 4),
+              Text('需要先在设置中配置 AI API Key', style: TextStyle(fontSize: 12, color: AppColors.textHint)),
+            ],
+          )),
+        ],
+        const SizedBox(height: 8),
+        ...state.groups.map((g) => _TargetGroupTile(group: g)),
+      ],
+    );
+  }
+
+  static String _formatTime(DateTime dt) {
+    return '${dt.month}/${dt.day} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+  }
+}
+
+class _TargetGroupTile extends StatefulWidget {
+  final TargetGroup group;
+  const _TargetGroupTile({required this.group});
+
+  @override
+  State<_TargetGroupTile> createState() => _TargetGroupTileState();
+}
+
+class _TargetGroupTileState extends State<_TargetGroupTile> {
+  bool _expanded = false;
+
+  static const _colors = [
+    Color(0xFFE53935), Color(0xFF5C6BC0), Color(0xFF26A69A),
+    Color(0xFFFF7043), Color(0xFF7E57C2), Color(0xFF29B6F6),
+    Color(0xFFAB47BC), Color(0xFF66BB6A), Color(0xFFEF5350),
+    Color(0xFF42A5F5),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final g = widget.group;
+    final color = _colors[g.name.hashCode.abs() % _colors.length];
+    final pnlColor = g.totalPnl >= 0 ? AppColors.gain : AppColors.loss;
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 10),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        children: [
+          InkWell(
+            onTap: () => setState(() => _expanded = !_expanded),
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Row(
+                children: [
+                  Container(
+                    width: 32, height: 32,
+                    decoration: BoxDecoration(
+                      color: color.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Center(child: Text(
+                      g.name.characters.first,
+                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: color),
+                    )),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(g.name, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                      const SizedBox(height: 2),
+                      Text('${g.holdings.length}只  占比 ${g.proportion.toStringAsFixed(1)}%',
+                          style: const TextStyle(fontSize: 11, color: AppColors.textSecondary)),
+                    ],
+                  )),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(FormatUtils.formatCurrency(g.totalMarketValue),
+                          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+                      Text(FormatUtils.formatChange(g.totalPnl),
+                          style: TextStyle(fontSize: 11, color: pnlColor)),
+                    ],
+                  ),
+                  const SizedBox(width: 4),
+                  AnimatedRotation(
+                    turns: _expanded ? 0.5 : 0,
+                    duration: const Duration(milliseconds: 200),
+                    child: const Icon(Icons.expand_more, color: AppColors.textHint, size: 20),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          AnimatedCrossFade(
+            firstChild: const SizedBox.shrink(),
+            secondChild: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (g.description.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(14, 0, 14, 8),
+                    child: Text(g.description,
+                      style: const TextStyle(fontSize: 12, color: AppColors.textSecondary, fontStyle: FontStyle.italic)),
+                  ),
+                ...g.holdings.map((h) {
+                  final hPnlColor = h.pnl >= 0 ? AppColors.gain : AppColors.loss;
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
+                    child: Row(
+                      children: [
+                        Expanded(child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(h.name, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+                            Text('${h.code}  ${h.reason}',
+                                style: const TextStyle(fontSize: 10, color: AppColors.textHint),
+                                maxLines: 1, overflow: TextOverflow.ellipsis),
+                          ],
+                        )),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text(FormatUtils.formatCurrency(h.marketValue),
+                                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                            Text(FormatUtils.formatPercent(h.pnlPercent),
+                                style: TextStyle(fontSize: 11, color: hPnlColor)),
+                          ],
+                        ),
+                      ],
+                    ),
+                  );
+                }),
+                const SizedBox(height: 8),
+              ],
+            ),
+            crossFadeState: _expanded ? CrossFadeState.showSecond : CrossFadeState.showFirst,
+            duration: const Duration(milliseconds: 200),
+          ),
         ],
       ),
     );

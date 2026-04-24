@@ -120,11 +120,21 @@ class DataSerializer {
       ));
     }
 
-    // 导入持仓（导入时自动纠正 assetType 为 "other" 的记录）
+    // 导入持仓（自动迁移旧类型名 + 纠正 "other"）
     for (final h in (data['holdings'] as List? ?? [])) {
       final code = h['assetCode'] as String;
       final name = h['assetName'] as String;
       var type = h['assetType'] as String;
+
+      // 旧枚举名迁移
+      final legacy = AssetType.legacyNameMap[type];
+      if (legacy != null) {
+        final better = AssetClassifier.classify(code, name);
+        final newType = (better != AssetType.other) ? better.name : legacy;
+        debugPrint('[Import] migrated "$name" ($code): $type → $newType');
+        type = newType;
+      }
+      // "other" 类型尝试自动识别
       if (type == AssetType.other.name) {
         final better = AssetClassifier.classify(code, name);
         if (better != AssetType.other) {

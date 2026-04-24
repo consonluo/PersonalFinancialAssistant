@@ -25,7 +25,7 @@ class AssetClassifier {
     }
 
     // 4. 检查名称中是否含有 ETF
-    if (upperName.contains('ETF')) return AssetType.indexETF;
+    if (upperName.contains('ETF')) return AssetType.indexFund;
 
     return AssetType.other;
   }
@@ -40,6 +40,11 @@ class AssetClassifier {
     // 银行理财 / 储蓄险等低风险产品（优先于基金，避免"净值型理财"被误判）
     if (_isWealthProduct(lowerName)) return AssetType.wealth;
 
+    // 指数基金优先（含 ETF/指数 等关键词的一定不是货币/债券基金）
+    for (final kw in MarketConstants.classifyKeywords['indexFund']!) {
+      if (lowerName.contains(kw.toLowerCase())) return AssetType.indexFund;
+    }
+
     // 货币基金
     for (final kw in MarketConstants.classifyKeywords['moneyFund']!) {
       if (lowerName.contains(kw.toLowerCase())) return AssetType.moneyFund;
@@ -50,29 +55,19 @@ class AssetClassifier {
       if (lowerName.contains(kw.toLowerCase())) return AssetType.bondFund;
     }
 
-    // 红利基金
-    for (final kw in MarketConstants.classifyKeywords['dividendFund']!) {
-      if (lowerName.contains(kw.toLowerCase())) return AssetType.dividendFund;
+    // 主动管理基金
+    for (final kw in MarketConstants.classifyKeywords['activeFund']!) {
+      if (lowerName.contains(kw.toLowerCase())) return AssetType.activeFund;
     }
 
-    // 纳指ETF
-    for (final kw in MarketConstants.classifyKeywords['nasdaqETF']!) {
-      if (lowerName.contains(kw.toLowerCase())) return AssetType.nasdaqETF;
+    // QDII / 海外 / 全球 — 无法进一步判断指数或主动，默认主动
+    if (lowerName.contains('qdii') || lowerName.contains('海外') || lowerName.contains('全球')) {
+      return AssetType.activeFund;
     }
 
-    // QDII
-    for (final kw in MarketConstants.classifyKeywords['qdii']!) {
-      if (lowerName.contains(kw.toLowerCase())) return AssetType.qdii;
-    }
-
-    // 指数ETF
-    for (final kw in MarketConstants.classifyKeywords['indexETF']!) {
-      if (lowerName.contains(kw.toLowerCase())) return AssetType.indexETF;
-    }
-
-    // 混合基金
-    for (final kw in MarketConstants.classifyKeywords['mixedFund']!) {
-      if (lowerName.contains(kw.toLowerCase())) return AssetType.mixedFund;
+    // "红利"/"高股息"/"分红"不含 ETF/指数关键词时默认为主动基金
+    if (lowerName.contains('红利') || lowerName.contains('高股息') || lowerName.contains('分红')) {
+      return AssetType.activeFund;
     }
 
     return null;
@@ -80,8 +75,12 @@ class AssetClassifier {
 
   /// 判断是否为存款类产品
   static bool _isDeposit(String lowerName) {
-    // 先排除结构性存款（归入理财）
+    // 排除结构性存款（归入理财）
     if (lowerName.contains('结构')) return false;
+    // 排除明确的基金产品（"货币""债券""混合""指数"等）
+    if (lowerName.contains('货币') || lowerName.contains('债券') ||
+        lowerName.contains('混合') || lowerName.contains('基金') ||
+        lowerName.contains('etf')) return false;
 
     const depositKeywords = [
       '活期', '定期', '大额存单', '通知存款', '定存',
@@ -159,7 +158,7 @@ class AssetClassifier {
   static AssetType _classifyFundByName(String name) {
     final type = _classifyByName(name);
     if (type != null) return type;
-    return AssetType.mixedFund; // 默认为混合基金
+    return AssetType.activeFund; // 默认为主动基金
   }
 
   /// 批量分类
@@ -181,15 +180,13 @@ class AssetClassifier {
       case AssetType.hkStock:
       case AssetType.usStock:
         return '股票';
-      case AssetType.indexETF:
-      case AssetType.nasdaqETF:
-        return 'ETF';
-      case AssetType.qdii:
-      case AssetType.dividendFund:
+      case AssetType.indexFund:
+        return '指数基金';
+      case AssetType.activeFund:
+        return '主动基金';
       case AssetType.bondFund:
       case AssetType.moneyFund:
-      case AssetType.mixedFund:
-        return '基金';
+        return '固收基金';
       case AssetType.wealth:
       case AssetType.structuredDeposit:
       case AssetType.treasuryRepo:

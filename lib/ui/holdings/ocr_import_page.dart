@@ -789,9 +789,9 @@ class _OcrImportPageState extends ConsumerState<OcrImportPage> {
   String _assetTypeLabel(String type) {
     const labels = {
       'aStock': 'A股', 'hkStock': '港股', 'usStock': '美股',
-      'indexETF': 'ETF', 'qdii': 'QDII', 'dividendFund': '红利',
-      'nasdaqETF': '纳指', 'bondFund': '债基', 'moneyFund': '货基',
-      'mixedFund': '基金', 'wealth': '理财', 'deposit': '存款', 'other': '其他',
+      'indexFund': '指数', 'activeFund': '主动',
+      'bondFund': '债基', 'moneyFund': '货基',
+      'wealth': '理财', 'deposit': '存款', 'other': '其他',
     };
     return labels[type] ?? '资产';
   }
@@ -825,13 +825,10 @@ class _OcrImportPageState extends ConsumerState<OcrImportPage> {
                     DropdownMenuItem(value: 'aStock', child: Text('A股')),
                     DropdownMenuItem(value: 'hkStock', child: Text('港股')),
                     DropdownMenuItem(value: 'usStock', child: Text('美股')),
-                    DropdownMenuItem(value: 'indexETF', child: Text('指数ETF')),
-                    DropdownMenuItem(value: 'nasdaqETF', child: Text('纳指ETF')),
-                    DropdownMenuItem(value: 'qdii', child: Text('QDII')),
-                    DropdownMenuItem(value: 'dividendFund', child: Text('红利基金')),
+                    DropdownMenuItem(value: 'indexFund', child: Text('指数基金')),
+                    DropdownMenuItem(value: 'activeFund', child: Text('主动基金')),
                     DropdownMenuItem(value: 'bondFund', child: Text('债券基金')),
                     DropdownMenuItem(value: 'moneyFund', child: Text('货币基金')),
-                    DropdownMenuItem(value: 'mixedFund', child: Text('混合基金')),
                     DropdownMenuItem(value: 'wealth', child: Text('银行理财')),
                     DropdownMenuItem(value: 'deposit', child: Text('存款')),
                     DropdownMenuItem(value: 'other', child: Text('其他')),

@@ -76,7 +76,7 @@ class OcrService {
 - totalMarketValue: 持仓**总市值**（当前市值/金额总计。有些APP显示"市值""持仓市值""当前价值"就是这个）
 - profitLoss: 盈亏金额（浮动盈亏/持仓收益的绝对值）
 - profitLossPercent: 收益率百分比（如 8.30 表示 8.30%，-5.2 表示 -5.2%）
-- assetType: 必须是以下之一：aStock/hkStock/usStock/indexETF/qdii/dividendFund/nasdaqETF/bondFund/moneyFund/mixedFund/wealth/deposit/fixedDeposit/largeDeposit/noticeDeposit/structuredDeposit/gold/insurance/other
+- assetType: 必须是以下之一：aStock/hkStock/usStock/indexFund(被动指数)/activeFund(主动管理)/bondFund/moneyFund/wealth/deposit/fixedDeposit/largeDeposit/noticeDeposit/structuredDeposit/gold/insurance/other
 - currency: CNY/HKD/USD/EUR/GBP/JPY
 
 **如何判断是单价还是总价：**
@@ -94,7 +94,7 @@ class OcrService {
 **返回格式（严格JSON数组，不要markdown）：**
 [
   {"code":"600519","name":"贵州茅台","quantity":100,"costPrice":1800.50,"currentPrice":1950.00,"totalCost":180050,"totalMarketValue":195000,"profitLoss":14950,"profitLossPercent":8.30,"assetType":"aStock","currency":"CNY"},
-  {"code":"161725","name":"招商中证白酒","quantity":5000,"costPrice":0,"currentPrice":1.2345,"totalCost":5500,"totalMarketValue":6172.50,"profitLoss":672.50,"profitLossPercent":12.23,"assetType":"mixedFund","currency":"CNY"},
+  {"code":"161725","name":"招商中证白酒","quantity":5000,"costPrice":0,"currentPrice":1.2345,"totalCost":5500,"totalMarketValue":6172.50,"profitLoss":672.50,"profitLossPercent":12.23,"assetType":"indexFund","currency":"CNY"},
   {"code":"unknown","name":"XX理财产品","quantity":0,"costPrice":0,"currentPrice":0,"totalCost":100000,"totalMarketValue":105000,"profitLoss":5000,"profitLossPercent":5.0,"assetType":"wealth","currency":"CNY"}
 ]''';
 
