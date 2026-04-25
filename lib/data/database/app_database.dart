@@ -30,7 +30,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration {
@@ -41,6 +41,10 @@ class AppDatabase extends _$AppDatabase {
       onUpgrade: (Migrator m, int from, int to) async {
         if (from < 2) {
           await m.createTable(assetSnapshots);
+        }
+        if (from < 3) {
+          // 添加 currency 字段到 holdings 表
+          await m.addColumn(holdings, holdings.currency);
         }
       },
     );

@@ -98,6 +98,9 @@ class ExchangeRateService {
     return fallbackRates[from] ?? 1.0;
   }
 
+  /// 公开的获取兜底汇率方法
+  static double getFallbackRate(String from) => _getFallbackRate(from);
+
   /// 批量获取多种币种的汇率
   static Future<Map<String, double>> getRates(Set<String> currencies) async {
     final result = <String, double>{};

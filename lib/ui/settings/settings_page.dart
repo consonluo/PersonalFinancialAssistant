@@ -141,7 +141,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                     ? AppColors.success
                     : AppColors.warning,
               ),
-              title: Text(_provider == 'zhipu' ? '智谱AI（推荐，国内免费）' : 'Google Gemini'),
+              title: const Text('智谱AI（国内免费）'),
               subtitle: Text(
                 _apiKeyLoaded && _apiKey != null && _apiKey!.isNotEmpty
                     ? '已配置 (${_apiKey!.length > 10 ? '${_apiKey!.substring(0, 10)}...' : _apiKey!})'
@@ -248,48 +248,29 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                   children: [
                     const Text('AI 截图识别配置', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
                     const SizedBox(height: 16),
-                    const Text('选择 AI 服务商', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                    const Text('AI 服务商', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
                     const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: ChoiceChip(
-                            label: const Text('智谱AI（推荐）'),
-                            selected: isZhipu,
-                            onSelected: (_) {
-                              setDialogState(() { dialogProvider = 'zhipu'; controller.clear(); });
-                            },
-                            labelStyle: TextStyle(color: isZhipu ? Colors.white : AppColors.textPrimary, fontSize: 12),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: ChoiceChip(
-                            label: const Text('Google Gemini'),
-                            selected: !isZhipu,
-                            onSelected: (_) {
-                              setDialogState(() { dialogProvider = 'gemini'; controller.clear(); });
-                            },
-                            labelStyle: TextStyle(color: !isZhipu ? Colors.white : AppColors.textPrimary, fontSize: 12),
-                          ),
-                        ),
-                      ],
+                    // 仅显示智谱AI（已隐藏 Gemini 选项）
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: AppColors.primary.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.verified, color: AppColors.primary, size: 20),
+                          const SizedBox(width: 8),
+                          const Text('智谱AI GLM-4V-Flash（国内直连、完全免费）', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
+                        ],
+                      ),
                     ),
                     const SizedBox(height: 12),
-                    Text(
-                      isZhipu
-                          ? '智谱AI GLM-4V-Flash：国内直连、完全免费'
-                          : 'Google Gemini：需翻墙，有免费额度',
-                      style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
-                    ),
-                    const SizedBox(height: 4),
                     InkWell(
-                      onTap: () => launchUrl(Uri.parse(isZhipu
-                          ? 'https://open.bigmodel.cn/usercenter/apikeys'
-                          : 'https://aistudio.google.com/apikey')),
-                      child: Text(
-                        isZhipu ? '前往智谱AI申请免费 Key →' : '前往 Google AI Studio 申请 →',
-                        style: const TextStyle(color: AppColors.primary, fontSize: 13, decoration: TextDecoration.underline),
+                      onTap: () => launchUrl(Uri.parse('https://open.bigmodel.cn/usercenter/apikeys')),
+                      child: const Text(
+                        '前往智谱AI申请免费 Key →',
+                        style: TextStyle(color: AppColors.primary, fontSize: 13, decoration: TextDecoration.underline),
                       ),
                     ),
                     const SizedBox(height: 16),

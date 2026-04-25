@@ -143,30 +143,36 @@ class $FamilyMembersTable extends FamilyMembers
   FamilyMember map(Map<String, dynamic> data, {String? tablePrefix}) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
     return FamilyMember(
-      id: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}id'],
-      )!,
-      name: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}name'],
-      )!,
-      avatar: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}avatar'],
-      )!,
-      role: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}role'],
-      )!,
-      createdAt: attachedDatabase.typeMapping.read(
-        DriftSqlType.dateTime,
-        data['${effectivePrefix}created_at'],
-      )!,
-      updatedAt: attachedDatabase.typeMapping.read(
-        DriftSqlType.dateTime,
-        data['${effectivePrefix}updated_at'],
-      )!,
+      id:
+          attachedDatabase.typeMapping.read(
+            DriftSqlType.string,
+            data['${effectivePrefix}id'],
+          )!,
+      name:
+          attachedDatabase.typeMapping.read(
+            DriftSqlType.string,
+            data['${effectivePrefix}name'],
+          )!,
+      avatar:
+          attachedDatabase.typeMapping.read(
+            DriftSqlType.string,
+            data['${effectivePrefix}avatar'],
+          )!,
+      role:
+          attachedDatabase.typeMapping.read(
+            DriftSqlType.string,
+            data['${effectivePrefix}role'],
+          )!,
+      createdAt:
+          attachedDatabase.typeMapping.read(
+            DriftSqlType.dateTime,
+            data['${effectivePrefix}created_at'],
+          )!,
+      updatedAt:
+          attachedDatabase.typeMapping.read(
+            DriftSqlType.dateTime,
+            data['${effectivePrefix}updated_at'],
+          )!,
     );
   }
 
@@ -587,38 +593,46 @@ class $AccountsTable extends Accounts with TableInfo<$AccountsTable, Account> {
   Account map(Map<String, dynamic> data, {String? tablePrefix}) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
     return Account(
-      id: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}id'],
-      )!,
-      memberId: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}member_id'],
-      )!,
-      name: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}name'],
-      )!,
-      type: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}type'],
-      )!,
-      institution: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}institution'],
-      )!,
-      subType: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}sub_type'],
-      )!,
-      createdAt: attachedDatabase.typeMapping.read(
-        DriftSqlType.dateTime,
-        data['${effectivePrefix}created_at'],
-      )!,
-      updatedAt: attachedDatabase.typeMapping.read(
-        DriftSqlType.dateTime,
-        data['${effectivePrefix}updated_at'],
-      )!,
+      id:
+          attachedDatabase.typeMapping.read(
+            DriftSqlType.string,
+            data['${effectivePrefix}id'],
+          )!,
+      memberId:
+          attachedDatabase.typeMapping.read(
+            DriftSqlType.string,
+            data['${effectivePrefix}member_id'],
+          )!,
+      name:
+          attachedDatabase.typeMapping.read(
+            DriftSqlType.string,
+            data['${effectivePrefix}name'],
+          )!,
+      type:
+          attachedDatabase.typeMapping.read(
+            DriftSqlType.string,
+            data['${effectivePrefix}type'],
+          )!,
+      institution:
+          attachedDatabase.typeMapping.read(
+            DriftSqlType.string,
+            data['${effectivePrefix}institution'],
+          )!,
+      subType:
+          attachedDatabase.typeMapping.read(
+            DriftSqlType.string,
+            data['${effectivePrefix}sub_type'],
+          )!,
+      createdAt:
+          attachedDatabase.typeMapping.read(
+            DriftSqlType.dateTime,
+            data['${effectivePrefix}created_at'],
+          )!,
+      updatedAt:
+          attachedDatabase.typeMapping.read(
+            DriftSqlType.dateTime,
+            data['${effectivePrefix}updated_at'],
+          )!,
     );
   }
 
@@ -730,9 +744,8 @@ class Account extends DataClass implements Insertable<Account> {
       memberId: data.memberId.present ? data.memberId.value : this.memberId,
       name: data.name.present ? data.name.value : this.name,
       type: data.type.present ? data.type.value : this.type,
-      institution: data.institution.present
-          ? data.institution.value
-          : this.institution,
+      institution:
+          data.institution.present ? data.institution.value : this.institution,
       subType: data.subType.present ? data.subType.value : this.subType,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
@@ -1026,6 +1039,18 @@ class $HoldingsTable extends Holdings with TableInfo<$HoldingsTable, Holding> {
     requiredDuringInsert: false,
     defaultValue: const Constant(''),
   );
+  static const VerificationMeta _currencyMeta = const VerificationMeta(
+    'currency',
+  );
+  @override
+  late final GeneratedColumn<String> currency = GeneratedColumn<String>(
+    'currency',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('CNY'),
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -1062,6 +1087,7 @@ class $HoldingsTable extends Holdings with TableInfo<$HoldingsTable, Holding> {
     currentPrice,
     tags,
     notes,
+    currency,
     createdAt,
     updatedAt,
   ];
@@ -1147,6 +1173,12 @@ class $HoldingsTable extends Holdings with TableInfo<$HoldingsTable, Holding> {
         notes.isAcceptableOrUnknown(data['notes']!, _notesMeta),
       );
     }
+    if (data.containsKey('currency')) {
+      context.handle(
+        _currencyMeta,
+        currency.isAcceptableOrUnknown(data['currency']!, _currencyMeta),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -1168,54 +1200,71 @@ class $HoldingsTable extends Holdings with TableInfo<$HoldingsTable, Holding> {
   Holding map(Map<String, dynamic> data, {String? tablePrefix}) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
     return Holding(
-      id: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}id'],
-      )!,
-      accountId: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}account_id'],
-      )!,
-      assetCode: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}asset_code'],
-      )!,
-      assetName: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}asset_name'],
-      )!,
-      assetType: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}asset_type'],
-      )!,
-      quantity: attachedDatabase.typeMapping.read(
-        DriftSqlType.double,
-        data['${effectivePrefix}quantity'],
-      )!,
-      costPrice: attachedDatabase.typeMapping.read(
-        DriftSqlType.double,
-        data['${effectivePrefix}cost_price'],
-      )!,
-      currentPrice: attachedDatabase.typeMapping.read(
-        DriftSqlType.double,
-        data['${effectivePrefix}current_price'],
-      )!,
-      tags: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}tags'],
-      )!,
-      notes: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}notes'],
-      )!,
-      createdAt: attachedDatabase.typeMapping.read(
-        DriftSqlType.dateTime,
-        data['${effectivePrefix}created_at'],
-      )!,
-      updatedAt: attachedDatabase.typeMapping.read(
-        DriftSqlType.dateTime,
-        data['${effectivePrefix}updated_at'],
-      )!,
+      id:
+          attachedDatabase.typeMapping.read(
+            DriftSqlType.string,
+            data['${effectivePrefix}id'],
+          )!,
+      accountId:
+          attachedDatabase.typeMapping.read(
+            DriftSqlType.string,
+            data['${effectivePrefix}account_id'],
+          )!,
+      assetCode:
+          attachedDatabase.typeMapping.read(
+            DriftSqlType.string,
+            data['${effectivePrefix}asset_code'],
+          )!,
+      assetName:
+          attachedDatabase.typeMapping.read(
+            DriftSqlType.string,
+            data['${effectivePrefix}asset_name'],
+          )!,
+      assetType:
+          attachedDatabase.typeMapping.read(
+            DriftSqlType.string,
+            data['${effectivePrefix}asset_type'],
+          )!,
+      quantity:
+          attachedDatabase.typeMapping.read(
+            DriftSqlType.double,
+            data['${effectivePrefix}quantity'],
+          )!,
+      costPrice:
+          attachedDatabase.typeMapping.read(
+            DriftSqlType.double,
+            data['${effectivePrefix}cost_price'],
+          )!,
+      currentPrice:
+          attachedDatabase.typeMapping.read(
+            DriftSqlType.double,
+            data['${effectivePrefix}current_price'],
+          )!,
+      tags:
+          attachedDatabase.typeMapping.read(
+            DriftSqlType.string,
+            data['${effectivePrefix}tags'],
+          )!,
+      notes:
+          attachedDatabase.typeMapping.read(
+            DriftSqlType.string,
+            data['${effectivePrefix}notes'],
+          )!,
+      currency:
+          attachedDatabase.typeMapping.read(
+            DriftSqlType.string,
+            data['${effectivePrefix}currency'],
+          )!,
+      createdAt:
+          attachedDatabase.typeMapping.read(
+            DriftSqlType.dateTime,
+            data['${effectivePrefix}created_at'],
+          )!,
+      updatedAt:
+          attachedDatabase.typeMapping.read(
+            DriftSqlType.dateTime,
+            data['${effectivePrefix}updated_at'],
+          )!,
     );
   }
 
@@ -1236,6 +1285,7 @@ class Holding extends DataClass implements Insertable<Holding> {
   final double currentPrice;
   final String tags;
   final String notes;
+  final String currency;
   final DateTime createdAt;
   final DateTime updatedAt;
   const Holding({
@@ -1249,6 +1299,7 @@ class Holding extends DataClass implements Insertable<Holding> {
     required this.currentPrice,
     required this.tags,
     required this.notes,
+    required this.currency,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -1265,6 +1316,7 @@ class Holding extends DataClass implements Insertable<Holding> {
     map['current_price'] = Variable<double>(currentPrice);
     map['tags'] = Variable<String>(tags);
     map['notes'] = Variable<String>(notes);
+    map['currency'] = Variable<String>(currency);
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
     return map;
@@ -1282,6 +1334,7 @@ class Holding extends DataClass implements Insertable<Holding> {
       currentPrice: Value(currentPrice),
       tags: Value(tags),
       notes: Value(notes),
+      currency: Value(currency),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
     );
@@ -1303,6 +1356,7 @@ class Holding extends DataClass implements Insertable<Holding> {
       currentPrice: serializer.fromJson<double>(json['currentPrice']),
       tags: serializer.fromJson<String>(json['tags']),
       notes: serializer.fromJson<String>(json['notes']),
+      currency: serializer.fromJson<String>(json['currency']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
     );
@@ -1321,6 +1375,7 @@ class Holding extends DataClass implements Insertable<Holding> {
       'currentPrice': serializer.toJson<double>(currentPrice),
       'tags': serializer.toJson<String>(tags),
       'notes': serializer.toJson<String>(notes),
+      'currency': serializer.toJson<String>(currency),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
     };
@@ -1337,6 +1392,7 @@ class Holding extends DataClass implements Insertable<Holding> {
     double? currentPrice,
     String? tags,
     String? notes,
+    String? currency,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) => Holding(
@@ -1350,6 +1406,7 @@ class Holding extends DataClass implements Insertable<Holding> {
     currentPrice: currentPrice ?? this.currentPrice,
     tags: tags ?? this.tags,
     notes: notes ?? this.notes,
+    currency: currency ?? this.currency,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
   );
@@ -1362,11 +1419,13 @@ class Holding extends DataClass implements Insertable<Holding> {
       assetType: data.assetType.present ? data.assetType.value : this.assetType,
       quantity: data.quantity.present ? data.quantity.value : this.quantity,
       costPrice: data.costPrice.present ? data.costPrice.value : this.costPrice,
-      currentPrice: data.currentPrice.present
-          ? data.currentPrice.value
-          : this.currentPrice,
+      currentPrice:
+          data.currentPrice.present
+              ? data.currentPrice.value
+              : this.currentPrice,
       tags: data.tags.present ? data.tags.value : this.tags,
       notes: data.notes.present ? data.notes.value : this.notes,
+      currency: data.currency.present ? data.currency.value : this.currency,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
     );
@@ -1385,6 +1444,7 @@ class Holding extends DataClass implements Insertable<Holding> {
           ..write('currentPrice: $currentPrice, ')
           ..write('tags: $tags, ')
           ..write('notes: $notes, ')
+          ..write('currency: $currency, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
@@ -1403,6 +1463,7 @@ class Holding extends DataClass implements Insertable<Holding> {
     currentPrice,
     tags,
     notes,
+    currency,
     createdAt,
     updatedAt,
   );
@@ -1420,6 +1481,7 @@ class Holding extends DataClass implements Insertable<Holding> {
           other.currentPrice == this.currentPrice &&
           other.tags == this.tags &&
           other.notes == this.notes &&
+          other.currency == this.currency &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt);
 }
@@ -1435,6 +1497,7 @@ class HoldingsCompanion extends UpdateCompanion<Holding> {
   final Value<double> currentPrice;
   final Value<String> tags;
   final Value<String> notes;
+  final Value<String> currency;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<int> rowid;
@@ -1449,6 +1512,7 @@ class HoldingsCompanion extends UpdateCompanion<Holding> {
     this.currentPrice = const Value.absent(),
     this.tags = const Value.absent(),
     this.notes = const Value.absent(),
+    this.currency = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -1464,6 +1528,7 @@ class HoldingsCompanion extends UpdateCompanion<Holding> {
     this.currentPrice = const Value.absent(),
     this.tags = const Value.absent(),
     this.notes = const Value.absent(),
+    this.currency = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -1483,6 +1548,7 @@ class HoldingsCompanion extends UpdateCompanion<Holding> {
     Expression<double>? currentPrice,
     Expression<String>? tags,
     Expression<String>? notes,
+    Expression<String>? currency,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<int>? rowid,
@@ -1498,6 +1564,7 @@ class HoldingsCompanion extends UpdateCompanion<Holding> {
       if (currentPrice != null) 'current_price': currentPrice,
       if (tags != null) 'tags': tags,
       if (notes != null) 'notes': notes,
+      if (currency != null) 'currency': currency,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (rowid != null) 'rowid': rowid,
@@ -1515,6 +1582,7 @@ class HoldingsCompanion extends UpdateCompanion<Holding> {
     Value<double>? currentPrice,
     Value<String>? tags,
     Value<String>? notes,
+    Value<String>? currency,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
     Value<int>? rowid,
@@ -1530,6 +1598,7 @@ class HoldingsCompanion extends UpdateCompanion<Holding> {
       currentPrice: currentPrice ?? this.currentPrice,
       tags: tags ?? this.tags,
       notes: notes ?? this.notes,
+      currency: currency ?? this.currency,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       rowid: rowid ?? this.rowid,
@@ -1569,6 +1638,9 @@ class HoldingsCompanion extends UpdateCompanion<Holding> {
     if (notes.present) {
       map['notes'] = Variable<String>(notes.value);
     }
+    if (currency.present) {
+      map['currency'] = Variable<String>(currency.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -1594,6 +1666,7 @@ class HoldingsCompanion extends UpdateCompanion<Holding> {
           ..write('currentPrice: $currentPrice, ')
           ..write('tags: $tags, ')
           ..write('notes: $notes, ')
+          ..write('currency: $currency, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('rowid: $rowid')
@@ -1799,42 +1872,51 @@ class $FixedAssetsTable extends FixedAssets
   FixedAsset map(Map<String, dynamic> data, {String? tablePrefix}) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
     return FixedAsset(
-      id: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}id'],
-      )!,
-      memberId: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}member_id'],
-      )!,
-      type: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}type'],
-      )!,
-      name: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}name'],
-      )!,
-      estimatedValue: attachedDatabase.typeMapping.read(
-        DriftSqlType.double,
-        data['${effectivePrefix}estimated_value'],
-      )!,
-      details: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}details'],
-      )!,
-      notes: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}notes'],
-      )!,
-      createdAt: attachedDatabase.typeMapping.read(
-        DriftSqlType.dateTime,
-        data['${effectivePrefix}created_at'],
-      )!,
-      updatedAt: attachedDatabase.typeMapping.read(
-        DriftSqlType.dateTime,
-        data['${effectivePrefix}updated_at'],
-      )!,
+      id:
+          attachedDatabase.typeMapping.read(
+            DriftSqlType.string,
+            data['${effectivePrefix}id'],
+          )!,
+      memberId:
+          attachedDatabase.typeMapping.read(
+            DriftSqlType.string,
+            data['${effectivePrefix}member_id'],
+          )!,
+      type:
+          attachedDatabase.typeMapping.read(
+            DriftSqlType.string,
+            data['${effectivePrefix}type'],
+          )!,
+      name:
+          attachedDatabase.typeMapping.read(
+            DriftSqlType.string,
+            data['${effectivePrefix}name'],
+          )!,
+      estimatedValue:
+          attachedDatabase.typeMapping.read(
+            DriftSqlType.double,
+            data['${effectivePrefix}estimated_value'],
+          )!,
+      details:
+          attachedDatabase.typeMapping.read(
+            DriftSqlType.string,
+            data['${effectivePrefix}details'],
+          )!,
+      notes:
+          attachedDatabase.typeMapping.read(
+            DriftSqlType.string,
+            data['${effectivePrefix}notes'],
+          )!,
+      createdAt:
+          attachedDatabase.typeMapping.read(
+            DriftSqlType.dateTime,
+            data['${effectivePrefix}created_at'],
+          )!,
+      updatedAt:
+          attachedDatabase.typeMapping.read(
+            DriftSqlType.dateTime,
+            data['${effectivePrefix}updated_at'],
+          )!,
     );
   }
 
@@ -1954,9 +2036,10 @@ class FixedAsset extends DataClass implements Insertable<FixedAsset> {
       memberId: data.memberId.present ? data.memberId.value : this.memberId,
       type: data.type.present ? data.type.value : this.type,
       name: data.name.present ? data.name.value : this.name,
-      estimatedValue: data.estimatedValue.present
-          ? data.estimatedValue.value
-          : this.estimatedValue,
+      estimatedValue:
+          data.estimatedValue.present
+              ? data.estimatedValue.value
+              : this.estimatedValue,
       details: data.details.present ? data.details.value : this.details,
       notes: data.notes.present ? data.notes.value : this.notes,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
@@ -2395,50 +2478,61 @@ class $LiabilitiesTable extends Liabilities
   Liability map(Map<String, dynamic> data, {String? tablePrefix}) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
     return Liability(
-      id: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}id'],
-      )!,
-      memberId: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}member_id'],
-      )!,
-      type: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}type'],
-      )!,
-      name: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}name'],
-      )!,
-      totalAmount: attachedDatabase.typeMapping.read(
-        DriftSqlType.double,
-        data['${effectivePrefix}total_amount'],
-      )!,
-      remainingAmount: attachedDatabase.typeMapping.read(
-        DriftSqlType.double,
-        data['${effectivePrefix}remaining_amount'],
-      )!,
-      interestRate: attachedDatabase.typeMapping.read(
-        DriftSqlType.double,
-        data['${effectivePrefix}interest_rate'],
-      )!,
-      monthlyPayment: attachedDatabase.typeMapping.read(
-        DriftSqlType.double,
-        data['${effectivePrefix}monthly_payment'],
-      )!,
-      notes: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}notes'],
-      )!,
-      createdAt: attachedDatabase.typeMapping.read(
-        DriftSqlType.dateTime,
-        data['${effectivePrefix}created_at'],
-      )!,
-      updatedAt: attachedDatabase.typeMapping.read(
-        DriftSqlType.dateTime,
-        data['${effectivePrefix}updated_at'],
-      )!,
+      id:
+          attachedDatabase.typeMapping.read(
+            DriftSqlType.string,
+            data['${effectivePrefix}id'],
+          )!,
+      memberId:
+          attachedDatabase.typeMapping.read(
+            DriftSqlType.string,
+            data['${effectivePrefix}member_id'],
+          )!,
+      type:
+          attachedDatabase.typeMapping.read(
+            DriftSqlType.string,
+            data['${effectivePrefix}type'],
+          )!,
+      name:
+          attachedDatabase.typeMapping.read(
+            DriftSqlType.string,
+            data['${effectivePrefix}name'],
+          )!,
+      totalAmount:
+          attachedDatabase.typeMapping.read(
+            DriftSqlType.double,
+            data['${effectivePrefix}total_amount'],
+          )!,
+      remainingAmount:
+          attachedDatabase.typeMapping.read(
+            DriftSqlType.double,
+            data['${effectivePrefix}remaining_amount'],
+          )!,
+      interestRate:
+          attachedDatabase.typeMapping.read(
+            DriftSqlType.double,
+            data['${effectivePrefix}interest_rate'],
+          )!,
+      monthlyPayment:
+          attachedDatabase.typeMapping.read(
+            DriftSqlType.double,
+            data['${effectivePrefix}monthly_payment'],
+          )!,
+      notes:
+          attachedDatabase.typeMapping.read(
+            DriftSqlType.string,
+            data['${effectivePrefix}notes'],
+          )!,
+      createdAt:
+          attachedDatabase.typeMapping.read(
+            DriftSqlType.dateTime,
+            data['${effectivePrefix}created_at'],
+          )!,
+      updatedAt:
+          attachedDatabase.typeMapping.read(
+            DriftSqlType.dateTime,
+            data['${effectivePrefix}updated_at'],
+          )!,
     );
   }
 
@@ -2574,18 +2668,20 @@ class Liability extends DataClass implements Insertable<Liability> {
       memberId: data.memberId.present ? data.memberId.value : this.memberId,
       type: data.type.present ? data.type.value : this.type,
       name: data.name.present ? data.name.value : this.name,
-      totalAmount: data.totalAmount.present
-          ? data.totalAmount.value
-          : this.totalAmount,
-      remainingAmount: data.remainingAmount.present
-          ? data.remainingAmount.value
-          : this.remainingAmount,
-      interestRate: data.interestRate.present
-          ? data.interestRate.value
-          : this.interestRate,
-      monthlyPayment: data.monthlyPayment.present
-          ? data.monthlyPayment.value
-          : this.monthlyPayment,
+      totalAmount:
+          data.totalAmount.present ? data.totalAmount.value : this.totalAmount,
+      remainingAmount:
+          data.remainingAmount.present
+              ? data.remainingAmount.value
+              : this.remainingAmount,
+      interestRate:
+          data.interestRate.present
+              ? data.interestRate.value
+              : this.interestRate,
+      monthlyPayment:
+          data.monthlyPayment.present
+              ? data.monthlyPayment.value
+              : this.monthlyPayment,
       notes: data.notes.present ? data.notes.value : this.notes,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
@@ -3008,42 +3104,50 @@ class $InvestmentPlansTable extends InvestmentPlans
   InvestmentPlan map(Map<String, dynamic> data, {String? tablePrefix}) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
     return InvestmentPlan(
-      id: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}id'],
-      )!,
-      accountId: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}account_id'],
-      )!,
-      assetCode: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}asset_code'],
-      )!,
-      assetName: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}asset_name'],
-      )!,
-      amount: attachedDatabase.typeMapping.read(
-        DriftSqlType.double,
-        data['${effectivePrefix}amount'],
-      )!,
-      frequency: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}frequency'],
-      )!,
+      id:
+          attachedDatabase.typeMapping.read(
+            DriftSqlType.string,
+            data['${effectivePrefix}id'],
+          )!,
+      accountId:
+          attachedDatabase.typeMapping.read(
+            DriftSqlType.string,
+            data['${effectivePrefix}account_id'],
+          )!,
+      assetCode:
+          attachedDatabase.typeMapping.read(
+            DriftSqlType.string,
+            data['${effectivePrefix}asset_code'],
+          )!,
+      assetName:
+          attachedDatabase.typeMapping.read(
+            DriftSqlType.string,
+            data['${effectivePrefix}asset_name'],
+          )!,
+      amount:
+          attachedDatabase.typeMapping.read(
+            DriftSqlType.double,
+            data['${effectivePrefix}amount'],
+          )!,
+      frequency:
+          attachedDatabase.typeMapping.read(
+            DriftSqlType.string,
+            data['${effectivePrefix}frequency'],
+          )!,
       nextDate: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}next_date'],
       ),
-      isActive: attachedDatabase.typeMapping.read(
-        DriftSqlType.bool,
-        data['${effectivePrefix}is_active'],
-      )!,
-      createdAt: attachedDatabase.typeMapping.read(
-        DriftSqlType.dateTime,
-        data['${effectivePrefix}created_at'],
-      )!,
+      isActive:
+          attachedDatabase.typeMapping.read(
+            DriftSqlType.bool,
+            data['${effectivePrefix}is_active'],
+          )!,
+      createdAt:
+          attachedDatabase.typeMapping.read(
+            DriftSqlType.dateTime,
+            data['${effectivePrefix}created_at'],
+          )!,
     );
   }
 
@@ -3099,9 +3203,10 @@ class InvestmentPlan extends DataClass implements Insertable<InvestmentPlan> {
       assetName: Value(assetName),
       amount: Value(amount),
       frequency: Value(frequency),
-      nextDate: nextDate == null && nullToAbsent
-          ? const Value.absent()
-          : Value(nextDate),
+      nextDate:
+          nextDate == null && nullToAbsent
+              ? const Value.absent()
+              : Value(nextDate),
       isActive: Value(isActive),
       createdAt: Value(createdAt),
     );
@@ -3522,34 +3627,41 @@ class $MarketCacheTable extends MarketCache
   MarketCacheData map(Map<String, dynamic> data, {String? tablePrefix}) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
     return MarketCacheData(
-      assetCode: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}asset_code'],
-      )!,
-      price: attachedDatabase.typeMapping.read(
-        DriftSqlType.double,
-        data['${effectivePrefix}price'],
-      )!,
-      change: attachedDatabase.typeMapping.read(
-        DriftSqlType.double,
-        data['${effectivePrefix}change'],
-      )!,
-      changePercent: attachedDatabase.typeMapping.read(
-        DriftSqlType.double,
-        data['${effectivePrefix}change_percent'],
-      )!,
-      volume: attachedDatabase.typeMapping.read(
-        DriftSqlType.double,
-        data['${effectivePrefix}volume'],
-      )!,
-      name: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}name'],
-      )!,
-      updatedAt: attachedDatabase.typeMapping.read(
-        DriftSqlType.dateTime,
-        data['${effectivePrefix}updated_at'],
-      )!,
+      assetCode:
+          attachedDatabase.typeMapping.read(
+            DriftSqlType.string,
+            data['${effectivePrefix}asset_code'],
+          )!,
+      price:
+          attachedDatabase.typeMapping.read(
+            DriftSqlType.double,
+            data['${effectivePrefix}price'],
+          )!,
+      change:
+          attachedDatabase.typeMapping.read(
+            DriftSqlType.double,
+            data['${effectivePrefix}change'],
+          )!,
+      changePercent:
+          attachedDatabase.typeMapping.read(
+            DriftSqlType.double,
+            data['${effectivePrefix}change_percent'],
+          )!,
+      volume:
+          attachedDatabase.typeMapping.read(
+            DriftSqlType.double,
+            data['${effectivePrefix}volume'],
+          )!,
+      name:
+          attachedDatabase.typeMapping.read(
+            DriftSqlType.string,
+            data['${effectivePrefix}name'],
+          )!,
+      updatedAt:
+          attachedDatabase.typeMapping.read(
+            DriftSqlType.dateTime,
+            data['${effectivePrefix}updated_at'],
+          )!,
     );
   }
 
@@ -3652,9 +3764,10 @@ class MarketCacheData extends DataClass implements Insertable<MarketCacheData> {
       assetCode: data.assetCode.present ? data.assetCode.value : this.assetCode,
       price: data.price.present ? data.price.value : this.price,
       change: data.change.present ? data.change.value : this.change,
-      changePercent: data.changePercent.present
-          ? data.changePercent.value
-          : this.changePercent,
+      changePercent:
+          data.changePercent.present
+              ? data.changePercent.value
+              : this.changePercent,
       volume: data.volume.present ? data.volume.value : this.volume,
       name: data.name.present ? data.name.value : this.name,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
@@ -4014,38 +4127,46 @@ class $AssetSnapshotsTable extends AssetSnapshots
   AssetSnapshot map(Map<String, dynamic> data, {String? tablePrefix}) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
     return AssetSnapshot(
-      id: attachedDatabase.typeMapping.read(
-        DriftSqlType.int,
-        data['${effectivePrefix}id'],
-      )!,
-      snapshotDate: attachedDatabase.typeMapping.read(
-        DriftSqlType.dateTime,
-        data['${effectivePrefix}snapshot_date'],
-      )!,
-      totalAssets: attachedDatabase.typeMapping.read(
-        DriftSqlType.double,
-        data['${effectivePrefix}total_assets'],
-      )!,
-      totalLiabilities: attachedDatabase.typeMapping.read(
-        DriftSqlType.double,
-        data['${effectivePrefix}total_liabilities'],
-      )!,
-      netWorth: attachedDatabase.typeMapping.read(
-        DriftSqlType.double,
-        data['${effectivePrefix}net_worth'],
-      )!,
-      totalFixedAssets: attachedDatabase.typeMapping.read(
-        DriftSqlType.double,
-        data['${effectivePrefix}total_fixed_assets'],
-      )!,
-      categoryBreakdown: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}category_breakdown'],
-      )!,
-      createdAt: attachedDatabase.typeMapping.read(
-        DriftSqlType.dateTime,
-        data['${effectivePrefix}created_at'],
-      )!,
+      id:
+          attachedDatabase.typeMapping.read(
+            DriftSqlType.int,
+            data['${effectivePrefix}id'],
+          )!,
+      snapshotDate:
+          attachedDatabase.typeMapping.read(
+            DriftSqlType.dateTime,
+            data['${effectivePrefix}snapshot_date'],
+          )!,
+      totalAssets:
+          attachedDatabase.typeMapping.read(
+            DriftSqlType.double,
+            data['${effectivePrefix}total_assets'],
+          )!,
+      totalLiabilities:
+          attachedDatabase.typeMapping.read(
+            DriftSqlType.double,
+            data['${effectivePrefix}total_liabilities'],
+          )!,
+      netWorth:
+          attachedDatabase.typeMapping.read(
+            DriftSqlType.double,
+            data['${effectivePrefix}net_worth'],
+          )!,
+      totalFixedAssets:
+          attachedDatabase.typeMapping.read(
+            DriftSqlType.double,
+            data['${effectivePrefix}total_fixed_assets'],
+          )!,
+      categoryBreakdown:
+          attachedDatabase.typeMapping.read(
+            DriftSqlType.string,
+            data['${effectivePrefix}category_breakdown'],
+          )!,
+      createdAt:
+          attachedDatabase.typeMapping.read(
+            DriftSqlType.dateTime,
+            data['${effectivePrefix}created_at'],
+          )!,
     );
   }
 
@@ -4154,22 +4275,25 @@ class AssetSnapshot extends DataClass implements Insertable<AssetSnapshot> {
   AssetSnapshot copyWithCompanion(AssetSnapshotsCompanion data) {
     return AssetSnapshot(
       id: data.id.present ? data.id.value : this.id,
-      snapshotDate: data.snapshotDate.present
-          ? data.snapshotDate.value
-          : this.snapshotDate,
-      totalAssets: data.totalAssets.present
-          ? data.totalAssets.value
-          : this.totalAssets,
-      totalLiabilities: data.totalLiabilities.present
-          ? data.totalLiabilities.value
-          : this.totalLiabilities,
+      snapshotDate:
+          data.snapshotDate.present
+              ? data.snapshotDate.value
+              : this.snapshotDate,
+      totalAssets:
+          data.totalAssets.present ? data.totalAssets.value : this.totalAssets,
+      totalLiabilities:
+          data.totalLiabilities.present
+              ? data.totalLiabilities.value
+              : this.totalLiabilities,
       netWorth: data.netWorth.present ? data.netWorth.value : this.netWorth,
-      totalFixedAssets: data.totalFixedAssets.present
-          ? data.totalFixedAssets.value
-          : this.totalFixedAssets,
-      categoryBreakdown: data.categoryBreakdown.present
-          ? data.categoryBreakdown.value
-          : this.categoryBreakdown,
+      totalFixedAssets:
+          data.totalFixedAssets.present
+              ? data.totalFixedAssets.value
+              : this.totalFixedAssets,
+      categoryBreakdown:
+          data.categoryBreakdown.present
+              ? data.categoryBreakdown.value
+              : this.categoryBreakdown,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
     );
   }
@@ -4514,12 +4638,16 @@ class $$FamilyMembersTableTableManager
         TableManagerState(
           db: db,
           table: table,
-          createFilteringComposer: () =>
-              $$FamilyMembersTableFilterComposer($db: db, $table: table),
-          createOrderingComposer: () =>
-              $$FamilyMembersTableOrderingComposer($db: db, $table: table),
-          createComputedFieldComposer: () =>
-              $$FamilyMembersTableAnnotationComposer($db: db, $table: table),
+          createFilteringComposer:
+              () => $$FamilyMembersTableFilterComposer($db: db, $table: table),
+          createOrderingComposer:
+              () =>
+                  $$FamilyMembersTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer:
+              () => $$FamilyMembersTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
           updateCompanionCallback:
               ({
                 Value<String> id = const Value.absent(),
@@ -4556,9 +4684,16 @@ class $$FamilyMembersTableTableManager
                 updatedAt: updatedAt,
                 rowid: rowid,
               ),
-          withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
-              .toList(),
+          withReferenceMapper:
+              (p0) =>
+                  p0
+                      .map(
+                        (e) => (
+                          e.readTable(table),
+                          BaseReferences(db, table, e),
+                        ),
+                      )
+                      .toList(),
           prefetchHooksCallback: null,
         ),
       );
@@ -4762,12 +4897,12 @@ class $$AccountsTableTableManager
         TableManagerState(
           db: db,
           table: table,
-          createFilteringComposer: () =>
-              $$AccountsTableFilterComposer($db: db, $table: table),
-          createOrderingComposer: () =>
-              $$AccountsTableOrderingComposer($db: db, $table: table),
-          createComputedFieldComposer: () =>
-              $$AccountsTableAnnotationComposer($db: db, $table: table),
+          createFilteringComposer:
+              () => $$AccountsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer:
+              () => $$AccountsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer:
+              () => $$AccountsTableAnnotationComposer($db: db, $table: table),
           updateCompanionCallback:
               ({
                 Value<String> id = const Value.absent(),
@@ -4812,9 +4947,16 @@ class $$AccountsTableTableManager
                 updatedAt: updatedAt,
                 rowid: rowid,
               ),
-          withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
-              .toList(),
+          withReferenceMapper:
+              (p0) =>
+                  p0
+                      .map(
+                        (e) => (
+                          e.readTable(table),
+                          BaseReferences(db, table, e),
+                        ),
+                      )
+                      .toList(),
           prefetchHooksCallback: null,
         ),
       );
@@ -4846,6 +4988,7 @@ typedef $$HoldingsTableCreateCompanionBuilder =
       Value<double> currentPrice,
       Value<String> tags,
       Value<String> notes,
+      Value<String> currency,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<int> rowid,
@@ -4862,6 +5005,7 @@ typedef $$HoldingsTableUpdateCompanionBuilder =
       Value<double> currentPrice,
       Value<String> tags,
       Value<String> notes,
+      Value<String> currency,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<int> rowid,
@@ -4923,6 +5067,11 @@ class $$HoldingsTableFilterComposer
 
   ColumnFilters<String> get notes => $composableBuilder(
     column: $table.notes,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get currency => $composableBuilder(
+    column: $table.currency,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -4996,6 +5145,11 @@ class $$HoldingsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get currency => $composableBuilder(
+    column: $table.currency,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -5048,6 +5202,9 @@ class $$HoldingsTableAnnotationComposer
   GeneratedColumn<String> get notes =>
       $composableBuilder(column: $table.notes, builder: (column) => column);
 
+  GeneratedColumn<String> get currency =>
+      $composableBuilder(column: $table.currency, builder: (column) => column);
+
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
 
@@ -5075,12 +5232,12 @@ class $$HoldingsTableTableManager
         TableManagerState(
           db: db,
           table: table,
-          createFilteringComposer: () =>
-              $$HoldingsTableFilterComposer($db: db, $table: table),
-          createOrderingComposer: () =>
-              $$HoldingsTableOrderingComposer($db: db, $table: table),
-          createComputedFieldComposer: () =>
-              $$HoldingsTableAnnotationComposer($db: db, $table: table),
+          createFilteringComposer:
+              () => $$HoldingsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer:
+              () => $$HoldingsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer:
+              () => $$HoldingsTableAnnotationComposer($db: db, $table: table),
           updateCompanionCallback:
               ({
                 Value<String> id = const Value.absent(),
@@ -5093,6 +5250,7 @@ class $$HoldingsTableTableManager
                 Value<double> currentPrice = const Value.absent(),
                 Value<String> tags = const Value.absent(),
                 Value<String> notes = const Value.absent(),
+                Value<String> currency = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -5107,6 +5265,7 @@ class $$HoldingsTableTableManager
                 currentPrice: currentPrice,
                 tags: tags,
                 notes: notes,
+                currency: currency,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 rowid: rowid,
@@ -5123,6 +5282,7 @@ class $$HoldingsTableTableManager
                 Value<double> currentPrice = const Value.absent(),
                 Value<String> tags = const Value.absent(),
                 Value<String> notes = const Value.absent(),
+                Value<String> currency = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -5137,13 +5297,21 @@ class $$HoldingsTableTableManager
                 currentPrice: currentPrice,
                 tags: tags,
                 notes: notes,
+                currency: currency,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 rowid: rowid,
               ),
-          withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
-              .toList(),
+          withReferenceMapper:
+              (p0) =>
+                  p0
+                      .map(
+                        (e) => (
+                          e.readTable(table),
+                          BaseReferences(db, table, e),
+                        ),
+                      )
+                      .toList(),
           prefetchHooksCallback: null,
         ),
       );
@@ -5362,12 +5530,13 @@ class $$FixedAssetsTableTableManager
         TableManagerState(
           db: db,
           table: table,
-          createFilteringComposer: () =>
-              $$FixedAssetsTableFilterComposer($db: db, $table: table),
-          createOrderingComposer: () =>
-              $$FixedAssetsTableOrderingComposer($db: db, $table: table),
-          createComputedFieldComposer: () =>
-              $$FixedAssetsTableAnnotationComposer($db: db, $table: table),
+          createFilteringComposer:
+              () => $$FixedAssetsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer:
+              () => $$FixedAssetsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer:
+              () =>
+                  $$FixedAssetsTableAnnotationComposer($db: db, $table: table),
           updateCompanionCallback:
               ({
                 Value<String> id = const Value.absent(),
@@ -5416,9 +5585,16 @@ class $$FixedAssetsTableTableManager
                 updatedAt: updatedAt,
                 rowid: rowid,
               ),
-          withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
-              .toList(),
+          withReferenceMapper:
+              (p0) =>
+                  p0
+                      .map(
+                        (e) => (
+                          e.readTable(table),
+                          BaseReferences(db, table, e),
+                        ),
+                      )
+                      .toList(),
           prefetchHooksCallback: null,
         ),
       );
@@ -5676,12 +5852,13 @@ class $$LiabilitiesTableTableManager
         TableManagerState(
           db: db,
           table: table,
-          createFilteringComposer: () =>
-              $$LiabilitiesTableFilterComposer($db: db, $table: table),
-          createOrderingComposer: () =>
-              $$LiabilitiesTableOrderingComposer($db: db, $table: table),
-          createComputedFieldComposer: () =>
-              $$LiabilitiesTableAnnotationComposer($db: db, $table: table),
+          createFilteringComposer:
+              () => $$LiabilitiesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer:
+              () => $$LiabilitiesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer:
+              () =>
+                  $$LiabilitiesTableAnnotationComposer($db: db, $table: table),
           updateCompanionCallback:
               ({
                 Value<String> id = const Value.absent(),
@@ -5738,9 +5915,16 @@ class $$LiabilitiesTableTableManager
                 updatedAt: updatedAt,
                 rowid: rowid,
               ),
-          withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
-              .toList(),
+          withReferenceMapper:
+              (p0) =>
+                  p0
+                      .map(
+                        (e) => (
+                          e.readTable(table),
+                          BaseReferences(db, table, e),
+                        ),
+                      )
+                      .toList(),
           prefetchHooksCallback: null,
         ),
       );
@@ -5963,12 +6147,19 @@ class $$InvestmentPlansTableTableManager
         TableManagerState(
           db: db,
           table: table,
-          createFilteringComposer: () =>
-              $$InvestmentPlansTableFilterComposer($db: db, $table: table),
-          createOrderingComposer: () =>
-              $$InvestmentPlansTableOrderingComposer($db: db, $table: table),
-          createComputedFieldComposer: () =>
-              $$InvestmentPlansTableAnnotationComposer($db: db, $table: table),
+          createFilteringComposer:
+              () =>
+                  $$InvestmentPlansTableFilterComposer($db: db, $table: table),
+          createOrderingComposer:
+              () => $$InvestmentPlansTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer:
+              () => $$InvestmentPlansTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
           updateCompanionCallback:
               ({
                 Value<String> id = const Value.absent(),
@@ -6017,9 +6208,16 @@ class $$InvestmentPlansTableTableManager
                 createdAt: createdAt,
                 rowid: rowid,
               ),
-          withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
-              .toList(),
+          withReferenceMapper:
+              (p0) =>
+                  p0
+                      .map(
+                        (e) => (
+                          e.readTable(table),
+                          BaseReferences(db, table, e),
+                        ),
+                      )
+                      .toList(),
           prefetchHooksCallback: null,
         ),
       );
@@ -6211,12 +6409,13 @@ class $$MarketCacheTableTableManager
         TableManagerState(
           db: db,
           table: table,
-          createFilteringComposer: () =>
-              $$MarketCacheTableFilterComposer($db: db, $table: table),
-          createOrderingComposer: () =>
-              $$MarketCacheTableOrderingComposer($db: db, $table: table),
-          createComputedFieldComposer: () =>
-              $$MarketCacheTableAnnotationComposer($db: db, $table: table),
+          createFilteringComposer:
+              () => $$MarketCacheTableFilterComposer($db: db, $table: table),
+          createOrderingComposer:
+              () => $$MarketCacheTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer:
+              () =>
+                  $$MarketCacheTableAnnotationComposer($db: db, $table: table),
           updateCompanionCallback:
               ({
                 Value<String> assetCode = const Value.absent(),
@@ -6257,9 +6456,16 @@ class $$MarketCacheTableTableManager
                 updatedAt: updatedAt,
                 rowid: rowid,
               ),
-          withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
-              .toList(),
+          withReferenceMapper:
+              (p0) =>
+                  p0
+                      .map(
+                        (e) => (
+                          e.readTable(table),
+                          BaseReferences(db, table, e),
+                        ),
+                      )
+                      .toList(),
           prefetchHooksCallback: null,
         ),
       );
@@ -6474,12 +6680,16 @@ class $$AssetSnapshotsTableTableManager
         TableManagerState(
           db: db,
           table: table,
-          createFilteringComposer: () =>
-              $$AssetSnapshotsTableFilterComposer($db: db, $table: table),
-          createOrderingComposer: () =>
-              $$AssetSnapshotsTableOrderingComposer($db: db, $table: table),
-          createComputedFieldComposer: () =>
-              $$AssetSnapshotsTableAnnotationComposer($db: db, $table: table),
+          createFilteringComposer:
+              () => $$AssetSnapshotsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer:
+              () =>
+                  $$AssetSnapshotsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer:
+              () => $$AssetSnapshotsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
           updateCompanionCallback:
               ({
                 Value<int> id = const Value.absent(),
@@ -6520,9 +6730,16 @@ class $$AssetSnapshotsTableTableManager
                 categoryBreakdown: categoryBreakdown,
                 createdAt: createdAt,
               ),
-          withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
-              .toList(),
+          withReferenceMapper:
+              (p0) =>
+                  p0
+                      .map(
+                        (e) => (
+                          e.readTable(table),
+                          BaseReferences(db, table, e),
+                        ),
+                      )
+                      .toList(),
           prefetchHooksCallback: null,
         ),
       );

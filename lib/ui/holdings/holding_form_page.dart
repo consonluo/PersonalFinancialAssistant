@@ -7,6 +7,7 @@ import '../../core/constants/app_constants.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/asset_classifier.dart';
 import '../../core/utils/category_group.dart';
+import '../../core/utils/exchange_rate_service.dart';
 import '../../core/utils/snapshot_service.dart';
 import '../../providers/database_provider.dart';
 import '../../providers/sync_provider.dart';
@@ -33,6 +34,7 @@ class _HoldingFormPageState extends ConsumerState<HoldingFormPage> {
   final _totalAmountController = TextEditingController();
   final _totalCostController = TextEditingController();
   AssetType _assetType = AssetType.aStock;
+  String _currency = 'CNY'; // 默认人民币
   bool _isEdit = false;
   String? _existingAccountId;
 
@@ -70,6 +72,7 @@ class _HoldingFormPageState extends ConsumerState<HoldingFormPage> {
       _priceController.text = h.currentPrice.toString();
       _existingAccountId = h.accountId;
       _assetType = AssetType.values.firstWhere((e) => e.name == h.assetType, orElse: () => AssetType.other);
+      _currency = h.currency ?? 'CNY';
       // 理财/存款模式下，填充总额字段
       if (_inputMode == _InputMode.deposit) {
         _totalAmountController.text = (h.quantity * h.currentPrice).toString();
@@ -120,6 +123,20 @@ class _HoldingFormPageState extends ConsumerState<HoldingFormPage> {
                   decoration: const InputDecoration(labelText: '资产类型'),
                   items: AssetType.values.map((t) => DropdownMenuItem(value: t, child: Text(t.label))).toList(),
                   onChanged: (v) => setState(() { _assetType = v ?? AssetType.other; _typeManuallySet = true; }),
+                ),
+                const SizedBox(height: 16),
+                // 币种选择
+                DropdownButtonFormField<String>(
+                  value: _currency,
+                  decoration: const InputDecoration(labelText: '币种'),
+                  items: const [
+                    DropdownMenuItem(value: 'CNY', child: Text('人民币 (CNY)')),
+                    DropdownMenuItem(value: 'USD', child: Text('美元 (USD)')),
+                    DropdownMenuItem(value: 'HKD', child: Text('港币 (HKD)')),
+                    DropdownMenuItem(value: 'EUR', child: Text('欧元 (EUR)')),
+                    DropdownMenuItem(value: 'GBP', child: Text('英镑 (GBP)')),
+                  ],
+                  onChanged: (v) => setState(() => _currency = v ?? 'CNY'),
                 ),
                 const SizedBox(height: 8),
                 // 输入模式提示
@@ -325,6 +342,7 @@ class _HoldingFormPageState extends ConsumerState<HoldingFormPage> {
           currentPrice: Value(currentPrice),
           tags: Value(existing?.tags ?? ''),
           notes: Value(existing?.notes ?? ''),
+          currency: Value(_currency),
           createdAt: Value(existing?.createdAt ?? now),
           updatedAt: Value(now),
         ));
@@ -338,6 +356,7 @@ class _HoldingFormPageState extends ConsumerState<HoldingFormPage> {
           quantity: Value(quantity),
           costPrice: Value(costPrice),
           currentPrice: Value(currentPrice),
+          currency: Value(_currency),
           createdAt: Value(now),
           updatedAt: Value(now),
         ));

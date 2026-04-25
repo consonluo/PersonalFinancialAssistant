@@ -13,6 +13,7 @@ class HoldingModel {
   final double currentPrice;
   final List<String> tags;
   final String notes;
+  final String currency; // 币种: CNY/HKD/USD/EUR/GBP
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -27,6 +28,7 @@ class HoldingModel {
     this.currentPrice = 0,
     this.tags = const [],
     this.notes = '',
+    this.currency = 'CNY',
     required this.createdAt,
     required this.updatedAt,
   });
@@ -68,6 +70,7 @@ class HoldingModel {
       currentPrice: (json['currentPrice'] as num?)?.toDouble() ?? 0,
       tags: parseTags(json['tags']),
       notes: json['notes'] as String? ?? '',
+      currency: json['currency'] as String? ?? 'CNY',
       createdAt: DateTime.parse(json['createdAt'] as String),
       updatedAt: DateTime.parse(json['updatedAt'] as String),
     );
@@ -84,6 +87,7 @@ class HoldingModel {
         'currentPrice': currentPrice,
         'tags': tags,
         'notes': notes,
+        'currency': currency,
         'createdAt': createdAt.toIso8601String(),
         'updatedAt': updatedAt.toIso8601String(),
       };
@@ -99,6 +103,7 @@ class HoldingModel {
     double? currentPrice,
     List<String>? tags,
     String? notes,
+    String? currency,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -113,6 +118,7 @@ class HoldingModel {
       currentPrice: currentPrice ?? this.currentPrice,
       tags: tags ?? this.tags,
       notes: notes ?? this.notes,
+      currency: currency ?? this.currency,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );

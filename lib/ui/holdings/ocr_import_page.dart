@@ -318,17 +318,27 @@ class _OcrImportPageState extends ConsumerState<OcrImportPage> {
                               ),
                               child: Text(typeLabel, style: const TextStyle(fontSize: 10, color: AppColors.primary, fontWeight: FontWeight.w600)),
                             ),
-                            if (r.needsCurrencyConversion) ...[
-                              const SizedBox(width: 4),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: Colors.orange.withValues(alpha: 0.12),
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                                child: Text(r.currency, style: TextStyle(fontSize: 10, color: Colors.orange.shade700, fontWeight: FontWeight.w600)),
+                            const SizedBox(width: 4),
+                            // 币种标签
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: r.currency == 'CNY' 
+                                    ? AppColors.success.withValues(alpha: 0.12)
+                                    : Colors.orange.withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(4),
                               ),
-                            ],
+                              child: Text(
+                                ExchangeRateService.currencyNames[r.currency] ?? r.currency,
+                                style: TextStyle(
+                                  fontSize: 10, 
+                                  color: r.currency == 'CNY' 
+                                      ? AppColors.success 
+                                      : Colors.orange.shade700, 
+                                  fontWeight: FontWeight.w600
+                                ),
+                              ),
+                            ),
                             const SizedBox(width: 10),
                             Expanded(
                               child: Column(
@@ -676,6 +686,7 @@ class _OcrImportPageState extends ConsumerState<OcrImportPage> {
           currentPrice: Value(r.currentPrice),
           tags: Value(existing.tags),
           notes: Value(existing.notes),
+          currency: Value(r.currency),
           createdAt: Value(existing.createdAt),
           updatedAt: Value(now),
         ));
@@ -691,6 +702,7 @@ class _OcrImportPageState extends ConsumerState<OcrImportPage> {
           quantity: Value(r.quantity),
           costPrice: Value(r.costPrice),
           currentPrice: Value(r.currentPrice),
+          currency: Value(r.currency),
           createdAt: Value(now),
           updatedAt: Value(now),
         ));
@@ -804,6 +816,7 @@ class _OcrImportPageState extends ConsumerState<OcrImportPage> {
     final priceC = TextEditingController(text: r.currentPrice.toString());
     final mvC = TextEditingController(text: r.marketValue.toString());
     String selectedType = r.assetType.isNotEmpty ? r.assetType : 'other';
+    String selectedCurrency = r.currency.isNotEmpty ? r.currency : 'CNY';
 
     final saved = await showDialog<bool>(
       context: context,
@@ -818,22 +831,43 @@ class _OcrImportPageState extends ConsumerState<OcrImportPage> {
                 const SizedBox(height: 10),
                 TextField(controller: codeC, decoration: const InputDecoration(labelText: '代码', isDense: true, hintText: '如 600519、AAPL')),
                 const SizedBox(height: 10),
-                DropdownButtonFormField<String>(
-                  value: selectedType,
-                  decoration: const InputDecoration(labelText: '资产类型', isDense: true),
-                  items: const [
-                    DropdownMenuItem(value: 'aStock', child: Text('A股')),
-                    DropdownMenuItem(value: 'hkStock', child: Text('港股')),
-                    DropdownMenuItem(value: 'usStock', child: Text('美股')),
-                    DropdownMenuItem(value: 'indexFund', child: Text('指数基金')),
-                    DropdownMenuItem(value: 'activeFund', child: Text('主动基金')),
-                    DropdownMenuItem(value: 'bondFund', child: Text('债券基金')),
-                    DropdownMenuItem(value: 'moneyFund', child: Text('货币基金')),
-                    DropdownMenuItem(value: 'wealth', child: Text('银行理财')),
-                    DropdownMenuItem(value: 'deposit', child: Text('存款')),
-                    DropdownMenuItem(value: 'other', child: Text('其他')),
+                Row(
+                  children: [
+                    Expanded(
+                      child: DropdownButtonFormField<String>(
+                        value: selectedType,
+                        decoration: const InputDecoration(labelText: '资产类型', isDense: true),
+                        items: const [
+                          DropdownMenuItem(value: 'aStock', child: Text('A股')),
+                          DropdownMenuItem(value: 'hkStock', child: Text('港股')),
+                          DropdownMenuItem(value: 'usStock', child: Text('美股')),
+                          DropdownMenuItem(value: 'indexFund', child: Text('指数基金')),
+                          DropdownMenuItem(value: 'activeFund', child: Text('主动基金')),
+                          DropdownMenuItem(value: 'bondFund', child: Text('债券基金')),
+                          DropdownMenuItem(value: 'moneyFund', child: Text('货币基金')),
+                          DropdownMenuItem(value: 'wealth', child: Text('银行理财')),
+                          DropdownMenuItem(value: 'deposit', child: Text('存款')),
+                          DropdownMenuItem(value: 'other', child: Text('其他')),
+                        ],
+                        onChanged: (v) => setDialogState(() => selectedType = v ?? 'other'),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: DropdownButtonFormField<String>(
+                        value: selectedCurrency,
+                        decoration: const InputDecoration(labelText: '币种', isDense: true),
+                        items: const [
+                          DropdownMenuItem(value: 'CNY', child: Text('人民币')),
+                          DropdownMenuItem(value: 'USD', child: Text('美元')),
+                          DropdownMenuItem(value: 'HKD', child: Text('港元')),
+                          DropdownMenuItem(value: 'GBP', child: Text('英镑')),
+                          DropdownMenuItem(value: 'EUR', child: Text('欧元')),
+                        ],
+                        onChanged: (v) => setDialogState(() => selectedCurrency = v ?? 'CNY'),
+                      ),
+                    ),
                   ],
-                  onChanged: (v) => setDialogState(() => selectedType = v ?? 'other'),
                 ),
                 const SizedBox(height: 10),
                 Row(
@@ -871,6 +905,7 @@ class _OcrImportPageState extends ConsumerState<OcrImportPage> {
         currentPrice: double.tryParse(priceC.text) ?? r.currentPrice,
         marketValue: double.tryParse(mvC.text) ?? r.marketValue,
         assetType: selectedType,
+        currency: selectedCurrency,
       );
       ref.read(ocrResultProvider.notifier).updateResult(index, updated);
     }

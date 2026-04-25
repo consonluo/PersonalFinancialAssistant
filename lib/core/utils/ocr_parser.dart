@@ -246,33 +246,19 @@ class OcrParser {
       if (unitCost < 0) { unitCost = unitCost.abs(); warnings.add('成本价为负已修正'); }
 
       // ======== 推断币种 ========
-      // 优先使用截图上识别的货币，如果没有则根据文本中的货币符号判断，最后才根据资产类型判断
+      // 优先级：1. AI 识别 2. 代码前缀 3. 资产类型 4. 货币符号
       String resolvedCurrency = currency;
       if (resolvedCurrency.isEmpty) {
-        // 第一优先级：根据文本中的货币符号判断
-        if (hasDollarSign && !hasYenSign && !hasHkdSign) {
-          resolvedCurrency = 'USD';
-        } else if (hasHkdSign) {
-          resolvedCurrency = 'HKD';
-        } else if (hasGBP) {
-          resolvedCurrency = 'GBP';
-        } else if (hasEUR) {
-          resolvedCurrency = 'EUR';
-        } else if (hasYenSign) {
-          resolvedCurrency = 'CNY';
-        }
-        // 第二优先级：根据资产所属市场判断币种
-        else {
-          // 美股 → 美元
+        // 第一优先级：根据股票代码前缀判断
+        resolvedCurrency = _detectCurrencyByCode(code);
+        
+        // 第二优先级：根据资产类型判断
+        if (resolvedCurrency.isEmpty) {
           if (const {'usStock', 'US', '美股', 'NASDAQ', '纽交所', '纳斯达克'}.contains(assetType)) {
             resolvedCurrency = 'USD';
-          }
-          // 港股 → 港元
-          else if (const {'hkStock', 'HK', '港股', '港交所'}.contains(assetType)) {
+          } else if (const {'hkStock', 'HK', '港股', '港交所'}.contains(assetType)) {
             resolvedCurrency = 'HKD';
-          }
-          // 国内基金（A 股、指数基金、主动基金、债券基金、货币基金等）→ 人民币
-          else if (const {
+          } else if (const {
             'indexFund', 'activeFund', 'bondFund', 'moneyFund', 'aStock',
             'deposit', 'wealth', 'fixedDeposit', 'largeDeposit', 'noticeDeposit',
             'structuredDeposit', 'treasuryRepo', 'realEstate', 'vehicle',
@@ -280,10 +266,24 @@ class OcrParser {
           }.contains(assetType)) {
             resolvedCurrency = 'CNY';
           }
-          // 默认人民币
-          else {
-            resolvedCurrency = 'CNY';
+        }
+        
+        // 第三优先级：根据货币符号判断
+        if (resolvedCurrency.isEmpty || resolvedCurrency == 'CNY') {
+          if (hasDollarSign && !hasYenSign && !hasHkdSign) {
+            resolvedCurrency = 'USD';
+          } else if (hasHkdSign) {
+            resolvedCurrency = 'HKD';
+          } else if (hasGBP) {
+            resolvedCurrency = 'GBP';
+          } else if (hasEUR) {
+            resolvedCurrency = 'EUR';
           }
+        }
+        
+        // 默认人民币
+        if (resolvedCurrency.isEmpty) {
+          resolvedCurrency = 'CNY';
         }
       }
       // 统一币种格式
@@ -317,6 +317,42 @@ class OcrParser {
     final unitGuess = price / qty;
     if (unitGuess > 0.1 && unitGuess < 10000 && price > 1000) return true;
     return false;
+  }
+
+  /// 根据股票代码判断币种
+  static String _detectCurrencyByCode(String code) {
+    if (code.isEmpty || code == 'unknown') return '';
+    
+    final upperCode = code.toUpperCase();
+    
+    // 美股代码：通常 1-5 个大写字母（如 AAPL, GOOGL, MSFT, TSLA, META, NVDA）
+    // 也可能是 5 位数字（如在某些系统中的表示）
+    if (RegExp(r'^[A-Z]{1,5}$').hasMatch(upperCode)) {
+      return 'USD';
+    }
+    
+    // 港股代码：5 位数字，通常以 0、6、8、9 开头
+    // 如 00700 (腾讯)、09988 (阿里巴巴)、09619 (京东)
+    if (RegExp(r'^[0689]\d{4}$').hasMatch(code)) {
+      return 'HKD';
+    }
+    
+    // A 股代码：6 位数字
+    // 以 6 开头通常是上证，0/3 开头是深证
+    if (RegExp(r'^\d{6}$').hasMatch(code)) {
+      // 排除纯数字的美股代码（有些系统用数字表示美股）
+      // 美股代码一般在 10000-99999 之间（5位数）
+      final numCode = int.tryParse(code);
+      if (numCode != null) {
+        // 如果是 5 位数字且以 1-9 开头，可能是美股
+        if (code.length == 5 && !code.startsWith('0')) {
+          return 'USD';
+        }
+      }
+      return 'CNY';
+    }
+    
+    return '';
   }
 
   static String _getString(Map<String, dynamic> map, List<String> keys) {
