@@ -57,16 +57,9 @@ class HoldingListPage extends ConsumerWidget {
               final pnl = mv - totalCost;
               final pnlPct = totalCost != 0 ? pnl / totalCost * 100 : 0.0;
               final isUp = pnl >= 0;
-              return Dismissible(
+              return _SwipeableDeleteCard(
                 key: ValueKey(h.id),
-                direction: DismissDirection.endToStart,
-                confirmDismiss: (_) => _confirmDelete(context, ref, h.id, h.assetName),
-                background: Container(
-                  alignment: Alignment.centerRight,
-                  padding: const EdgeInsets.only(right: 20),
-                  color: AppColors.error,
-                  child: const Icon(Icons.delete, color: Colors.white),
-                ),
+                onDelete: () => _confirmDelete(context, ref, h.id, h.assetName),
                 child: Card(
                   margin: const EdgeInsets.only(bottom: 8),
                   child: InkWell(
@@ -436,6 +429,113 @@ class _StreamingClassifyDialogState extends State<_StreamingClassifyDialog> {
           child: const Text('取消'),
         ),
       ],
+    );
+  }
+}
+
+/// 可左滑删除的卡片组件
+/// 左滑显示删除按钮，点击按钮后弹出确认对话框
+class _SwipeableDeleteCard extends StatefulWidget {
+  final Widget child;
+  final VoidCallback onDelete;
+
+  const _SwipeableDeleteCard({
+    required super.key,
+    required this.child,
+    required this.onDelete,
+  });
+
+  @override
+  State<_SwipeableDeleteCard> createState() => _SwipeableDeleteCardState();
+}
+
+class _SwipeableDeleteCardState extends State<_SwipeableDeleteCard> {
+  double _dragExtent = 0;
+
+  static const double _deleteButtonWidth = 80;
+
+  void _handleDragUpdate(DragUpdateDetails details) {
+    setState(() {
+      _dragExtent = (_dragExtent + details.delta.dx).clamp(-_deleteButtonWidth, 0);
+    });
+  }
+
+  void _handleDragEnd(DragEndDetails details) {
+    if (_dragExtent < -_deleteButtonWidth * 0.5) {
+      // 显示删除按钮
+      setState(() => _dragExtent = -_deleteButtonWidth);
+    } else {
+      // 恢复原位
+      setState(() => _dragExtent = 0);
+    }
+  }
+
+  void _onDeleteTap() async {
+    // 弹出确认对话框
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('删除持仓'),
+        content: const Text('确定删除该持仓？'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('删除', style: TextStyle(color: AppColors.error)),
+          ),
+        ],
+      ),
+    );
+    if (confirm == true) {
+      widget.onDelete();
+    } else {
+      // 收起删除按钮
+      setState(() => _dragExtent = 0);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onHorizontalDragUpdate: _handleDragUpdate,
+      onHorizontalDragEnd: _handleDragEnd,
+      child: Stack(
+        children: [
+          // 删除按钮
+          Positioned.fill(
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                GestureDetector(
+                  onTap: _onDeleteTap,
+                  child: Container(
+                    width: _deleteButtonWidth,
+                    alignment: Alignment.center,
+                    color: AppColors.error,
+                    child: const Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.delete, color: Colors.white, size: 24),
+                        SizedBox(height: 4),
+                        Text('删除', style: TextStyle(color: Colors.white, fontSize: 12)),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // 卡片内容
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 150),
+            transform: Matrix4.translationValues(_dragExtent, 0, 0),
+            child: widget.child,
+          ),
+        ],
+      ),
     );
   }
 }
