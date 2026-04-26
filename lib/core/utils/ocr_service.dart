@@ -70,32 +70,38 @@ class OcrService {
 - code: 证券/基金代码
 - name: 产品名称
 - quantity: 持仓数量/份额（股数或份额数）
-- costPrice: 成本**单价**（每股/每份的成本价。注意区分：如果截图显示的是"成本"且数值很大，可能是总成本而非单价，此时填到totalCost）
-- currentPrice: 当前**单价**（每股/每份的现价/净值。同理，如果数值很大可能是总市值，填到totalMarketValue）
-- totalCost: 持仓**总成本**（投入的本金总额。有些APP显示"持仓成本""买入金额"就是这个）
-- totalMarketValue: 持仓**总市值**（当前市值/金额总计。有些APP显示"市值""持仓市值""当前价值"就是这个）
-- profitLoss: 盈亏金额（浮动盈亏/持仓收益的绝对值）
+- costPrice: 成本**单价**（每股/每份的成本价，允许为负数如做空、涡轮等）
+- currentPrice: 当前**单价**（每股/每份的现价/净值）
+- totalCost: 持仓**总成本**（投入的本金总额，允许为负数）
+- totalMarketValue: 持仓**总市值**（当前市值/金额总计，最可靠的值）
+- profitLoss: 盈亏金额（浮动盈亏/持仓收益）
 - profitLossPercent: 收益率百分比（如 8.30 表示 8.30%，-5.2 表示 -5.2%）
 - assetType: 必须是以下之一：aStock/hkStock/usStock/indexFund(被动指数)/activeFund(主动管理)/bondFund/moneyFund/wealth/deposit/fixedDeposit/largeDeposit/noticeDeposit/structuredDeposit/gold/insurance/other
 - currency: CNY/HKD/USD/EUR/GBP/JPY
+- tags: **AI聚合标签**，用于将相同投资标的的产品聚合起来（如["纳指","QDII","美股"]）。可用标签包括：
+  * 指数类：纳指、标普500、道琼斯、沪深300、上证、创业板、港股
+  * 主题类：红利、消费、科技、医药、新能源、半导体、军工、金融、白酒、互联网
+  * 市场类：A股、美股、港股、QDII
+  * 可同时标注多个标签，如纳斯达克ETF可标为["纳指","QDII","美股"]
 
 **如何判断是单价还是总价：**
 - 股票的成本价/现价通常是几元到几千元（单价），市值通常是几万到几百万（总价）
 - 基金净值通常在0.5~10之间（单价），持仓市值通常是几千到几十万（总价）
-- 银行理财/存款通常只有总金额，没有单价概念
-- 如果无法确定，同时填 costPrice 和 totalCost，系统会自动交叉验证
+- **总值(totalMarketValue)是最可靠的，优先填写真实显示的总值**
+- 如果不确定单价和总价哪个更准确，直接填总价，让系统自动计算单价
 
 **特殊类型处理：**
 - 银行存款: quantity=1, totalMarketValue=金额, assetType=deposit/fixedDeposit/largeDeposit
 - 银行理财: quantity=1(如无份额), totalMarketValue=当前金额, totalCost=投入金额, assetType=wealth
 - 货币基金/余额宝: assetType=moneyFund
+- 成本允许为负数（如做空、涡轮、认沽权证等衍生品）
 - 缺失的数字字段填0
 
 **返回格式（严格JSON数组，不要markdown）：**
 [
-  {"code":"600519","name":"贵州茅台","quantity":100,"costPrice":1800.50,"currentPrice":1950.00,"totalCost":180050,"totalMarketValue":195000,"profitLoss":14950,"profitLossPercent":8.30,"assetType":"aStock","currency":"CNY"},
-  {"code":"161725","name":"招商中证白酒","quantity":5000,"costPrice":0,"currentPrice":1.2345,"totalCost":5500,"totalMarketValue":6172.50,"profitLoss":672.50,"profitLossPercent":12.23,"assetType":"indexFund","currency":"CNY"},
-  {"code":"unknown","name":"XX理财产品","quantity":0,"costPrice":0,"currentPrice":0,"totalCost":100000,"totalMarketValue":105000,"profitLoss":5000,"profitLossPercent":5.0,"assetType":"wealth","currency":"CNY"}
+  {"code":"600519","name":"贵州茅台","quantity":100,"costPrice":1800.50,"currentPrice":1950.00,"totalCost":180050,"totalMarketValue":195000,"profitLoss":14950,"profitLossPercent":8.30,"assetType":"aStock","currency":"CNY","tags":["白酒","消费"]},
+  {"code":"161725","name":"招商中证白酒","quantity":5000,"costPrice":0,"currentPrice":1.2345,"totalCost":5500,"totalMarketValue":6172.50,"profitLoss":672.50,"profitLossPercent":12.23,"assetType":"indexFund","currency":"CNY","tags":["消费","纳指","QDII"]},
+  {"code":"AAPL","name":"苹果公司","quantity":50,"costPrice":150.00,"currentPrice":175.00,"totalCost":7500,"totalMarketValue":8750,"profitLoss":1250,"profitLossPercent":16.67,"assetType":"usStock","currency":"USD","tags":["美股","科技"]}
 ]''';
 
   // ===== 识别入口 =====

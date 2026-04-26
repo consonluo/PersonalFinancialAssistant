@@ -350,6 +350,22 @@ class _OcrImportPageState extends ConsumerState<OcrImportPage> {
                                     '${r.code != "unknown" ? "${r.code} · " : ""}数量:${r.quantity} · 现价:${r.currentPrice}',
                                     style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
                                   ),
+                                  // AI 聚合标签
+                                  if (r.aiTags.isNotEmpty) ...[
+                                    const SizedBox(height: 4),
+                                    Wrap(
+                                      spacing: 4,
+                                      runSpacing: 2,
+                                      children: r.aiTags.take(4).map((tag) => Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                                        decoration: BoxDecoration(
+                                          color: Colors.purple.withValues(alpha: 0.1),
+                                          borderRadius: BorderRadius.circular(3),
+                                        ),
+                                        child: Text(tag, style: const TextStyle(fontSize: 10, color: Colors.purple)),
+                                      )).toList(),
+                                    ),
+                                  ],
                                   if (r.hasWarnings)
                                     Padding(
                                       padding: const EdgeInsets.only(top: 2),
@@ -815,6 +831,7 @@ class _OcrImportPageState extends ConsumerState<OcrImportPage> {
     final costC = TextEditingController(text: r.costPrice.toString());
     final priceC = TextEditingController(text: r.currentPrice.toString());
     final mvC = TextEditingController(text: r.marketValue.toString());
+    final tagsC = TextEditingController(text: r.aiTags.join(','));
     String selectedType = r.assetType.isNotEmpty ? r.assetType : 'other';
     String selectedCurrency = r.currency.isNotEmpty ? r.currency : 'CNY';
 
@@ -874,7 +891,7 @@ class _OcrImportPageState extends ConsumerState<OcrImportPage> {
                   children: [
                     Expanded(child: TextField(controller: qtyC, decoration: const InputDecoration(labelText: '数量', isDense: true), keyboardType: TextInputType.number)),
                     const SizedBox(width: 8),
-                    Expanded(child: TextField(controller: costC, decoration: const InputDecoration(labelText: '成本价', isDense: true), keyboardType: TextInputType.number)),
+                    Expanded(child: TextField(controller: costC, decoration: const InputDecoration(labelText: '成本价(可负)', isDense: true), keyboardType: const TextInputType.numberWithOptions(signed: true))),
                   ],
                 ),
                 const SizedBox(height: 10),
@@ -882,9 +899,22 @@ class _OcrImportPageState extends ConsumerState<OcrImportPage> {
                   children: [
                     Expanded(child: TextField(controller: priceC, decoration: const InputDecoration(labelText: '现价', isDense: true), keyboardType: TextInputType.number)),
                     const SizedBox(width: 8),
-                    Expanded(child: TextField(controller: mvC, decoration: const InputDecoration(labelText: '市值', isDense: true), keyboardType: TextInputType.number)),
+                    Expanded(child: TextField(controller: mvC, decoration: const InputDecoration(labelText: '市值(最可靠)', isDense: true), keyboardType: TextInputType.number)),
                   ],
                 ),
+                const SizedBox(height: 10),
+                // AI 聚合标签输入
+                TextField(
+                  controller: tagsC,
+                  decoration: const InputDecoration(
+                    labelText: 'AI聚合标签(逗号分隔)',
+                    isDense: true,
+                    hintText: '如: 纳指,QDII,美股',
+                  ),
+                ),
+                const SizedBox(height: 4),
+                const Text('常用标签: 纳指,标普500,红利,消费,科技,QDII,美股,港股,A股', 
+                  style: TextStyle(fontSize: 10, color: AppColors.textHint)),
               ],
             ),
           ),
@@ -897,6 +927,7 @@ class _OcrImportPageState extends ConsumerState<OcrImportPage> {
     );
 
     if (saved == true) {
+      final tags = tagsC.text.split(',').map((t) => t.trim()).where((t) => t.isNotEmpty).toList();
       final updated = r.copyWith(
         name: nameC.text.trim().isNotEmpty ? nameC.text.trim() : r.name,
         code: codeC.text.trim().isNotEmpty ? codeC.text.trim() : 'unknown',
@@ -906,11 +937,12 @@ class _OcrImportPageState extends ConsumerState<OcrImportPage> {
         marketValue: double.tryParse(mvC.text) ?? r.marketValue,
         assetType: selectedType,
         currency: selectedCurrency,
+        aiTags: tags,
       );
       ref.read(ocrResultProvider.notifier).updateResult(index, updated);
     }
 
     nameC.dispose(); codeC.dispose(); qtyC.dispose();
-    costC.dispose(); priceC.dispose(); mvC.dispose();
+    costC.dispose(); priceC.dispose(); mvC.dispose(); tagsC.dispose();
   }
 }

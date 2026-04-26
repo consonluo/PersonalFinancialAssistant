@@ -48,6 +48,8 @@ class OcrParser {
       final name = _getString(item, ['name', 'stockName', 'assetName']);
       final assetType = _getString(item, ['assetType', 'type', 'category']);
       final currency = _getString(item, ['currency', 'currencyCode', 'ccy']);
+      // AI 聚合标签（多标签）
+      final aiTags = _getStringList(item, ['tags', 'aiTags', 'aggregations', 'groupings']);
 
       if (code.isEmpty && name.isEmpty) continue;
 
@@ -62,20 +64,21 @@ class OcrParser {
 
       final warnings = <String>[];
       
-      // ======== 提取原始文本中的货币符号，用于判断币种 ========
-      // 将 item 转换为字符串用于判断货币符号
+      // ======== 提取原始文本中的货币符号和名称关键词 ========
       final itemText = item.toString();
       final combinedText = '$originalText $itemText';
-      var hasDollarSign = combinedText.contains('\$') || combinedText.contains('USD') || combinedText.contains('美元');
-      var hasYenSign = combinedText.contains('¥') || combinedText.contains('￥') || combinedText.contains('CNY') || combinedText.contains('人民币');
-      var hasHkdSign = combinedText.contains('HK\$') || combinedText.contains('HKD') || combinedText.contains('港元') || combinedText.contains('港币');
-      var hasGBP = combinedText.contains('GBP') || combinedText.contains('英镑');
-      var hasEUR = combinedText.contains('EUR') || combinedText.contains('欧元');
+      final upperText = combinedText.toUpperCase();
+      final hasDollarSign = upperText.contains('\$') || upperText.contains('USD') || combinedText.contains('美元');
+      final hasYenSign = combinedText.contains('¥') || combinedText.contains('￥') || upperText.contains('CNY') || combinedText.contains('人民币');
+      final hasHkdSign = upperText.contains('HK\$') || upperText.contains('HKD') || combinedText.contains('港元') || combinedText.contains('港币');
+      final hasGBP = upperText.contains('GBP') || combinedText.contains('英镑');
+      final hasEUR = upperText.contains('EUR') || combinedText.contains('欧元');
 
       // ======== 第一步：智能判断单价 vs 总价 ========
+      // 核心原则：总值最可靠，优先信任总值，其他字段由总值反推
+      
       // 如果 costPrice 比 totalCost 大，说明 AI 把总价填到了单价字段
       if (unitCost > 0 && totalCost > 0 && unitCost > totalCost * 0.9 && qty > 1) {
-        // costPrice 其实是总成本
         final tmp = unitCost; unitCost = 0; totalCost = tmp;
       }
       if (unitPrice > 0 && totalMv > 0 && unitPrice > totalMv * 0.9 && qty > 1) {
@@ -93,40 +96,69 @@ class OcrParser {
         }
       }
 
-      // ======== 第二步：从已知值推算缺失值 ========
-      // 总市值 ← 单价 × 数量
-      if (totalMv <= 0 && unitPrice > 0 && qty > 0) totalMv = unitPrice * qty;
-      // 总成本 ← 单价成本 × 数量
-      if (totalCost <= 0 && unitCost > 0 && qty > 0) totalCost = unitCost * qty;
-      // 单价 ← 总市值 / 数量
-      if (unitPrice <= 0 && totalMv > 0 && qty > 0) unitPrice = totalMv / qty;
-      // 单价成本 ← 总成本 / 数量
-      if (unitCost <= 0 && totalCost > 0 && qty > 0) unitCost = totalCost / qty;
-      // 数量 ← 总市值 / 单价
-      if (qty <= 0 && unitPrice > 0 && totalMv > 0) qty = totalMv / unitPrice;
-      // 总市值 ← 总成本 + 盈亏
-      if (totalMv <= 0 && totalCost > 0 && pnl != 0) totalMv = totalCost + pnl;
-      // 总成本 ← 总市值 - 盈亏
-      if (totalCost <= 0 && totalMv > 0 && pnl != 0) totalCost = totalMv - pnl;
-
-      // 从收益率推算成本
-      if (unitCost <= 0 && unitPrice > 0 && pnlPct != 0) {
-        unitCost = unitPrice / (1 + pnlPct / 100);
+      // ======== 第二步：总值优先原则补全缺失字段 ========
+      // 总值是最可靠的，优先保证总值正确
+      // 如果没有总值但有单价和数量，尝试计算
+      if (totalMv <= 0 && unitPrice > 0 && qty > 0) {
+        totalMv = unitPrice * qty;
       }
+      if (totalCost <= 0 && unitCost != 0 && qty > 0) {
+        // 注意：成本允许为负数（如做空、涡轮等）
+        totalCost = unitCost * qty;
+      }
+      
+      // 从总值反推单价
+      if (unitPrice <= 0 && totalMv > 0 && qty > 0) {
+        unitPrice = totalMv / qty;
+      }
+      // 从总值反推成本单价（成本允许负数）
+      if (unitCost == 0 && totalCost != 0 && qty > 0) {
+        unitCost = totalCost / qty;
+      }
+      // 从总值和盈亏反推成本
+      if (totalCost <= 0 && totalMv > 0 && pnl != 0) {
+        totalCost = totalMv - pnl;
+        if (qty > 0) unitCost = totalCost / qty;
+      }
+      // 从收益率反推成本
       if (totalCost <= 0 && totalMv > 0 && pnlPct != 0) {
         totalCost = totalMv / (1 + pnlPct / 100);
+        if (qty > 0) unitCost = totalCost / qty;
+      }
+      // 从盈亏和成本反推市值
+      if (totalMv <= 0 && totalCost != 0 && pnl != 0) {
+        totalMv = totalCost + pnl;
+      }
+      // 从盈亏和市值反推成本
+      if (totalCost == 0 && totalMv > 0 && pnl != 0) {
+        totalCost = totalMv - pnl;
+        if (qty > 0) unitCost = totalCost / qty;
+      }
+      // 从盈亏百分比和市值反推成本
+      if (totalCost == 0 && totalMv > 0 && pnlPct != 0) {
+        totalCost = totalMv / (1 + pnlPct / 100);
+        if (qty > 0) unitCost = totalCost / qty;
+      }
+      // 从盈亏百分比和成本反推市值
+      if (totalMv <= 0 && totalCost != 0 && pnlPct != 0) {
+        totalMv = totalCost * (1 + pnlPct / 100);
       }
 
       // 盈亏额 ← 总市值 - 总成本
-      if (pnl == 0 && totalMv > 0 && totalCost > 0) pnl = totalMv - totalCost;
+      if (pnl == 0 && totalMv > 0 && totalCost != 0) pnl = totalMv - totalCost;
       // 收益率 ← (总市值 - 总成本) / 总成本 × 100
-      if (pnlPct == 0 && totalCost > 0 && totalMv > 0) pnlPct = (totalMv - totalCost) / totalCost * 100;
+      if (pnlPct == 0 && totalCost != 0 && totalMv > 0) pnlPct = (totalMv - totalCost) / totalCost * 100;
 
-      // 再次补全单价和总价
-      if (unitPrice <= 0 && totalMv > 0 && qty > 0) unitPrice = totalMv / qty;
-      if (unitCost <= 0 && totalCost > 0 && qty > 0) unitCost = totalCost / qty;
-      if (totalMv <= 0 && unitPrice > 0 && qty > 0) totalMv = unitPrice * qty;
-      if (totalCost <= 0 && unitCost > 0 && qty > 0) totalCost = unitCost * qty;
+      // 确保数量有值（存款/理财等数量为1）
+      if (qty <= 0 && (totalMv > 0 || unitPrice > 0)) {
+        final isDepositLike = const {'deposit', 'wealth', 'moneyFund', 'fixedDeposit',
+            'largeDeposit', 'noticeDeposit', 'structuredDeposit', 'insurance'}.contains(assetType);
+        if (isDepositLike) {
+          qty = 1;
+        } else if (unitPrice > 0 && totalMv > 0) {
+          qty = totalMv / unitPrice;
+        }
+      }
 
       // ======== 第三步：存款/理财特殊处理 ========
       final isDepositLike = const {'deposit', 'wealth', 'moneyFund', 'fixedDeposit',
@@ -136,160 +168,145 @@ class OcrParser {
           qty = 1;
           if (totalMv > 0) { unitPrice = totalMv; }
           else { totalMv = unitPrice; }
-          if (totalCost <= 0) { totalCost = totalMv; unitCost = unitPrice; }
+          if (totalCost == 0) { totalCost = totalMv; unitCost = unitPrice; }
         }
       }
-      // 没有成本价就默认等于现价
-      if (unitCost <= 0 && unitPrice > 0) unitCost = unitPrice;
-      if (totalCost <= 0 && totalMv > 0) totalCost = totalMv;
-      // 确保总市值有值
-      if (totalMv <= 0 && unitPrice > 0 && qty > 0) totalMv = unitPrice * qty;
+      // 没有成本价就默认等于现价（存款理财等）
+      if (isDepositLike && unitCost == 0 && unitPrice > 0) {
+        unitCost = unitPrice;
+      }
+      if (isDepositLike && totalCost == 0 && totalMv > 0) {
+        totalCost = totalMv;
+      }
 
-      // ======== 第四步：多维度交叉验证 ========
-
-      // 验证1: 总市值 ≈ 单价 × 数量
-      if (qty > 0 && unitPrice > 0 && totalMv > 0) {
+      // ======== 第四步：交叉验证（信任总值） ========
+      // 总值是截图直接显示的，最可靠
+      if (qty > 0 && totalMv > 0 && unitPrice > 0) {
         final computed = unitPrice * qty;
         final diff = (computed - totalMv).abs();
-        if (diff > totalMv * 0.05 && diff > 1) { // 偏差超过5%
-          // 信任总市值（截图直接显示），修正单价
+        if (diff > totalMv * 0.05 && diff > 1) {
           unitPrice = totalMv / qty;
-          warnings.add('单价已按市值/数量修正');
+          warnings.add('单价已按市值修正');
         }
       }
-      // 验证2: 总成本 ≈ 单价成本 × 数量
-      if (qty > 0 && unitCost > 0 && totalCost > 0) {
+      // 成本验证（成本允许负数）
+      if (qty > 0 && totalCost != 0 && unitCost != 0) {
         final computed = unitCost * qty;
         final diff = (computed - totalCost).abs();
-        if (diff > totalCost * 0.05 && diff > 1) {
+        if (totalCost != 0 && diff > totalCost.abs() * 0.05 && diff > 1) {
           unitCost = totalCost / qty;
         }
       }
-      // 验证3: 盈亏额 ≈ 总市值 - 总成本
-      if (totalMv > 0 && totalCost > 0 && pnl != 0) {
-        final computedPnl = totalMv - totalCost;
-        final diff = (computedPnl - pnl).abs();
-        if (diff > totalMv * 0.05 && diff > 10) {
-          warnings.add('盈亏与市值/成本不完全一致');
-        }
-      }
-      // 验证4: 收益率 ≈ (总市值 - 总成本) / 总成本 × 100
-      if (totalMv > 0 && totalCost > 0 && pnlPct != 0) {
+      // 收益率验证
+      if (totalMv > 0 && totalCost != 0 && pnlPct != 0) {
         final computedPct = (totalMv - totalCost) / totalCost * 100;
-        if ((computedPct - pnlPct).abs() > 2) { // 偏差超过2个百分点
-          // 收益率更可信（截图直接标注的），用收益率反推成本
+        if ((computedPct - pnlPct).abs() > 2) {
+          // 收益率更可信，用收益率反推成本
           totalCost = totalMv / (1 + pnlPct / 100);
           if (qty > 0) unitCost = totalCost / qty;
           warnings.add('成本已按收益率修正');
         }
       }
 
-      // ======== 第五步：持仓数量和市值合理性判断 ========
-      // 根据资产类型判断数量和市值的合理性
-      final isStock = const {'aStock', 'hkStock', 'usStock'}.contains(assetType);
-      final isFund = const {'indexFund', 'activeFund', 'bondFund', 'moneyFund'}.contains(assetType);
-      final isDeposit = const {'deposit', 'fixedDeposit', 'largeDeposit', 'noticeDeposit', 'wealth', 'structuredDeposit'}.contains(assetType);
-      
-      if (qty > 0 && totalMv > 0 && unitPrice > 0) {
-        // 判断单价是否合理
-        final unitPriceRatio = unitPrice * qty / totalMv;
-        if (unitPriceRatio < 0.5 || unitPriceRatio > 1.5) {
-          // 单价与市值的比例异常，尝试修正
-          final computedUnitPrice = totalMv / qty;
-          if (computedUnitPrice > 0.01 && computedUnitPrice < 1000000) {
-            unitPrice = computedUnitPrice;
-            warnings.add('单价已按市值/数量修正');
-          }
-        }
+      // ======== 第五步：合理性判断 ========
+      if (qty > 0 && totalMv > 0) {
+        final isStock = const {'aStock', 'hkStock', 'usStock'}.contains(assetType);
+        final isFund = const {'indexFund', 'activeFund', 'bondFund', 'moneyFund'}.contains(assetType);
         
-        // 判断数量是否合理（根据资产类型）
-        if (isStock) {
-          // A股：手为单位，1手=100股，单价通常在 1~500 元
-          if (qty > 0 && qty < 100 && unitPrice > 0) {
-            // 可能是零散股，提醒用户确认
-            if (qty < 10) warnings.add('股票数量${qty.toStringAsFixed(0)}较少，请确认是否正确');
+        if (isStock && unitPrice > 0) {
+          // A股股价异常检测
+          if (code.length == 6 && unitPrice > 1000) {
+            warnings.add('A 股单价偏高，请确认');
           }
-          // A 股股价异常检测
-          if (unitPrice > 1000) warnings.add('A 股单价${unitPrice.toStringAsFixed(2)}偏高，请确认');
-          if (unitPrice < 1) warnings.add('A 股单价${unitPrice.toStringAsFixed(2)}异常偏低，请确认');
         }
-        if (isFund) {
-          // 基金：净值通常在 0.5~10 元，份额可以是任意正数
-          if (unitPrice > 20) warnings.add('基金净值${unitPrice.toStringAsFixed(4)}偏高，请确认');
-          if (unitPrice < 0.1) warnings.add('基金净值${unitPrice.toStringAsFixed(4)}异常偏低，请确认');
+        if (isFund && unitPrice > 0) {
+          if (unitPrice > 20) warnings.add('基金净值偏高，请确认');
         }
-        if (isDeposit) {
-          // 存款/理财：数量通常为 1，金额在 1千~500万
-          if (qty > 10) warnings.add('存款/理财份数${qty.toStringAsFixed(0)}较多，请确认');
-          if (totalMv > 5000000) warnings.add('存款/理财市值${(totalMv/10000).toStringAsFixed(0)}万偏高，请确认');
-        }
-        // 市值合理性检查
-        if (totalMv > 100000000) warnings.add('市值${(totalMv/100000000).toStringAsFixed(1)}亿，请确认');
-      }
-      
-      // 判断成本价是否合理
-      if (unitCost > 0 && unitPrice > 0) {
-        final costRatio = unitCost / unitPrice;
-        if (costRatio > 3) warnings.add('成本价是现价的${(costRatio*100).toStringAsFixed(0)}%，亏损较大，请确认');
-        if (costRatio < 0.1) warnings.add('成本价是现价的${(costRatio*100).toStringAsFixed(0)}%，盈利较大，请确认');
+        if (totalMv > 100000000) warnings.add('市值较大，请确认');
       }
 
       // ======== 第六步：异常检测 ========
-      if (unitCost > 0 && unitPrice > 0) {
+      if (unitPrice > 0 && unitCost != 0) {
         final calcPnl = (unitPrice - unitCost) / unitCost * 100;
-        if (calcPnl > 500) warnings.add('盈利${calcPnl.toStringAsFixed(0)}%异常偏高');
-        if (calcPnl < -90) warnings.add('亏损${calcPnl.abs().toStringAsFixed(0)}%异常偏高');
+        if (calcPnl > 500) warnings.add('盈利异常偏高');
+        if (calcPnl < -90) warnings.add('亏损异常偏高');
       }
-      if (totalMv > 100000000) warnings.add('市值${(totalMv / 10000).toStringAsFixed(0)}万，请确认');
+      if (totalMv > 100000000) warnings.add('市值较大，请确认');
       if (qty < 0) { qty = qty.abs(); warnings.add('数量为负已修正'); }
       if (unitPrice < 0) { unitPrice = unitPrice.abs(); warnings.add('现价为负已修正'); }
-      if (unitCost < 0) { unitCost = unitCost.abs(); warnings.add('成本价为负已修正'); }
+      // 注意：成本允许负数，不再自动修正
 
-      // ======== 推断币种 ========
-      // 优先级：1. AI 识别 2. 代码前缀 3. 资产类型 4. 货币符号
+      // ======== 推断币种（代码优先级最高） ========
       String resolvedCurrency = currency;
+      
+      // 第一优先级：直接根据代码判断（最准确）
+      final codeCurrency = _detectCurrencyByCode(code);
+      if (codeCurrency.isNotEmpty) {
+        resolvedCurrency = codeCurrency;
+      }
+      
+      // 第二优先级：AI 识别
+      if (resolvedCurrency.isEmpty && currency.isNotEmpty) {
+        resolvedCurrency = currency;
+      }
+      
+      // 第三优先级：名称关键词（纳斯达克、港交所等）
       if (resolvedCurrency.isEmpty) {
-        // 第一优先级：根据股票代码前缀判断
-        resolvedCurrency = _detectCurrencyByCode(code);
-        
-        // 第二优先级：根据资产类型判断
-        if (resolvedCurrency.isEmpty) {
-          if (const {'usStock', 'US', '美股', 'NASDAQ', '纽交所', '纳斯达克'}.contains(assetType)) {
-            resolvedCurrency = 'USD';
-          } else if (const {'hkStock', 'HK', '港股', '港交所'}.contains(assetType)) {
-            resolvedCurrency = 'HKD';
-          } else if (const {
-            'indexFund', 'activeFund', 'bondFund', 'moneyFund', 'aStock',
-            'deposit', 'wealth', 'fixedDeposit', 'largeDeposit', 'noticeDeposit',
-            'structuredDeposit', 'treasuryRepo', 'realEstate', 'vehicle',
-            'IDX', 'ACT', 'BOND', 'MMF', 'A', '国内', '基金', 'A股'
-          }.contains(assetType)) {
-            resolvedCurrency = 'CNY';
-          }
+        final nameUpper = name.toUpperCase();
+        if (nameUpper.contains('NASDAQ') || nameUpper.contains('纽交所') || 
+            nameUpper.contains('纳斯达克') || upperText.contains('美国')) {
+          resolvedCurrency = 'USD';
+        } else if (nameUpper.contains('港交所') || nameUpper.contains('港股')) {
+          resolvedCurrency = 'HKD';
         }
-        
-        // 第三优先级：根据货币符号判断
-        if (resolvedCurrency.isEmpty || resolvedCurrency == 'CNY') {
-          if (hasDollarSign && !hasYenSign && !hasHkdSign) {
-            resolvedCurrency = 'USD';
-          } else if (hasHkdSign) {
-            resolvedCurrency = 'HKD';
-          } else if (hasGBP) {
-            resolvedCurrency = 'GBP';
-          } else if (hasEUR) {
-            resolvedCurrency = 'EUR';
-          }
-        }
-        
-        // 默认人民币
-        if (resolvedCurrency.isEmpty) {
+      }
+      
+      // 第四优先级：资产类型
+      if (resolvedCurrency.isEmpty) {
+        if (const {'usStock'}.contains(assetType)) {
+          resolvedCurrency = 'USD';
+        } else if (const {'hkStock'}.contains(assetType)) {
+          resolvedCurrency = 'HKD';
+        } else if (const {
+          'aStock', 'indexFund', 'activeFund', 'bondFund', 'moneyFund',
+          'deposit', 'wealth', 'fixedDeposit', 'largeDeposit', 'noticeDeposit',
+          'structuredDeposit', 'treasuryRepo', 'realEstate', 'vehicle',
+        }.contains(assetType)) {
           resolvedCurrency = 'CNY';
         }
       }
+      
+      // 第五优先级：货币符号（谨慎使用，容易误判）
+      if (resolvedCurrency.isEmpty) {
+        if (hasDollarSign && !hasYenSign && !hasHkdSign) {
+          resolvedCurrency = 'USD';
+        } else if (hasHkdSign) {
+          resolvedCurrency = 'HKD';
+        } else if (hasGBP) {
+          resolvedCurrency = 'GBP';
+        } else if (hasEUR) {
+          resolvedCurrency = 'EUR';
+        }
+      }
+      
+      // 默认人民币
+      if (resolvedCurrency.isEmpty) {
+        resolvedCurrency = 'CNY';
+      }
+      
       // 统一币种格式
       resolvedCurrency = resolvedCurrency.toUpperCase();
       if (resolvedCurrency == 'RMB' || resolvedCurrency == 'YEN') resolvedCurrency = 'CNY';
       if (resolvedCurrency == 'DOLLAR' || resolvedCurrency == 'DOLLARS') resolvedCurrency = 'USD';
+
+      // ======== 推断 AI 聚合标签 ========
+      // 如果 AI 返回了标签，直接使用
+      var resolvedTags = aiTags;
+      
+      // 如果没有标签，根据名称和代码智能推断
+      if (resolvedTags.isEmpty) {
+        resolvedTags = _inferTags(code, name, assetType);
+      }
 
       results.add(ParsedHolding(
         code: code.isNotEmpty ? code : 'unknown',
@@ -300,56 +317,116 @@ class OcrParser {
         marketValue: totalMv,
         assetType: assetType.isNotEmpty ? assetType : '',
         currency: resolvedCurrency,
+        aiTags: resolvedTags,
         warnings: warnings,
       ));
     }
     return results;
   }
 
+  /// 根据股票代码和名称推断聚合标签
+  static List<String> _inferTags(String code, String name, String assetType) {
+    final tags = <String>[];
+    final nameUpper = name.toUpperCase();
+    final codeUpper = code.toUpperCase();
+    
+    // 指数标签
+    if (nameUpper.contains('纳斯达克') || nameUpper.contains('NASDAQ') || 
+        nameUpper.contains('纳指') || codeUpper == 'NDX' || codeUpper == 'QQQ') {
+      tags.add('纳指');
+    }
+    if (nameUpper.contains('标普') || nameUpper.contains('S&P') || 
+        codeUpper == 'SPY' || codeUpper == 'VOO') {
+      tags.add('标普500');
+    }
+    if (nameUpper.contains('道琼斯') || codeUpper == 'DIA') {
+      tags.add('道琼斯');
+    }
+    if (nameUpper.contains('沪深300') || nameUpper.contains('300') || codeUpper == '510300') {
+      tags.add('沪深300');
+    }
+    if (nameUpper.contains('上证') || (code.length == 6 && code.startsWith('6'))) {
+      tags.add('上证');
+    }
+    if (nameUpper.contains('创业板') || (code.length == 6 && code.startsWith('3'))) {
+      tags.add('创业板');
+    }
+    if (nameUpper.contains('恒生') || nameUpper.contains('H股') || 
+        (code.length == 5 && RegExp(r'^[0689]\d{4}$').hasMatch(code))) {
+      tags.add('港股');
+    }
+    
+    // 红利/高股息标签
+    if (nameUpper.contains('红利') || nameUpper.contains('高股息') || 
+        nameUpper.contains('股息') || nameUpper.contains('分红')) {
+      tags.add('红利');
+    }
+    
+    // 行业/主题标签
+    if (nameUpper.contains('消费')) tags.add('消费');
+    if (nameUpper.contains('科技')) tags.add('科技');
+    if (nameUpper.contains('医药') || nameUpper.contains('医疗')) tags.add('医药');
+    if (nameUpper.contains('新能源') || nameUpper.contains('光伏')) tags.add('新能源');
+    if (nameUpper.contains('半导体') || nameUpper.contains('芯片')) tags.add('半导体');
+    if (nameUpper.contains('军工') || nameUpper.contains('国防')) tags.add('军工');
+    if (nameUpper.contains('金融') || nameUpper.contains('银行')) tags.add('金融');
+    if (nameUpper.contains('白酒')) tags.add('白酒');
+    if (nameUpper.contains('互联网')) tags.add('互联网');
+    
+    // 市场标签
+    if (assetType == 'usStock' || RegExp(r'^[A-Z]{1,5}$').hasMatch(codeUpper)) {
+      tags.add('美股');
+    }
+    if (assetType == 'hkStock' || (code.length == 5 && RegExp(r'^[0689]\d{4}$').hasMatch(code))) {
+      if (!tags.contains('港股')) tags.add('港股');
+    }
+    if (assetType == 'aStock' || code.length == 6) {
+      tags.add('A股');
+    }
+    
+    // QDII 标签（海外基金）
+    if (nameUpper.contains('QDII') || nameUpper.contains('海外') || 
+        (nameUpper.contains('纳斯达克') && assetType == 'indexFund')) {
+      tags.add('QDII');
+    }
+    
+    return tags;
+  }
+
   /// 判断一个价格是否像"总价"而非"单价"
   static bool _looksLikeTotalPrice(double price, double qty, String assetType) {
     if (qty <= 1) return false;
-    // 基金类：净值通常在 0.5~10 之间，如果 price > 100 且有份额，大概率是总价
-    final isFund = const {'indexFund', 'activeFund',
-        'bondFund', 'moneyFund'}.contains(assetType);
+    final isFund = const {'indexFund', 'activeFund', 'bondFund', 'moneyFund'}.contains(assetType);
     if (isFund && price > 100 && qty > 10) return true;
-    // 通用：如果 price / qty 的比值在合理单价范围内，则 price 是总价
     final unitGuess = price / qty;
     if (unitGuess > 0.1 && unitGuess < 10000 && price > 1000) return true;
     return false;
   }
 
-  /// 根据股票代码判断币种
+  /// 根据股票代码判断币种（最高优先级）
   static String _detectCurrencyByCode(String code) {
     if (code.isEmpty || code == 'unknown') return '';
     
     final upperCode = code.toUpperCase();
     
-    // 美股代码：通常 1-5 个大写字母（如 AAPL, GOOGL, MSFT, TSLA, META, NVDA）
-    // 也可能是 5 位数字（如在某些系统中的表示）
+    // 美股代码：1-5 个大写字母
     if (RegExp(r'^[A-Z]{1,5}$').hasMatch(upperCode)) {
       return 'USD';
     }
     
     // 港股代码：5 位数字，通常以 0、6、8、9 开头
-    // 如 00700 (腾讯)、09988 (阿里巴巴)、09619 (京东)
     if (RegExp(r'^[0689]\d{4}$').hasMatch(code)) {
       return 'HKD';
     }
     
     // A 股代码：6 位数字
-    // 以 6 开头通常是上证，0/3 开头是深证
     if (RegExp(r'^\d{6}$').hasMatch(code)) {
-      // 排除纯数字的美股代码（有些系统用数字表示美股）
-      // 美股代码一般在 10000-99999 之间（5位数）
-      final numCode = int.tryParse(code);
-      if (numCode != null) {
-        // 如果是 5 位数字且以 1-9 开头，可能是美股
-        if (code.length == 5 && !code.startsWith('0')) {
-          return 'USD';
-        }
-      }
       return 'CNY';
+    }
+    
+    // 纯数字的 5 位码（某些系统表示美股）
+    if (RegExp(r'^\d{5}$').hasMatch(code)) {
+      return 'USD';
     }
     
     return '';
@@ -361,6 +438,27 @@ class OcrParser {
       if (value != null && value.toString().trim().isNotEmpty) return value.toString().trim();
     }
     return '';
+  }
+
+  static List<String> _getStringList(Map<String, dynamic> map, List<String> keys) {
+    for (final key in keys) {
+      final value = map[key];
+      if (value is List) {
+        return value.map((e) => e.toString().trim()).where((s) => s.isNotEmpty).toList();
+      }
+      if (value is String && value.isNotEmpty) {
+        // 尝试解析 JSON 数组格式
+        try {
+          final parsed = jsonDecode(value);
+          if (parsed is List) {
+            return parsed.map((e) => e.toString().trim()).where((s) => s.isNotEmpty).toList();
+          }
+        } catch (_) {}
+        // 尝试逗号分隔
+        return value.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+      }
+    }
+    return [];
   }
 
   static double _getDouble(Map<String, dynamic> map, List<String> keys) {
@@ -419,11 +517,12 @@ class ParsedHolding {
   final String code;
   final String name;
   final double quantity;
-  final double costPrice;
+  final double costPrice; // 允许负数（如做空、涡轮等）
   final double currentPrice;
   final double marketValue;
   final String assetType; // AI 识别的资产类型
   final String currency; // 币种: CNY/HKD/USD/EUR/GBP/JPY
+  final List<String> aiTags; // AI 聚合标签
   final List<String> warnings; // 数据异常警告
 
   const ParsedHolding({
@@ -435,20 +534,21 @@ class ParsedHolding {
     required this.marketValue,
     this.assetType = '',
     this.currency = 'CNY',
+    this.aiTags = const [],
     this.warnings = const [],
   });
 
   ParsedHolding copyWith({
     String? code, String? name, double? quantity, double? costPrice,
     double? currentPrice, double? marketValue, String? assetType, String? currency,
-    List<String>? warnings,
+    List<String>? aiTags, List<String>? warnings,
   }) {
     return ParsedHolding(
       code: code ?? this.code, name: name ?? this.name,
       quantity: quantity ?? this.quantity, costPrice: costPrice ?? this.costPrice,
       currentPrice: currentPrice ?? this.currentPrice, marketValue: marketValue ?? this.marketValue,
       assetType: assetType ?? this.assetType, currency: currency ?? this.currency,
-      warnings: warnings ?? this.warnings,
+      aiTags: aiTags ?? this.aiTags, warnings: warnings ?? this.warnings,
     );
   }
 
@@ -459,5 +559,5 @@ class ParsedHolding {
   bool get hasWarnings => warnings.isNotEmpty;
 
   @override
-  String toString() => 'ParsedHolding($code, $name, type=$assetType, currency=$currency, mv=$marketValue${warnings.isNotEmpty ? ", warn=${warnings.join(";")}" : ""})';
+  String toString() => 'ParsedHolding($code, $name, type=$assetType, currency=$currency, tags=$aiTags, mv=$marketValue${warnings.isNotEmpty ? ", warn=${warnings.join(";")}" : ""})';
 }
