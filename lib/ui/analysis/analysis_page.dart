@@ -489,7 +489,7 @@ class _TargetTab extends ConsumerWidget {
                             if (override == null) return;
                           }
                           if (!context.mounted) return;
-                          await notifier.classify(promptOverride: override);
+                          await notifier.classifyStream(promptOverride: override);
                         },
                         child: Text(state.groups.isEmpty ? '开始分类' : '重新分类'),
                       ),
@@ -528,16 +528,41 @@ class _TargetTab extends ConsumerWidget {
           Card(
             child: Padding(
               padding: const EdgeInsets.all(12),
-              child: Row(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)),
-                  const SizedBox(width: 12),
-                  const Expanded(
-                    child: Text(
-                      '正在请求 AI…\n完整 JSON 返回后一次性解析展示（避免流式截断导致失败）',
-                      style: TextStyle(fontSize: 12, color: AppColors.textSecondary, height: 1.35),
-                    ),
+                  Row(
+                    children: [
+                      const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2)),
+                      const SizedBox(width: 12),
+                      const Text(
+                        '正在请求 AI 分析…',
+                        style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                      ),
+                    ],
                   ),
+                  if (state.streamText.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Container(
+                      constraints: const BoxConstraints(maxHeight: 200),
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: AppColors.backgroundCard,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: SingleChildScrollView(
+                        child: Text(
+                          state.streamText,
+                          style: const TextStyle(
+                            fontFamily: 'monospace',
+                            fontSize: 11,
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),

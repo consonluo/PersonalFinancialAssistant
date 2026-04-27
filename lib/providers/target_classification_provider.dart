@@ -207,6 +207,58 @@ ${jsonEncode(holdingList)}
     )).toList()..sort((a, b) => b.totalMarketValue.compareTo(a.totalMarketValue));
   }
 
+  /// 流式分类 — 实时显示 AI 输出，完成后解析 JSON
+  Future<void> classifyStream({String? promptOverride}) async {
+    if (state.isLoading) return;
+    state = state.copyWith(isLoading: true, error: null, streamText: '');
+
+    try {
+      final holdings = _ref.read(allHoldingsProvider).valueOrNull ?? [];
+      if (holdings.isEmpty) {
+        state = state.copyWith(isLoading: false, error: '暂无持仓数据');
+        return;
+      }
+
+      final holdingList = holdings.map((h) => {
+        'id': h.id,
+        'code': h.assetCode,
+        'name': h.assetName,
+        'type': h.assetType,
+      }).toList();
+
+      final prompt = promptOverride ?? buildTargetClassificationPrompt(holdingList);
+
+      final buffer = StringBuffer();
+      await for (final delta in AiService.chatStream(prompt)) {
+        buffer.write(delta);
+        state = state.copyWith(streamText: buffer.toString());
+      }
+
+      final response = buffer.toString();
+      final parsed = _parseGroupsJson(response);
+
+      final now = DateTime.now();
+      parsed['updatedAt'] = now.toIso8601String();
+
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_cacheKey, jsonEncode(parsed));
+
+      final groups = _parseAndEnrichGroups(parsed);
+      state = TargetClassificationState(
+        groups: groups, lastUpdated: now,
+      );
+    } on AiException catch (e) {
+      state = state.copyWith(isLoading: false, error: e.message);
+    } catch (e) {
+      debugPrint('[TargetClassify] stream error: $e');
+      state = state.copyWith(
+        isLoading: false,
+        error: 'AI 分类失败：$e\n若持仓较多，可在设置中精简提示词后重试。',
+      );
+    }
+  }
+
+  /// 非流式分类（保留兼容）
   Future<void> classify({String? promptOverride}) async {
     if (state.isLoading) return;
     state = state.copyWith(isLoading: true, error: null, streamText: '');

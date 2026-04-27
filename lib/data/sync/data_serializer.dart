@@ -50,6 +50,7 @@ class DataSerializer {
         'assetName': h.assetName, 'assetType': h.assetType,
         'quantity': h.quantity, 'costPrice': h.costPrice,
         'currentPrice': h.currentPrice, 'tags': h.tags, 'notes': h.notes,
+        'currency': h.currency,
         'createdAt': h.createdAt.toIso8601String(),
         'updatedAt': h.updatedAt.toIso8601String(),
       }).toList(),
@@ -153,6 +154,7 @@ class DataSerializer {
         currentPrice: Value((h['currentPrice'] as num).toDouble()),
         tags: Value(h['tags'] is List ? jsonEncode(h['tags']) : h['tags'] as String? ?? ''),
         notes: Value(h['notes'] as String? ?? ''),
+        currency: Value(h['currency'] as String? ?? 'CNY'),
         createdAt: Value(DateTime.parse(h['createdAt'] as String)),
         updatedAt: Value(DateTime.parse(h['updatedAt'] as String)),
       ));
