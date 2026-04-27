@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -17,7 +18,7 @@ class AnalysisPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return DefaultTabController(
-      length: 4,
+      length: 5,
       child: Scaffold(
         appBar: AppBar(
           title: const Text('资产分析'),
@@ -28,7 +29,8 @@ class AnalysisPage extends ConsumerWidget {
               Tab(text: '按分类'),
               Tab(text: '按市场'),
               Tab(text: '按品种'),
-              Tab(text: '按标的'),
+              Tab(text: '按标签'),
+              Tab(text: 'AI聚类'),
             ],
           ),
         ),
@@ -40,6 +42,7 @@ class AnalysisPage extends ConsumerWidget {
                 _CategoryTab(),
                 _MarketTab(),
                 _AssetTab(),
+                _TagTab(),
                 _TargetTab(),
               ],
             ),
@@ -707,6 +710,224 @@ class _TargetGroupTileState extends State<_TargetGroupTile> {
                 }),
                 const SizedBox(height: 8),
               ],
+            ),
+            crossFadeState: _expanded ? CrossFadeState.showSecond : CrossFadeState.showFirst,
+            duration: const Duration(milliseconds: 200),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ======== 按标签 Tab ========
+
+class _TagTab extends ConsumerWidget {
+  const _TagTab();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final holdings = ref.watch(allHoldingsProvider).valueOrNull ?? [];
+
+    // 收集所有标签并分组
+    final tagGroups = <String, List<_TagHoldingItem>>{};
+    double grandTotal = 0;
+
+    for (final h in holdings) {
+      if (h.quantity == 0) continue;
+      final tags = _parseHoldingTags(h.tags);
+      if (tags.isEmpty) {
+        // 没有标签的归入"未分类"
+        tagGroups.putIfAbsent('未分类', () => []).add(_TagHoldingItem(
+          id: h.id, name: h.assetName, code: h.assetCode,
+          marketValue: h.quantity * h.currentPrice,
+        ));
+        grandTotal += h.quantity * h.currentPrice;
+      } else {
+        for (final tag in tags) {
+          final mv = h.quantity * h.currentPrice;
+          tagGroups.putIfAbsent(tag, () => []).add(_TagHoldingItem(
+            id: h.id, name: h.assetName, code: h.assetCode,
+            marketValue: mv,
+          ));
+          grandTotal += mv / tags.length; // 避免重复计算
+        }
+      }
+    }
+
+    if (tagGroups.isEmpty) {
+      return const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.label_off_outlined, size: 48, color: AppColors.textHint),
+            SizedBox(height: 12),
+            Text('暂无数据', style: TextStyle(color: AppColors.textSecondary)),
+            SizedBox(height: 4),
+            Text('添加持仓时设置投资标的标签', style: TextStyle(fontSize: 12, color: AppColors.textHint)),
+          ],
+        ),
+      );
+    }
+
+    // 按总市值排序
+    final sortedTags = tagGroups.entries.toList()
+      ..sort((a, b) {
+        final aTotal = a.value.fold<double>(0, (sum, item) => sum + item.marketValue);
+        final bTotal = b.value.fold<double>(0, (sum, item) => sum + item.marketValue);
+        return bTotal.compareTo(aTotal);
+      });
+
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: sortedTags.length,
+      itemBuilder: (context, index) {
+        final tag = sortedTags[index].key;
+        final items = sortedTags[index].value;
+        final tagTotal = items.fold<double>(0, (sum, item) => sum + item.marketValue);
+        final proportion = grandTotal > 0 ? tagTotal / grandTotal * 100 : 0.0;
+
+        return _TagGroupTile(
+          tag: tag,
+          items: items,
+          totalValue: tagTotal,
+          proportion: proportion,
+        );
+      },
+    );
+  }
+
+  List<String> _parseHoldingTags(String? tagsStr) {
+    if (tagsStr == null || tagsStr.isEmpty) return [];
+    if (tagsStr.startsWith('[')) {
+      try {
+        final list = jsonDecode(tagsStr);
+        if (list is List) return list.map((e) => e.toString()).toList();
+      } catch (_) {}
+    }
+    return tagsStr.split(',').map((t) => t.trim()).where((t) => t.isNotEmpty).toList();
+  }
+}
+
+class _TagHoldingItem {
+  final String id;
+  final String name;
+  final String code;
+  final double marketValue;
+  _TagHoldingItem({
+    required this.id, required this.name, required this.code, required this.marketValue,
+  });
+}
+
+class _TagGroupTile extends StatefulWidget {
+  final String tag;
+  final List<_TagHoldingItem> items;
+  final double totalValue;
+  final double proportion;
+
+  const _TagGroupTile({
+    required this.tag, required this.items, required this.totalValue, required this.proportion,
+  });
+
+  @override
+  State<_TagGroupTile> createState() => _TagGroupTileState();
+}
+
+class _TagGroupTileState extends State<_TagGroupTile> {
+  bool _expanded = false;
+
+  static const _tagColors = [
+    Color(0xFF5C6BC0), Color(0xFF26A69A), Color(0xFFFF7043),
+    Color(0xFF7E57C2), Color(0xFF29B6F6), Color(0xFFAB47BC),
+    Color(0xFF66BB6A), Color(0xFFEF5350), Color(0xFF42A5F5),
+    Color(0xFFE53935),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final color = _tagColors[widget.tag.hashCode.abs() % _tagColors.length];
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 10),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        children: [
+          InkWell(
+            onTap: () => setState(() => _expanded = !_expanded),
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Row(
+                children: [
+                  Container(
+                    width: 36, height: 36,
+                    decoration: BoxDecoration(
+                      color: color.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Center(child: Text(
+                      widget.tag.characters.first,
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: color),
+                    )),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: color.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(widget.tag, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: color)),
+                        ),
+                        const SizedBox(width: 8),
+                        Text('${widget.items.length}只', style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+                        const SizedBox(width: 4),
+                        Text('${widget.proportion.toStringAsFixed(1)}%',
+                            style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+                      ]),
+                    ],
+                  )),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(FormatUtils.formatCurrency(widget.totalValue),
+                          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+                    ],
+                  ),
+                  const SizedBox(width: 4),
+                  AnimatedRotation(
+                    turns: _expanded ? 0.5 : 0,
+                    duration: const Duration(milliseconds: 200),
+                    child: const Icon(Icons.expand_more, color: AppColors.textHint, size: 20),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          AnimatedCrossFade(
+            firstChild: const SizedBox.shrink(),
+            secondChild: Column(
+              children: widget.items.map((item) {
+                return Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                  child: Row(
+                    children: [
+                      Expanded(child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(item.name, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+                          Text(item.code, style: const TextStyle(fontSize: 10, color: AppColors.textHint)),
+                        ],
+                      )),
+                      Text(FormatUtils.formatCurrency(item.marketValue),
+                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                    ],
+                  ),
+                );
+              }).toList(),
             ),
             crossFadeState: _expanded ? CrossFadeState.showSecond : CrossFadeState.showFirst,
             duration: const Duration(milliseconds: 200),

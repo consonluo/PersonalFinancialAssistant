@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -688,6 +689,9 @@ class _OcrImportPageState extends ConsumerState<OcrImportPage> {
         return false;
       }).firstOrNull;
 
+      // 处理 tags：AI 标签保存到数据库
+      final tagsJson = r.aiTags.isNotEmpty ? jsonEncode(r.aiTags) : existing?.tags ?? '';
+
       if (existing != null) {
         // 更新已有持仓
         matchedExistingIds.add(existing.id);
@@ -700,7 +704,7 @@ class _OcrImportPageState extends ConsumerState<OcrImportPage> {
           quantity: Value(r.quantity),
           costPrice: Value(r.costPrice > 0 ? r.costPrice : existing.costPrice),
           currentPrice: Value(r.currentPrice),
-          tags: Value(existing.tags),
+          tags: Value(tagsJson),
           notes: Value(existing.notes),
           currency: Value(r.currency),
           createdAt: Value(existing.createdAt),
@@ -718,6 +722,7 @@ class _OcrImportPageState extends ConsumerState<OcrImportPage> {
           quantity: Value(r.quantity),
           costPrice: Value(r.costPrice),
           currentPrice: Value(r.currentPrice),
+          tags: Value(tagsJson),
           currency: Value(r.currency),
           createdAt: Value(now),
           updatedAt: Value(now),

@@ -54,7 +54,20 @@ class _WelcomePageState extends ConsumerState<WelcomePage> {
         try {
           final sync = ref.read(autoSyncProvider);
           await sync.syncDown(familyId);
+          // syncDown 后重新查询，确保获取最新导入的数据
           members = await db.getAllMembers();
+        } catch (_) {}
+      }
+
+      // 如果本地没有成员但 syncDown 成功，说明是新用户或首次登录
+      if (members.isEmpty) {
+        // 检查云端是否有数据
+        try {
+          final sync = ref.read(autoSyncProvider);
+          final success = await sync.syncDown(familyId);
+          if (success) {
+            members = await db.getAllMembers();
+          }
         } catch (_) {}
       }
 

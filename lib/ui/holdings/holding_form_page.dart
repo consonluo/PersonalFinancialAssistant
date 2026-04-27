@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -33,10 +34,19 @@ class _HoldingFormPageState extends ConsumerState<HoldingFormPage> {
   // 理财/存款用的总额输入
   final _totalAmountController = TextEditingController();
   final _totalCostController = TextEditingController();
+  // 投资标的标签输入
+  final _tagsController = TextEditingController();
   AssetType _assetType = AssetType.aStock;
   String _currency = 'CNY'; // 默认人民币
   bool _isEdit = false;
   String? _existingAccountId;
+
+  /// 常用投资标的标签
+  static const _commonTags = [
+    '纳指', '标普500', '沪深300', '红利', '消费', '科技', '医药',
+    '新能源', '半导体', '军工', '金融', '白酒', '互联网', '港股',
+    'A股', '美股', 'QDII', '黄金', 'REITs',
+  ];
 
   /// 当前类型的输入模式
   _InputMode get _inputMode {
@@ -73,6 +83,9 @@ class _HoldingFormPageState extends ConsumerState<HoldingFormPage> {
       _existingAccountId = h.accountId;
       _assetType = AssetType.values.firstWhere((e) => e.name == h.assetType, orElse: () => AssetType.other);
       _currency = h.currency ?? 'CNY';
+      // 加载 tags
+      final tags = _parseTagsString(h.tags);
+      _tagsController.text = tags.join(',');
       // 理财/存款模式下，填充总额字段
       if (_inputMode == _InputMode.deposit) {
         _totalAmountController.text = (h.quantity * h.currentPrice).toString();
@@ -82,6 +95,26 @@ class _HoldingFormPageState extends ConsumerState<HoldingFormPage> {
       }
       setState(() {});
     }
+  }
+
+  /// 解析 tags 字符串为列表
+  List<String> _parseTagsString(String? tagsStr) {
+    if (tagsStr == null || tagsStr.isEmpty) return [];
+    // 尝试 JSON 数组格式
+    if (tagsStr.startsWith('[')) {
+      try {
+        final list = jsonDecode(tagsStr);
+        if (list is List) return list.map((e) => e.toString()).toList();
+      } catch (_) {}
+    }
+    // 逗号分隔
+    return tagsStr.split(',').map((t) => t.trim()).where((t) => t.isNotEmpty).toList();
+  }
+
+  /// 解析 tags 为 JSON 字符串
+  String _encodeTagsString(List<String> tags) {
+    if (tags.isEmpty) return '';
+    return jsonEncode(tags);
   }
 
   bool _typeManuallySet = false;
@@ -257,6 +290,46 @@ class _HoldingFormPageState extends ConsumerState<HoldingFormPage> {
                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
                   ),
                 ],
+                const SizedBox(height: 16),
+                // 投资标的标签
+                TextField(
+                  controller: _tagsController,
+                  decoration: const InputDecoration(
+                    labelText: '投资标的标签（选填）',
+                    hintText: '如：纳指,红利,消费',
+                    helperText: '支持多标签，用逗号分隔',
+                  ),
+                ),
+                const SizedBox(height: 8),
+                // 常用标签快捷选择
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 4,
+                  children: _commonTags.map((tag) {
+                    final isSelected = _tagsController.text.contains(tag);
+                    return FilterChip(
+                      label: Text(tag, style: const TextStyle(fontSize: 11)),
+                      selected: isSelected,
+                      onSelected: (selected) {
+                        final currentTags = _tagsController.text
+                            .split(',')
+                            .map((t) => t.trim())
+                            .where((t) => t.isNotEmpty)
+                            .toList();
+                        if (selected) {
+                          if (!currentTags.contains(tag)) currentTags.add(tag);
+                        } else {
+                          currentTags.remove(tag);
+                        }
+                        _tagsController.text = currentTags.join(',');
+                        setState(() {});
+                      },
+                      visualDensity: VisualDensity.compact,
+                      padding: EdgeInsets.zero,
+                      labelPadding: const EdgeInsets.symmetric(horizontal: 6),
+                    );
+                  }).toList(),
+                ),
                 const SizedBox(height: 32),
                 SizedBox(width: double.infinity, child: ElevatedButton(onPressed: _save, child: const Text('保存'))),
               ],
@@ -328,6 +401,14 @@ class _HoldingFormPageState extends ConsumerState<HoldingFormPage> {
       if (costPrice <= 0) { _showError('请输入成本价'); return; }
     }
 
+    // 处理 tags
+    final tagsStr = _tagsController.text
+        .split(',')
+        .map((t) => t.trim())
+        .where((t) => t.isNotEmpty)
+        .toList();
+    final tagsJson = _encodeTagsString(tagsStr);
+
     try {
       if (_isEdit) {
         final existing = await db.getHoldingById(widget.holdingId!);
@@ -340,7 +421,7 @@ class _HoldingFormPageState extends ConsumerState<HoldingFormPage> {
           quantity: Value(quantity),
           costPrice: Value(costPrice),
           currentPrice: Value(currentPrice),
-          tags: Value(existing?.tags ?? ''),
+          tags: Value(tagsJson),
           notes: Value(existing?.notes ?? ''),
           currency: Value(_currency),
           createdAt: Value(existing?.createdAt ?? now),
@@ -356,6 +437,7 @@ class _HoldingFormPageState extends ConsumerState<HoldingFormPage> {
           quantity: Value(quantity),
           costPrice: Value(costPrice),
           currentPrice: Value(currentPrice),
+          tags: Value(tagsJson),
           currency: Value(_currency),
           createdAt: Value(now),
           updatedAt: Value(now),
@@ -431,6 +513,7 @@ class _HoldingFormPageState extends ConsumerState<HoldingFormPage> {
     _priceController.dispose();
     _totalAmountController.dispose();
     _totalCostController.dispose();
+    _tagsController.dispose();
     super.dispose();
   }
 }
