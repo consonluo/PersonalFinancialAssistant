@@ -6,6 +6,13 @@ import '../data/models/sync_config_model.dart';
 import '../data/sync/webdav_sync_service.dart';
 import 'database_provider.dart';
 import 'current_role_provider.dart';
+import 'holding_provider.dart';
+import 'account_provider.dart';
+import 'family_provider.dart';
+import 'liability_provider.dart';
+import 'investment_plan_provider.dart';
+import 'asset_summary_provider.dart';
+import 'analysis_dimension_provider.dart';
 
 /// 同步配置 Provider（简化版：只需 familyId）
 final syncConfigProvider =
@@ -162,6 +169,8 @@ class AutoSyncManager {
       final success = await service.syncDown();
 
       if (success) {
+        // 数据导入成功后强制刷新所有相关 Provider
+        _refreshAllDataProviders();
         _ref.read(syncStatusProvider.notifier).state = SyncStatus.success;
         _ref.read(lastSyncTimeProvider.notifier).state = DateTime.now();
       } else {
@@ -172,6 +181,19 @@ class AutoSyncManager {
       _ref.read(syncStatusProvider.notifier).state = SyncStatus.error;
       return false;
     }
+  }
+
+  /// 刷新所有数据相关的 Provider
+  void _refreshAllDataProviders() {
+    _ref.invalidate(allHoldingsProvider);
+    _ref.invalidate(allAccountsProvider);
+    _ref.invalidate(familyMembersProvider);
+    _ref.invalidate(allLiabilitiesProvider);
+    _ref.invalidate(allInvestmentPlansProvider);
+    _ref.invalidate(assetSummaryProvider);
+    _ref.invalidate(memberAssetProvider);
+    _ref.invalidate(marketGroupProvider);
+    _ref.invalidate(assetTypeGroupProvider);
   }
 
   /// 获取远程元信息（用于验证密码）
