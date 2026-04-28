@@ -91,134 +91,136 @@ class DataSerializer {
     };
   }
 
-  /// 导入 JSON 数据到数据库（清空后导入）
+  /// 导入 JSON 数据到数据库（清空后导入，整体在一个事务中执行）
   Future<void> importAll(Map<String, dynamic> data) async {
-    await db.clearAllData();
+    await db.transaction(() async {
+      await db.clearAllData();
 
-    // 导入成员
-    for (final m in (data['members'] as List? ?? [])) {
-      await db.insertMember(FamilyMembersCompanion(
-        id: Value(m['id'] as String),
-        name: Value(m['name'] as String),
-        avatar: Value(m['avatar'] as String? ?? ''),
-        role: Value(m['role'] as String? ?? 'other'),
-        createdAt: Value(DateTime.parse(m['createdAt'] as String)),
-        updatedAt: Value(DateTime.parse(m['updatedAt'] as String)),
-      ));
-    }
-
-    // 导入账户
-    for (final a in (data['accounts'] as List? ?? [])) {
-      await db.insertAccount(AccountsCompanion(
-        id: Value(a['id'] as String),
-        memberId: Value(a['memberId'] as String),
-        name: Value(a['name'] as String),
-        type: Value(a['type'] as String),
-        institution: Value(a['institution'] as String? ?? ''),
-        subType: Value(a['subType'] as String? ?? ''),
-        createdAt: Value(DateTime.parse(a['createdAt'] as String)),
-        updatedAt: Value(DateTime.parse(a['updatedAt'] as String)),
-      ));
-    }
-
-    // 导入持仓（自动迁移旧类型名 + 纠正 "other"）
-    for (final h in (data['holdings'] as List? ?? [])) {
-      final code = h['assetCode'] as String;
-      final name = h['assetName'] as String;
-      var type = h['assetType'] as String;
-
-      // 旧枚举名迁移
-      final legacy = AssetType.legacyNameMap[type];
-      if (legacy != null) {
-        final better = AssetClassifier.classify(code, name);
-        final newType = (better != AssetType.other) ? better.name : legacy;
-        debugPrint('[Import] migrated "$name" ($code): $type → $newType');
-        type = newType;
+      // 导入成员
+      for (final m in (data['members'] as List? ?? [])) {
+        await db.insertMember(FamilyMembersCompanion(
+          id: Value(m['id'] as String),
+          name: Value(m['name'] as String),
+          avatar: Value(m['avatar'] as String? ?? ''),
+          role: Value(m['role'] as String? ?? 'other'),
+          createdAt: Value(DateTime.parse(m['createdAt'] as String)),
+          updatedAt: Value(DateTime.parse(m['updatedAt'] as String)),
+        ));
       }
-      // "other" 类型尝试自动识别
-      if (type == AssetType.other.name) {
-        final better = AssetClassifier.classify(code, name);
-        if (better != AssetType.other) {
-          debugPrint('[Import] reclassified "$name" ($code): other → ${better.name}');
-          type = better.name;
+
+      // 导入账户
+      for (final a in (data['accounts'] as List? ?? [])) {
+        await db.insertAccount(AccountsCompanion(
+          id: Value(a['id'] as String),
+          memberId: Value(a['memberId'] as String),
+          name: Value(a['name'] as String),
+          type: Value(a['type'] as String),
+          institution: Value(a['institution'] as String? ?? ''),
+          subType: Value(a['subType'] as String? ?? ''),
+          createdAt: Value(DateTime.parse(a['createdAt'] as String)),
+          updatedAt: Value(DateTime.parse(a['updatedAt'] as String)),
+        ));
+      }
+
+      // 导入持仓（自动迁移旧类型名 + 纠正 "other"）
+      for (final h in (data['holdings'] as List? ?? [])) {
+        final code = h['assetCode'] as String;
+        final name = h['assetName'] as String;
+        var type = h['assetType'] as String;
+
+        // 旧枚举名迁移
+        final legacy = AssetType.legacyNameMap[type];
+        if (legacy != null) {
+          final better = AssetClassifier.classify(code, name);
+          final newType = (better != AssetType.other) ? better.name : legacy;
+          debugPrint('[Import] migrated "$name" ($code): $type → $newType');
+          type = newType;
         }
+        // "other" 类型尝试自动识别
+        if (type == AssetType.other.name) {
+          final better = AssetClassifier.classify(code, name);
+          if (better != AssetType.other) {
+            debugPrint('[Import] reclassified "$name" ($code): other → ${better.name}');
+            type = better.name;
+          }
+        }
+        await db.insertHolding(HoldingsCompanion(
+          id: Value(h['id'] as String),
+          accountId: Value(h['accountId'] as String),
+          assetCode: Value(code),
+          assetName: Value(name),
+          assetType: Value(type),
+          quantity: Value((h['quantity'] as num).toDouble()),
+          costPrice: Value((h['costPrice'] as num).toDouble()),
+          currentPrice: Value((h['currentPrice'] as num).toDouble()),
+          tags: Value(h['tags'] is List ? jsonEncode(h['tags']) : h['tags'] as String? ?? ''),
+          notes: Value(h['notes'] as String? ?? ''),
+          currency: Value(h['currency'] as String? ?? 'CNY'),
+          createdAt: Value(DateTime.parse(h['createdAt'] as String)),
+          updatedAt: Value(DateTime.parse(h['updatedAt'] as String)),
+        ));
       }
-      await db.insertHolding(HoldingsCompanion(
-        id: Value(h['id'] as String),
-        accountId: Value(h['accountId'] as String),
-        assetCode: Value(code),
-        assetName: Value(name),
-        assetType: Value(type),
-        quantity: Value((h['quantity'] as num).toDouble()),
-        costPrice: Value((h['costPrice'] as num).toDouble()),
-        currentPrice: Value((h['currentPrice'] as num).toDouble()),
-        tags: Value(h['tags'] is List ? jsonEncode(h['tags']) : h['tags'] as String? ?? ''),
-        notes: Value(h['notes'] as String? ?? ''),
-        currency: Value(h['currency'] as String? ?? 'CNY'),
-        createdAt: Value(DateTime.parse(h['createdAt'] as String)),
-        updatedAt: Value(DateTime.parse(h['updatedAt'] as String)),
-      ));
-    }
 
-    // 导入固定资产
-    for (final f in (data['fixedAssets'] as List? ?? [])) {
-      await db.insertFixedAsset(FixedAssetsCompanion(
-        id: Value(f['id'] as String),
-        memberId: Value(f['memberId'] as String),
-        type: Value(f['type'] as String),
-        name: Value(f['name'] as String),
-        estimatedValue: Value((f['estimatedValue'] as num).toDouble()),
-        details: Value(f['details'] as String? ?? '{}'),
-        notes: Value(f['notes'] as String? ?? ''),
-        createdAt: Value(DateTime.parse(f['createdAt'] as String)),
-        updatedAt: Value(DateTime.parse(f['updatedAt'] as String)),
-      ));
-    }
+      // 导入固定资产
+      for (final f in (data['fixedAssets'] as List? ?? [])) {
+        await db.insertFixedAsset(FixedAssetsCompanion(
+          id: Value(f['id'] as String),
+          memberId: Value(f['memberId'] as String),
+          type: Value(f['type'] as String),
+          name: Value(f['name'] as String),
+          estimatedValue: Value((f['estimatedValue'] as num).toDouble()),
+          details: Value(f['details'] as String? ?? '{}'),
+          notes: Value(f['notes'] as String? ?? ''),
+          createdAt: Value(DateTime.parse(f['createdAt'] as String)),
+          updatedAt: Value(DateTime.parse(f['updatedAt'] as String)),
+        ));
+      }
 
-    // 导入负债
-    for (final l in (data['liabilities'] as List? ?? [])) {
-      await db.insertLiability(LiabilitiesCompanion(
-        id: Value(l['id'] as String),
-        memberId: Value(l['memberId'] as String),
-        type: Value(l['type'] as String),
-        name: Value(l['name'] as String),
-        totalAmount: Value((l['totalAmount'] as num).toDouble()),
-        remainingAmount: Value((l['remainingAmount'] as num).toDouble()),
-        interestRate: Value((l['interestRate'] as num).toDouble()),
-        monthlyPayment: Value((l['monthlyPayment'] as num).toDouble()),
-        notes: Value(l['notes'] as String? ?? ''),
-        createdAt: Value(DateTime.parse(l['createdAt'] as String)),
-        updatedAt: Value(DateTime.parse(l['updatedAt'] as String)),
-      ));
-    }
+      // 导入负债
+      for (final l in (data['liabilities'] as List? ?? [])) {
+        await db.insertLiability(LiabilitiesCompanion(
+          id: Value(l['id'] as String),
+          memberId: Value(l['memberId'] as String),
+          type: Value(l['type'] as String),
+          name: Value(l['name'] as String),
+          totalAmount: Value((l['totalAmount'] as num).toDouble()),
+          remainingAmount: Value((l['remainingAmount'] as num).toDouble()),
+          interestRate: Value((l['interestRate'] as num).toDouble()),
+          monthlyPayment: Value((l['monthlyPayment'] as num).toDouble()),
+          notes: Value(l['notes'] as String? ?? ''),
+          createdAt: Value(DateTime.parse(l['createdAt'] as String)),
+          updatedAt: Value(DateTime.parse(l['updatedAt'] as String)),
+        ));
+      }
 
-    // 导入定投计划
-    for (final p in (data['investmentPlans'] as List? ?? [])) {
-      await db.insertInvestmentPlan(InvestmentPlansCompanion(
-        id: Value(p['id'] as String),
-        accountId: Value(p['accountId'] as String),
-        assetCode: Value(p['assetCode'] as String),
-        assetName: Value(p['assetName'] as String),
-        amount: Value((p['amount'] as num).toDouble()),
-        frequency: Value(p['frequency'] as String),
-        nextDate: Value(p['nextDate'] != null ? DateTime.parse(p['nextDate'] as String) : null),
-        isActive: Value(p['isActive'] as bool? ?? true),
-        createdAt: Value(DateTime.parse(p['createdAt'] as String)),
-      ));
-    }
+      // 导入定投计划
+      for (final p in (data['investmentPlans'] as List? ?? [])) {
+        await db.insertInvestmentPlan(InvestmentPlansCompanion(
+          id: Value(p['id'] as String),
+          accountId: Value(p['accountId'] as String),
+          assetCode: Value(p['assetCode'] as String),
+          assetName: Value(p['assetName'] as String),
+          amount: Value((p['amount'] as num).toDouble()),
+          frequency: Value(p['frequency'] as String),
+          nextDate: Value(p['nextDate'] != null ? DateTime.parse(p['nextDate'] as String) : null),
+          isActive: Value(p['isActive'] as bool? ?? true),
+          createdAt: Value(DateTime.parse(p['createdAt'] as String)),
+        ));
+      }
 
-    // 导入资产快照
-    for (final s in (data['assetSnapshots'] as List? ?? [])) {
-      await db.insertSnapshot(AssetSnapshotsCompanion(
-        snapshotDate: Value(DateTime.parse(s['snapshotDate'] as String)),
-        totalAssets: Value((s['totalAssets'] as num).toDouble()),
-        totalLiabilities: Value((s['totalLiabilities'] as num).toDouble()),
-        netWorth: Value((s['netWorth'] as num).toDouble()),
-        totalFixedAssets: Value((s['totalFixedAssets'] as num?)?.toDouble() ?? 0),
-        categoryBreakdown: Value(s['categoryBreakdown'] as String? ?? '{}'),
-        createdAt: Value(DateTime.parse(s['createdAt'] as String)),
-      ));
-    }
+      // 导入资产快照
+      for (final s in (data['assetSnapshots'] as List? ?? [])) {
+        await db.insertSnapshot(AssetSnapshotsCompanion(
+          snapshotDate: Value(DateTime.parse(s['snapshotDate'] as String)),
+          totalAssets: Value((s['totalAssets'] as num).toDouble()),
+          totalLiabilities: Value((s['totalLiabilities'] as num).toDouble()),
+          netWorth: Value((s['netWorth'] as num).toDouble()),
+          totalFixedAssets: Value((s['totalFixedAssets'] as num?)?.toDouble() ?? 0),
+          categoryBreakdown: Value(s['categoryBreakdown'] as String? ?? '{}'),
+          createdAt: Value(DateTime.parse(s['createdAt'] as String)),
+        ));
+      }
+    });
 
     // 导入用户偏好配置（API Key 等）
     final userPrefs = data['userPreferences'] as Map<String, dynamic>?;

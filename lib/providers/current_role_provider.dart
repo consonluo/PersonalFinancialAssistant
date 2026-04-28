@@ -21,22 +21,28 @@ final familyIdProvider =
 });
 
 class FamilyIdNotifier extends StateNotifier<String?> {
+  bool _explicitlySet = false;
+
   FamilyIdNotifier() : super(null) {
     _load();
   }
 
   Future<void> _load() async {
     final prefs = await SharedPreferences.getInstance();
-    state = prefs.getString('family_id');
+    if (!_explicitlySet) {
+      state = prefs.getString('family_id');
+    }
   }
 
   Future<void> setFamilyId(String familyId) async {
+    _explicitlySet = true;
     state = familyId;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('family_id', familyId);
   }
 
   Future<void> clearFamilyId() async {
+    _explicitlySet = true;
     state = null;
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('family_id');
@@ -50,22 +56,28 @@ final accountNameProvider =
 });
 
 class AccountNameNotifier extends StateNotifier<String?> {
+  bool _explicitlySet = false;
+
   AccountNameNotifier() : super(null) {
     _load();
   }
 
   Future<void> _load() async {
     final prefs = await SharedPreferences.getInstance();
-    state = prefs.getString('account_name');
+    if (!_explicitlySet) {
+      state = prefs.getString('account_name');
+    }
   }
 
   Future<void> setAccountName(String name) async {
+    _explicitlySet = true;
     state = name.toUpperCase();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('account_name', name.toUpperCase());
   }
 
   Future<void> clear() async {
+    _explicitlySet = true;
     state = null;
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('account_name');
@@ -77,22 +89,28 @@ class AccountNameNotifier extends StateNotifier<String?> {
 }
 
 class CurrentRoleNotifier extends StateNotifier<String?> {
+  bool _explicitlySet = false;
+
   CurrentRoleNotifier() : super(null) {
     _load();
   }
 
   Future<void> _load() async {
     final prefs = await SharedPreferences.getInstance();
-    state = prefs.getString('current_role_id');
+    if (!_explicitlySet) {
+      state = prefs.getString('current_role_id');
+    }
   }
 
   Future<void> setRole(String memberId) async {
+    _explicitlySet = true;
     state = memberId;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('current_role_id', memberId);
   }
 
   Future<void> clearRole() async {
+    _explicitlySet = true;
     state = null;
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('current_role_id');

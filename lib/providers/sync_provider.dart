@@ -29,12 +29,15 @@ final lastSyncTimeProvider = StateProvider<DateTime?>((ref) => null);
 enum SyncStatus { idle, syncing, success, error }
 
 class SyncConfigNotifier extends StateNotifier<SyncConfigModel> {
+  bool _explicitlySet = false;
+
   SyncConfigNotifier() : super(const SyncConfigModel()) {
     _load();
   }
 
   Future<void> _load() async {
     final prefs = await SharedPreferences.getInstance();
+    if (_explicitlySet) return;
     final jsonStr = prefs.getString('sync_config');
     if (jsonStr != null) {
       state = SyncConfigModel.fromJson(jsonDecode(jsonStr));
@@ -42,6 +45,7 @@ class SyncConfigNotifier extends StateNotifier<SyncConfigModel> {
   }
 
   Future<void> updateConfig(SyncConfigModel config) async {
+    _explicitlySet = true;
     state = config;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('sync_config', jsonEncode(config.toJson()));
@@ -53,6 +57,7 @@ class SyncConfigNotifier extends StateNotifier<SyncConfigModel> {
   }
 
   Future<void> clearConfig() async {
+    _explicitlySet = true;
     state = const SyncConfigModel();
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('sync_config');
@@ -66,22 +71,28 @@ final passwordHashProvider =
 });
 
 class PasswordHashNotifier extends StateNotifier<String?> {
+  bool _explicitlySet = false;
+
   PasswordHashNotifier() : super(null) {
     _load();
   }
 
   Future<void> _load() async {
     final prefs = await SharedPreferences.getInstance();
-    state = prefs.getString('password_hash');
+    if (!_explicitlySet) {
+      state = prefs.getString('password_hash');
+    }
   }
 
   Future<void> setPasswordHash(String hash) async {
+    _explicitlySet = true;
     state = hash;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('password_hash', hash);
   }
 
   Future<void> clear() async {
+    _explicitlySet = true;
     state = null;
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('password_hash');
@@ -96,6 +107,7 @@ final autoSyncProvider = Provider<AutoSyncManager>((ref) {
 class AutoSyncManager {
   final Ref _ref;
   Timer? _debounceTimer;
+  DateTime? _lastSyncDownTime;
 
   AutoSyncManager(this._ref);
 
@@ -160,7 +172,17 @@ class AutoSyncManager {
   }
 
   /// 下载同步（通过家庭账号ID）
-  Future<bool> syncDown(String familyId) async {
+  ///
+  /// [skipIfRecent] 为 true 时，若距上次 syncDown 不足 30 秒则跳过，
+  /// 避免登录后 Dashboard 重复拉取导致数据闪清。
+  Future<bool> syncDown(String familyId, {bool skipIfRecent = false}) async {
+    if (skipIfRecent && _lastSyncDownTime != null) {
+      final elapsed = DateTime.now().difference(_lastSyncDownTime!);
+      if (elapsed.inSeconds < 30) {
+        return true;
+      }
+    }
+
     _ref.read(syncStatusProvider.notifier).state = SyncStatus.syncing;
 
     try {
@@ -169,7 +191,7 @@ class AutoSyncManager {
       final success = await service.syncDown();
 
       if (success) {
-        // 数据导入成功后强制刷新所有相关 Provider
+        _lastSyncDownTime = DateTime.now();
         _refreshAllDataProviders();
         _ref.read(syncStatusProvider.notifier).state = SyncStatus.success;
         _ref.read(lastSyncTimeProvider.notifier).state = DateTime.now();

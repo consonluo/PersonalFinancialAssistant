@@ -47,10 +47,15 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
 
       // 启动时先从云端拉取最新数据，再上传本地变更
       // 解决多设备/浏览器间数据同步问题
+      // skipIfRecent: 若刚在登录流程中完成了 syncDown 则跳过，避免重复清库导入
       final familyId = ref.read(familyIdProvider);
       if (familyId != null && familyId.isNotEmpty) {
         Future.delayed(const Duration(seconds: 2), () async {
-          try { await ref.read(autoSyncProvider).syncDown(familyId); } catch (_) {}
+          try {
+            await ref.read(autoSyncProvider).syncDown(familyId, skipIfRecent: true);
+          } catch (e) {
+            debugPrint('[Dashboard] syncDown error: $e');
+          }
         });
       }
 
