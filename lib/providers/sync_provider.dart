@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../data/models/sync_config_model.dart';
@@ -151,6 +152,16 @@ class AutoSyncManager {
 
     try {
       final db = _ref.read(databaseProvider);
+
+      // 安全检查：本地持仓为空但云端可能有数据时，拒绝上传以防覆盖
+      final holdings = await db.getAllHoldings();
+      final members = await db.getAllMembers();
+      if (holdings.isEmpty && members.isEmpty) {
+        debugPrint('[Sync] syncUp aborted: local DB is empty, refusing to overwrite cloud data');
+        _ref.read(syncStatusProvider.notifier).state = SyncStatus.idle;
+        return false;
+      }
+
       final passwordHash = _ref.read(passwordHashProvider);
       final accountName = _ref.read(accountNameProvider);
       final service = WebDavSyncService(db: db, familyId: familyId);
