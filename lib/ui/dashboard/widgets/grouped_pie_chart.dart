@@ -86,8 +86,10 @@ class GroupedPieChart extends StatelessWidget {
   }
 
   Widget _buildLegend(BuildContext context) {
-    return Column(
+    return SingleChildScrollView(
+      child: Column(
       mainAxisAlignment: MainAxisAlignment.center,
+      mainAxisSize: MainAxisSize.min,
       children: grouped.map((g) {
         return InkWell(
           onTap: () =>
@@ -116,6 +118,6 @@ class GroupedPieChart extends StatelessWidget {
           ),
         );
       }).toList(),
-    );
+    ));
   }
 }

@@ -1,7 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import '../models/market_data_model.dart';
-import 'market_api_client.dart';
+import 'market_api_client.dart' show MarketApiClient, ApiProxy;
 
 /// 新浪财经 API - 美股行情
 class SinaFinanceApi implements MarketApiClient {
@@ -34,7 +34,7 @@ class SinaFinanceApi implements MarketApiClient {
     final symbol = _toSinaSymbol(code);
     if (symbol.isEmpty) return null;
 
-    final url = 'https://hq.sinajs.cn/list=$symbol';
+    final url = ApiProxy.sina('/list=$symbol');
     final response = await _dio.get(url, options: Options(
       responseType: ResponseType.plain,
     ));

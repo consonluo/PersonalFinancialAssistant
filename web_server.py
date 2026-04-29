@@ -14,6 +14,13 @@ PORT = 9090
 WEB_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'build', 'web')
 WEBDAV_TARGET = 'https://dav.jianguoyun.com/dav'
 
+API_PROXY_MAP = {
+    '/api-proxy/eastmoney/': ('https://push2.eastmoney.com/', {'Referer': 'https://quote.eastmoney.com'}),
+    '/api-proxy/sina/':      ('https://hq.sinajs.cn/',        {'Referer': 'https://finance.sina.com.cn'}),
+    '/api-proxy/fundgz/':    ('https://fundgz.1234567.com.cn/', {'Referer': 'https://fund.eastmoney.com'}),
+    '/api-proxy/fundapi/':   ('https://fundmobapi.eastmoney.com/', {'Referer': 'https://fund.eastmoney.com'}),
+}
+
 
 class CORSProxyHandler(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
@@ -77,9 +84,46 @@ class CORSProxyHandler(http.server.SimpleHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(str(e).encode())
 
+    def _match_api_proxy(self):
+        for prefix, (target_base, headers) in API_PROXY_MAP.items():
+            if self.path.startswith(prefix):
+                return prefix, target_base, headers
+        return None, None, None
+
+    def _proxy_api(self, prefix, target_base, extra_headers):
+        remote_path = self.path[len(prefix):]
+        target_url = target_base + remote_path
+
+        req = urllib.request.Request(target_url, method='GET')
+        for k, v in extra_headers.items():
+            req.add_header(k, v)
+
+        try:
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                data = resp.read()
+                self.send_response(resp.status)
+                for key in ['Content-Type', 'Content-Length']:
+                    val = resp.headers.get(key)
+                    if val:
+                        self.send_header(key, val)
+                self.end_headers()
+                self.wfile.write(data)
+        except urllib.error.HTTPError as e:
+            self.send_response(e.code)
+            self.end_headers()
+            self.wfile.write(e.read())
+        except Exception as e:
+            self.send_response(502)
+            self.end_headers()
+            self.wfile.write(str(e).encode())
+
     def do_GET(self):
         if self.path.startswith('/webdav-proxy/'):
             self._proxy_webdav('GET')
+            return
+        prefix, target_base, headers = self._match_api_proxy()
+        if prefix:
+            self._proxy_api(prefix, target_base, headers)
         else:
             super().do_GET()
 

@@ -37,7 +37,7 @@ class EastMoneyApi implements MarketApiClient {
     final secIds = codes.map(_toSecId).where((s) => s.isNotEmpty).join(',');
     if (secIds.isEmpty) return [];
 
-    final url = 'https://push2.eastmoney.com/api/qt/ulist.np/get';
+    final url = ApiProxy.eastmoney('/api/qt/ulist.np/get');
     final response = await _dio.get(url, queryParameters: {
       'fltt': 2,
       'fields': 'f2,f3,f4,f5,f12,f14,f86',
@@ -53,7 +53,7 @@ class EastMoneyApi implements MarketApiClient {
 
     final List<dynamic> items = data['data']['diff'];
     return items.map((item) {
-      final ts = item['f86'] as int?;
+      final ts = (item['f86'] as num?)?.toInt();
       final updatedAt = ts != null && ts > 0
           ? DateTime.fromMillisecondsSinceEpoch(ts * 1000)
           : _lastTradingDay();

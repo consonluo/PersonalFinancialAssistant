@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import '../models/market_data_model.dart';
-import 'market_api_client.dart';
+import 'market_api_client.dart' show MarketApiClient, ApiProxy;
 
 /// 天天基金 API - 基金净值查询（估值接口 + 详情接口备用）
 class FundApi implements MarketApiClient {
@@ -59,7 +59,7 @@ class FundApi implements MarketApiClient {
 
   /// 天天基金实时估值接口（适用于权益类/混合型/债券型基金盘中估值）
   Future<MarketDataModel?> _getEstimate(String pureCode) async {
-    final url = 'https://fundgz.1234567.com.cn/js/$pureCode.js';
+    final url = ApiProxy.fundgz('/js/$pureCode.js');
     final response = await _dio.get(url, options: Options(
       responseType: ResponseType.plain,
       validateStatus: (status) => status != null && status < 500,
@@ -73,7 +73,7 @@ class FundApi implements MarketApiClient {
 
   /// 东方财富基金详情接口（支持货币基金、无估值的债基等）
   Future<List<MarketDataModel>> _getFundInfo(List<String> codes) async {
-    final url = 'https://fundmobapi.eastmoney.com/FundMNewApi/FundMNFInfo';
+    final url = ApiProxy.fundApi('/FundMNewApi/FundMNFInfo');
     final response = await _dio.get(url, queryParameters: {
       'plat': 'Android',
       'appType': 'ttjj',

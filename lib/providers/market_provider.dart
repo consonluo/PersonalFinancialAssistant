@@ -56,39 +56,54 @@ class MarketDataNotifier extends StateNotifier<Map<String, MarketDataModel>> {
     final fundCodes = <String>[];
 
     for (final h in holdings) {
+      if (h.quantity == 0) continue;
+      final code = h.assetCode;
       final type = AssetType.values.firstWhere(
         (e) => e.name == h.assetType,
         orElse: () => AssetType.other,
       );
+
+      // 判断代码形态
+      final pureDigit = code.replaceAll(RegExp(r'\.(SH|SZ|HK|OF|US)$', caseSensitive: false), '');
+      final is6Digit = RegExp(r'^\d{6}$').hasMatch(pureDigit);
+      final is5Digit = RegExp(r'^\d{5}$').hasMatch(pureDigit);
+      final isUsLike = RegExp(r'^[A-Za-z]{1,5}$').hasMatch(pureDigit) ||
+          code.toUpperCase().endsWith('.US');
+      final isHkLike = is5Digit || code.toUpperCase().endsWith('.HK');
+
       switch (type) {
         case AssetType.aStock:
-          aCodes.add(h.assetCode);
+          aCodes.add(code);
         case AssetType.hkStock:
-          hkCodes.add(h.assetCode);
+          hkCodes.add(code);
         case AssetType.usStock:
-          usCodes.add(h.assetCode);
+          usCodes.add(code);
         case AssetType.gold:
-          if (_isExchangeListedETF(h.assetCode)) {
-            aCodes.add(h.assetCode);
-          } else if (RegExp(r'^\d{6}$').hasMatch(h.assetCode)) {
-            fundCodes.add(h.assetCode);
+          if (_isExchangeListedETF(code)) {
+            aCodes.add(code);
+          } else if (is6Digit) {
+            fundCodes.add(code);
           }
         case AssetType.indexFund:
-          if (_isExchangeListedETF(h.assetCode)) {
-            aCodes.add(h.assetCode);
-          } else {
-            fundCodes.add(h.assetCode);
+        case AssetType.activeFund:
+        case AssetType.bondFund:
+        case AssetType.moneyFund:
+          if (_isExchangeListedETF(code)) {
+            aCodes.add(code);
+          } else if (isUsLike) {
+            usCodes.add(code);
+          } else if (isHkLike) {
+            hkCodes.add(code);
+          } else if (is6Digit) {
+            fundCodes.add(code);
           }
         case AssetType.deposit:
         case AssetType.fixedDeposit:
         case AssetType.largeDeposit:
         case AssetType.noticeDeposit:
+          if (is6Digit) fundCodes.add(code);
         case AssetType.realEstate:
         case AssetType.vehicle:
-        case AssetType.activeFund:
-        case AssetType.bondFund:
-        case AssetType.moneyFund:
-          fundCodes.add(h.assetCode);
         case AssetType.wealth:
         case AssetType.structuredDeposit:
         case AssetType.treasuryRepo:
@@ -144,7 +159,9 @@ class MarketDataNotifier extends StateNotifier<Map<String, MarketDataModel>> {
             ));
           }
         }
-        debugPrint('[Market] cache fallback: ${missingCodes.length} missing, recovered ${results.length - fetchedCodes.length}');
+        final stillMissing = missingCodes.difference(results.map((r) => r.assetCode).toSet());
+        debugPrint('[Market] cache fallback: ${missingCodes.length} missing, recovered ${missingCodes.length - stillMissing.length}');
+        if (stillMissing.isNotEmpty) debugPrint('[Market] still missing: $stillMissing');
       } catch (e) {
         debugPrint('[Market] cache fallback error: $e');
       }
@@ -184,15 +201,19 @@ class MarketDataNotifier extends StateNotifier<Map<String, MarketDataModel>> {
   }
 
   /// 判断是否为交易所上市ETF（走股票行情接口而非基金净值接口）
+  /// 上海: 510/511/512/513/515/516/518/520/560/561/562/563/588
+  /// 深圳: 159xxx
+  /// 排除 519xxx（LOF/开放式基金，走净值接口）
   static bool _isExchangeListedETF(String code) {
     final pure = code.replaceAll(
         RegExp(r'\.(SH|SZ|OF)$', caseSensitive: false), '');
     if (!RegExp(r'^\d{6}$').hasMatch(pure)) return false;
-    return pure.startsWith('51') ||
-        pure.startsWith('15') ||
-        pure.startsWith('56') ||
-        pure.startsWith('52') ||
-        pure.startsWith('58');
+    if (pure.startsWith('159')) return true;
+    final prefix3 = pure.substring(0, 3);
+    return const {
+      '510', '511', '512', '513', '515', '516', '518',
+      '520', '523', '560', '561', '562', '563', '588',
+    }.contains(prefix3);
   }
 
   /// 将最新行情价格写入持仓表的 currentPrice 字段

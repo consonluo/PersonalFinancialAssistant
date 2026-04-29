@@ -112,6 +112,8 @@ class _TodayChangePageState extends ConsumerState<TodayChangePage> {
         totalProfit: totalProfit,
         totalProfitPct: totalProfitPct,
         hasMarketData: market != null,
+        currentPrice: market?.price,
+        costPrice: h.costPrice,
         updatedAt: market?.updatedAt,
       ));
     }
@@ -140,6 +142,8 @@ class _HoldingItem {
   final double totalProfit;
   final double totalProfitPct;
   final bool hasMarketData;
+  final double? currentPrice;
+  final double costPrice;
   final DateTime? updatedAt;
 
   const _HoldingItem({
@@ -152,6 +156,8 @@ class _HoldingItem {
     required this.totalProfit,
     required this.totalProfitPct,
     required this.hasMarketData,
+    this.currentPrice,
+    this.costPrice = 0,
     this.updatedAt,
   });
 }
@@ -269,13 +275,24 @@ class _HoldingTile extends StatelessWidget {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
+                  if (item.hasMarketData && item.currentPrice != null && item.currentPrice! > 0) ...[
+                    Text(
+                      FormatUtils.formatPrice(item.currentPrice!),
+                      style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
+                    ),
+                    if (item.costPrice > 0)
+                      Text(
+                        '成本 ${FormatUtils.formatPrice(item.costPrice)}',
+                        style: const TextStyle(fontSize: 10, color: AppColors.textHint),
+                      ),
+                  ],
                   Text(
                     FormatUtils.formatPercent(item.todayChangePct),
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: changeColor),
+                    style: TextStyle(fontSize: item.hasMarketData && item.currentPrice != null ? 13 : 16, fontWeight: FontWeight.w700, color: changeColor),
                   ),
                   Text(
                     FormatUtils.formatChange(item.todayChange),
-                    style: TextStyle(fontSize: 12, color: changeColor),
+                    style: TextStyle(fontSize: 11, color: changeColor),
                   ),
                 ],
               ),
