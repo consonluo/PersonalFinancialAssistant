@@ -79,8 +79,8 @@ class EastMoneyApi implements MarketApiClient {
     final date = DateTime.tryParse(last[0]);
     final close = double.tryParse(last[2]) ?? 0;
     final prevClose = last.length > 7 ? double.tryParse(last[7]) ?? 0 : 0;
-    final change = prevClose > 0 ? close - prevClose : 0;
-    final changePct = prevClose > 0 ? (change / prevClose * 100) : 0;
+    final change = prevClose > 0 ? close - prevClose : 0.0;
+    final changePct = prevClose > 0 ? (change / prevClose * 100) : 0.0;
 
     if (close <= 0) return null;
     return MarketDataModel(
