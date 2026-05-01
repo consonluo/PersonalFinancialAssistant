@@ -65,21 +65,24 @@ class TargetClassificationState {
     String? error,
     String? streamText,
     DateTime? lastUpdated,
-  }) => TargetClassificationState(
-    groups: groups ?? this.groups,
-    isLoading: isLoading ?? this.isLoading,
-    error: error,
-    streamText: streamText ?? this.streamText,
-    lastUpdated: lastUpdated ?? this.lastUpdated,
-  );
+  }) =>
+      TargetClassificationState(
+        groups: groups ?? this.groups,
+        isLoading: isLoading ?? this.isLoading,
+        error: error,
+        streamText: streamText ?? this.streamText,
+        lastUpdated: lastUpdated ?? this.lastUpdated,
+      );
 }
 
-class TargetClassificationNotifier extends StateNotifier<TargetClassificationState> {
+class TargetClassificationNotifier
+    extends StateNotifier<TargetClassificationState> {
   final Ref _ref;
   static const _cacheKey = 'target_classification_cache';
 
   /// 构建「标的分类」AI 提示词（供设置里预览编辑）
-  static String buildTargetClassificationPrompt(List<Map<String, dynamic>> holdingList) {
+  static String buildTargetClassificationPrompt(
+      List<Map<String, dynamic>> holdingList) {
     return '''你是专业的投资组合分析师。请严格按照下列预定义标的分类对持仓进行归类。
 
 持仓列表：
@@ -132,53 +135,85 @@ ${jsonEncode(holdingList)}
   /// - 单引号字符串
   /// - 截断的 JSON（流式过早结束）
   static Map<String, dynamic> _parseGroupsJson(String raw) {
-    // 1. 先尝试提取 markdown 代码块内容
+    // 1) 先尝试提取 markdown 代码块内容
     var s = raw.trim();
-    final mdMatch = RegExp(r'```(?:json)?\s*([\s\S]*?)\s*```', caseSensitive: false).firstMatch(s);
+    final mdMatch = RegExp(
+      r'```(?:json)?\s*([\s\S]*?)\s*```',
+      caseSensitive: false,
+    ).firstMatch(s);
     if (mdMatch != null) {
       s = mdMatch.group(1)!.trim();
     } else {
-      // 没有完整 markdown 包裹的情况下，去掉残留的 ```json / ```
       s = s
           .replaceAll(RegExp(r'```json\s*', caseSensitive: false), '')
           .replaceAll(RegExp(r'```\s*'), '')
           .trim();
     }
 
-    // 2. 用括号计数找到第一个完整闭合的 JSON 对象
-    final extracted = _extractFirstJsonObject(s);
-    if (extracted == null) {
-      throw FormatException('响应中未找到完整的 JSON 对象');
-    }
-    s = extracted;
+    // 2) 先尝试整体解析（有些模型直接返回数组根节点）
+    final direct = _decodeGroupsRoot(s);
+    if (direct != null) return direct;
 
-    // 3. 直接尝试解析
-    try {
-      return jsonDecode(s) as Map<String, dynamic>;
-    } catch (_) {
-      // 4. 容错修复后重试
-      var fixed = s
-          // 去掉对象/数组尾部多余逗号
-          .replaceAll(RegExp(r',(\s*[}\]])'), r'$1')
-          // 去掉行尾的 // 注释
-          .replaceAll(RegExp(r'//[^\n]*'), '');
-      try {
-        return jsonDecode(fixed) as Map<String, dynamic>;
-      } catch (e) {
-        // 5. 最后尝试：把单引号字符串转为双引号（仅当看起来是 JSON 形态）
-        fixed = _replaceUnquotedSingleStrings(fixed);
-        return jsonDecode(fixed) as Map<String, dynamic>;
+    // 3) 提取首个完整 JSON 值（对象或数组）
+    final extracted = _extractFirstJsonValue(s);
+    if (extracted == null) {
+      // 兼容模型返回：groups:[...] 这种缺外层大括号的写法
+      final groupsArray = _extractGroupsArray(s);
+      if (groupsArray != null) {
+        return {'groups': groupsArray};
       }
+      throw FormatException('响应中未找到完整的JSON对象');
     }
+
+    // 4) 先原样解析，再容错修复解析
+    final parsed = _decodeGroupsRoot(extracted);
+    if (parsed != null) return parsed;
+
+    final fixed = _repairLikelyJson(extracted);
+    final repairedParsed = _decodeGroupsRoot(fixed);
+    if (repairedParsed != null) return repairedParsed;
+
+    // 5) 最后再尝试 groups:[...] 片段兜底
+    final groupsArray = _extractGroupsArray(fixed);
+    if (groupsArray != null) {
+      return {'groups': groupsArray};
+    }
+    throw const FormatException('JSON解析失败，请重试');
   }
 
-  /// 用括号计数从字符串中提取首个完整闭合的 JSON 对象
-  static String? _extractFirstJsonObject(String s) {
-    final start = s.indexOf('{');
+  static Map<String, dynamic>? _decodeGroupsRoot(String s) {
+    try {
+      final decoded = jsonDecode(s);
+      if (decoded is Map<String, dynamic>) {
+        if (decoded['groups'] is List) return decoded;
+      } else if (decoded is List) {
+        return {'groups': decoded};
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  /// 用括号计数从字符串中提取首个完整闭合 JSON 值（对象或数组）
+  static String? _extractFirstJsonValue(String s) {
+    final objStart = s.indexOf('{');
+    final arrStart = s.indexOf('[');
+    int start = -1;
+    String open = '{';
+    String close = '}';
+    if (objStart >= 0 && (arrStart < 0 || objStart < arrStart)) {
+      start = objStart;
+      open = '{';
+      close = '}';
+    } else if (arrStart >= 0) {
+      start = arrStart;
+      open = '[';
+      close = ']';
+    }
     if (start < 0) return null;
 
     var depth = 0;
     var inString = false;
+    String? quote;
     var escape = false;
     for (var i = start; i < s.length; i++) {
       final c = s[i];
@@ -190,21 +225,26 @@ ${jsonEncode(holdingList)}
         escape = true;
         continue;
       }
-      if (c == '"') {
-        inString = !inString;
+      if ((c == '"' || c == "'")) {
+        if (!inString) {
+          inString = true;
+          quote = c;
+        } else if (quote == c) {
+          inString = false;
+          quote = null;
+        }
         continue;
       }
       if (inString) continue;
-      if (c == '{') {
+      if (c == open) {
         depth++;
-      } else if (c == '}') {
+      } else if (c == close) {
         depth--;
         if (depth == 0) {
           return s.substring(start, i + 1);
         }
       }
     }
-    // 如果整个字符串没有完整闭合，返回 null（AI 输出被截断）
     return null;
   }
 
@@ -222,7 +262,42 @@ ${jsonEncode(holdingList)}
     );
   }
 
-  TargetClassificationNotifier(this._ref) : super(const TargetClassificationState()) {
+  static String _repairLikelyJson(String s) {
+    return _replaceUnquotedSingleStrings(
+      s
+          // 中文引号/顿号转标准 JSON 形式
+          .replaceAll('“', '"')
+          .replaceAll('”', '"')
+          .replaceAll('‘', "'")
+          .replaceAll('’', "'")
+          // 去掉对象/数组尾逗号
+          .replaceAll(RegExp(r',(\s*[}\]])'), r'$1')
+          // 去掉行尾注释
+          .replaceAll(RegExp(r'//[^\n]*'), '')
+          // 清理可能混入的 BOM
+          .replaceAll('\uFEFF', '')
+          .trim(),
+    );
+  }
+
+  static List<dynamic>? _extractGroupsArray(String s) {
+    final m = RegExp(
+      r'"groups"\s*:\s*(\[[\s\S]*\])',
+      caseSensitive: false,
+    ).firstMatch(s);
+    if (m == null) return null;
+    var arr = m.group(1)!.trim();
+    arr = _repairLikelyJson(arr);
+    try {
+      final d = jsonDecode(arr);
+      return d is List ? d : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  TargetClassificationNotifier(this._ref)
+      : super(const TargetClassificationState()) {
     _loadFromCache();
   }
 
@@ -257,9 +332,14 @@ ${jsonEncode(holdingList)}
       final key = h.assetCode.isNotEmpty ? h.assetCode : '__id:${h.id}';
       final mkt = marketData[h.assetCode];
       final price = mkt?.price ?? h.currentPrice;
-      codeAggregates.putIfAbsent(key, () => _CodeAgg(
-        firstId: h.id, name: h.assetName, code: h.assetCode, price: price,
-      ));
+      codeAggregates.putIfAbsent(
+          key,
+          () => _CodeAgg(
+                firstId: h.id,
+                name: h.assetName,
+                code: h.assetCode,
+                price: price,
+              ));
       final acc = codeAggregates[key]!;
       acc.qty += h.quantity;
       acc.totalCost += h.quantity * h.costPrice;
@@ -297,11 +377,17 @@ ${jsonEncode(holdingList)}
         final mv = agg.qty * agg.price;
         final pnl = mv - agg.totalCost;
         final avgCost = agg.qty != 0 ? agg.totalCost / agg.qty : 0.0;
-        final pnlPct = avgCost > 0 ? (agg.price - avgCost) / avgCost * 100 : 0.0;
+        final pnlPct =
+            avgCost > 0 ? (agg.price - avgCost) / avgCost * 100 : 0.0;
 
         items.add(TargetHolding(
-          id: agg.firstId, name: agg.name, code: agg.code,
-          reason: reason, marketValue: mv, pnl: pnl, pnlPercent: pnlPct,
+          id: agg.firstId,
+          name: agg.name,
+          code: agg.code,
+          reason: reason,
+          marketValue: mv,
+          pnl: pnl,
+          pnlPercent: pnlPct,
         ));
         groupMv += mv;
         groupPnl += pnl;
@@ -311,16 +397,24 @@ ${jsonEncode(holdingList)}
       enriched.add(_TempGroup(
         name: g['name'] as String? ?? '未分类',
         description: g['description'] as String? ?? '',
-        holdings: items, mv: groupMv, pnl: groupPnl,
+        holdings: items,
+        mv: groupMv,
+        pnl: groupPnl,
       ));
     }
 
-    return enriched.map((g) => TargetGroup(
-      name: g.name, description: g.description,
-      holdings: g.holdings..sort((a, b) => b.marketValue.compareTo(a.marketValue)),
-      totalMarketValue: g.mv, totalPnl: g.pnl,
-      proportion: grandTotal > 0 ? g.mv / grandTotal * 100 : 0,
-    )).toList()..sort((a, b) => b.totalMarketValue.compareTo(a.totalMarketValue));
+    return enriched
+        .map((g) => TargetGroup(
+              name: g.name,
+              description: g.description,
+              holdings: g.holdings
+                ..sort((a, b) => b.marketValue.compareTo(a.marketValue)),
+              totalMarketValue: g.mv,
+              totalPnl: g.pnl,
+              proportion: grandTotal > 0 ? g.mv / grandTotal * 100 : 0,
+            ))
+        .toList()
+      ..sort((a, b) => b.totalMarketValue.compareTo(a.totalMarketValue));
   }
 
   /// 流式分类 — 实时显示 AI 输出，完成后解析 JSON
@@ -335,14 +429,17 @@ ${jsonEncode(holdingList)}
         return;
       }
 
-      final holdingList = holdings.map((h) => {
-        'id': h.id,
-        'code': h.assetCode,
-        'name': h.assetName,
-        'type': h.assetType,
-      }).toList();
+      final holdingList = holdings
+          .map((h) => {
+                'id': h.id,
+                'code': h.assetCode,
+                'name': h.assetName,
+                'type': h.assetType,
+              })
+          .toList();
 
-      final prompt = promptOverride ?? buildTargetClassificationPrompt(holdingList);
+      final prompt =
+          promptOverride ?? buildTargetClassificationPrompt(holdingList);
 
       final buffer = StringBuffer();
       await for (final delta in AiService.chatStream(prompt)) {
@@ -351,7 +448,17 @@ ${jsonEncode(holdingList)}
       }
 
       final response = buffer.toString();
-      final parsed = _parseGroupsJson(response);
+      Map<String, dynamic> parsed;
+      try {
+        parsed = _parseGroupsJson(response);
+      } on FormatException {
+        // 流式输出可能截断/夹杂噪声；失败时补一次非流式请求拿完整 JSON
+        final retry = await AiService.chat(prompt).timeout(
+          const Duration(seconds: 180),
+          onTimeout: () => throw AiException('请求超时，请检查网络或稍后再试'),
+        );
+        parsed = _parseGroupsJson(retry);
+      }
 
       final now = DateTime.now();
       parsed['updatedAt'] = now.toIso8601String();
@@ -361,7 +468,8 @@ ${jsonEncode(holdingList)}
 
       final groups = _parseAndEnrichGroups(parsed);
       state = TargetClassificationState(
-        groups: groups, lastUpdated: now,
+        groups: groups,
+        lastUpdated: now,
       );
     } on AiException catch (e) {
       state = state.copyWith(isLoading: false, error: e.message);
@@ -386,14 +494,17 @@ ${jsonEncode(holdingList)}
         return;
       }
 
-      final holdingList = holdings.map((h) => {
-        'id': h.id,
-        'code': h.assetCode,
-        'name': h.assetName,
-        'type': h.assetType,
-      }).toList();
+      final holdingList = holdings
+          .map((h) => {
+                'id': h.id,
+                'code': h.assetCode,
+                'name': h.assetName,
+                'type': h.assetType,
+              })
+          .toList();
 
-      final prompt = promptOverride ?? buildTargetClassificationPrompt(holdingList);
+      final prompt =
+          promptOverride ?? buildTargetClassificationPrompt(holdingList);
 
       // 标的分类必须得到完整可解析 JSON；流式拼接易截断、且逐 token 刷新 UI 会造成卡顿
       final response = await AiService.chat(prompt).timeout(
@@ -411,7 +522,8 @@ ${jsonEncode(holdingList)}
 
       final groups = _parseAndEnrichGroups(parsed);
       state = TargetClassificationState(
-        groups: groups, lastUpdated: now,
+        groups: groups,
+        lastUpdated: now,
       );
     } on AiException catch (e) {
       state = state.copyWith(isLoading: false, error: e.message);
@@ -425,8 +537,8 @@ ${jsonEncode(holdingList)}
   }
 }
 
-final targetClassificationProvider =
-    StateNotifierProvider<TargetClassificationNotifier, TargetClassificationState>(
+final targetClassificationProvider = StateNotifierProvider<
+    TargetClassificationNotifier, TargetClassificationState>(
   (ref) => TargetClassificationNotifier(ref),
 );
 
@@ -434,8 +546,12 @@ class _TempGroup {
   final String name, description;
   final List<TargetHolding> holdings;
   final double mv, pnl;
-  _TempGroup({required this.name, required this.description,
-    required this.holdings, required this.mv, required this.pnl});
+  _TempGroup(
+      {required this.name,
+      required this.description,
+      required this.holdings,
+      required this.mv,
+      required this.pnl});
 }
 
 /// 按 assetCode 合并持仓的临时聚合
