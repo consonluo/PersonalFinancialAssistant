@@ -36,6 +36,65 @@ class EastMoneyApi implements MarketApiClient {
     return results.isEmpty ? null : results.first;
   }
 
+  /// 获取最近交易日收盘价（A/HK/US）
+  Future<List<MarketDataModel>> getLastCloseQuotes(List<String> codes) async {
+    final results = <MarketDataModel>[];
+    for (final code in codes) {
+      try {
+        final one = await getLastCloseQuote(code);
+        if (one != null && one.price > 0) results.add(one);
+      } catch (e) {
+        debugPrint('[EastMoneyApi] getLastCloseQuote($code) failed: $e');
+      }
+    }
+    return results;
+  }
+
+  Future<MarketDataModel?> getLastCloseQuote(String code) async {
+    final secId = _toSecId(code);
+    if (secId.isEmpty) return null;
+    final marketId = int.tryParse(secId.split('.').first) ?? 0;
+    final pureCode = secId.split('.').last;
+
+    final url = ApiProxy.eastmoney('/api/qt/stock/kline/get');
+    final response = await _dio.get(url, queryParameters: {
+      'secid': secId,
+      'klt': 101, // 日K
+      'fqt': 0,
+      'lmt': 5,
+      'end': '20500000',
+      'iscca': 1,
+      'fields1': 'f1,f2,f3,f4,f5,f6,f7,f8',
+      'fields2': 'f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61',
+    });
+    if (response.statusCode != 200) return null;
+    final data = response.data;
+    final kdata = data?['data'];
+    final klines = kdata?['klines'] as List?;
+    if (klines == null || klines.isEmpty) return null;
+
+    // 格式: 2026-04-30,31.12,31.45,30.90,31.20,...
+    final last = (klines.last as String).split(',');
+    if (last.length < 4) return null;
+    final date = DateTime.tryParse(last[0]);
+    final close = double.tryParse(last[2]) ?? 0;
+    final prevClose = last.length > 7 ? double.tryParse(last[7]) ?? 0 : 0;
+    final change = prevClose > 0 ? close - prevClose : 0;
+    final changePct = prevClose > 0 ? (change / prevClose * 100) : 0;
+
+    if (close <= 0) return null;
+    return MarketDataModel(
+      assetCode: pureCode,
+      name: kdata?['name']?.toString() ?? pureCode,
+      price: close,
+      change: change,
+      changePercent: changePct,
+      updatedAt: date ?? _lastTradingDay(),
+      currency: _currencyForMarketId(marketId),
+      source: MarketDataModel.sourceClose,
+    );
+  }
+
   Future<List<MarketDataModel>> _fetchBatchWithRetry(
     List<String> codes, {
     int maxAttempts = 3,

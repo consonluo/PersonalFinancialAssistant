@@ -1,5 +1,9 @@
 /// 行情数据模型
 class MarketDataModel {
+  static const String sourceLive = 'live';
+  static const String sourceClose = 'close';
+  static const String sourceCache = 'cache';
+
   final String assetCode;
   final String name;
   final double price;
@@ -12,6 +16,9 @@ class MarketDataModel {
   /// 由各 API 按数据来源标注：东财 A 股=CNY、东财港股=HKD、新浪美股=USD、基金=CNY。
   final String currency;
 
+  /// 行情来源：live(实时接口) / close(最近交易日收盘价) / cache(数据库缓存)
+  final String source;
+
   const MarketDataModel({
     required this.assetCode,
     this.name = '',
@@ -21,6 +28,7 @@ class MarketDataModel {
     this.volume = 0,
     required this.updatedAt,
     this.currency = 'CNY',
+    this.source = sourceLive,
   });
 
   bool get isUp => change > 0;
@@ -37,6 +45,7 @@ class MarketDataModel {
       volume: (json['volume'] as num?)?.toDouble() ?? 0,
       updatedAt: DateTime.parse(json['updatedAt'] as String),
       currency: json['currency'] as String? ?? 'CNY',
+      source: json['source'] as String? ?? sourceLive,
     );
   }
 
@@ -49,5 +58,6 @@ class MarketDataModel {
         'volume': volume,
         'updatedAt': updatedAt.toIso8601String(),
         'currency': currency,
+        'source': source,
       };
 }

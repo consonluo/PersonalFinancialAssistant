@@ -77,18 +77,24 @@ class MarketDataNotifier extends StateNotifier<Map<String, MarketDataModel>> {
           code.toUpperCase().endsWith('.US');
       final isHkLike = is5Digit || code.toUpperCase().endsWith('.HK');
 
+      var routed = false;
       switch (type) {
         case AssetType.aStock:
           aCodes.add(code);
+          routed = true;
         case AssetType.hkStock:
           hkCodes.add(code);
+          routed = true;
         case AssetType.usStock:
           usCodes.add(code);
+          routed = true;
         case AssetType.gold:
           if (_isExchangeListedETF(code)) {
             aCodes.add(code);
+            routed = true;
           } else if (is6Digit) {
             fundCodes.add(code);
+            routed = true;
           }
         case AssetType.indexFund:
         case AssetType.activeFund:
@@ -96,18 +102,25 @@ class MarketDataNotifier extends StateNotifier<Map<String, MarketDataModel>> {
         case AssetType.moneyFund:
           if (_isExchangeListedETF(code)) {
             aCodes.add(code);
+            routed = true;
           } else if (isUsLike) {
             usCodes.add(code);
+            routed = true;
           } else if (isHkLike) {
             hkCodes.add(code);
+            routed = true;
           } else if (is6Digit) {
             fundCodes.add(code);
+            routed = true;
           }
         case AssetType.deposit:
         case AssetType.fixedDeposit:
         case AssetType.largeDeposit:
         case AssetType.noticeDeposit:
-          if (is6Digit) fundCodes.add(code);
+          if (is6Digit) {
+            fundCodes.add(code);
+            routed = true;
+          }
         case AssetType.realEstate:
         case AssetType.vehicle:
         case AssetType.wealth:
@@ -117,25 +130,43 @@ class MarketDataNotifier extends StateNotifier<Map<String, MarketDataModel>> {
         case AssetType.other:
           break;
       }
+
+      // 兜底：资产类型被误分时，按代码形态补路由
+      if (!routed) {
+        if (isUsLike) {
+          usCodes.add(code);
+        } else if (isHkLike) {
+          hkCodes.add(code);
+        } else if (is6Digit) {
+          aCodes.add(code);
+        }
+      }
     }
 
+    final aCodesDedup = aCodes.toSet().toList();
+    final hkCodesDedup = hkCodes.toSet().toList();
+    final usCodesDedup = usCodes.toSet().toList();
+    final fundCodesDedup = fundCodes.toSet().toList();
+
     debugPrint(
-        '[Market] codes: A=${aCodes.length} HK=${hkCodes.length} US=${usCodes.length} Fund=${fundCodes.length}');
-    if (aCodes.isNotEmpty) debugPrint('[Market] aCodes: $aCodes');
-    if (fundCodes.isNotEmpty) debugPrint('[Market] fundCodes: $fundCodes');
+        '[Market] codes: A=${aCodesDedup.length} HK=${hkCodesDedup.length} US=${usCodesDedup.length} Fund=${fundCodesDedup.length}');
+    if (aCodesDedup.isNotEmpty) debugPrint('[Market] aCodes: $aCodesDedup');
+    if (fundCodesDedup.isNotEmpty) {
+      debugPrint('[Market] fundCodes: $fundCodesDedup');
+    }
 
     final results = <MarketDataModel>[];
 
     final futures = <Future<List<MarketDataModel>>>[];
-    if (aCodes.isNotEmpty || hkCodes.isNotEmpty) {
+    if (aCodesDedup.isNotEmpty || hkCodesDedup.isNotEmpty) {
       futures.add(_fetchWithRetry(
-          () => _eastMoneyApi.getQuotes([...aCodes, ...hkCodes])));
+          () => _eastMoneyApi.getQuotes([...aCodesDedup, ...hkCodesDedup])));
     }
-    if (usCodes.isNotEmpty) {
-      futures.add(_fetchWithRetry(() => _sinaApi.getQuotes(usCodes)));
+    if (usCodesDedup.isNotEmpty) {
+      futures.add(_fetchWithRetry(() => _sinaApi.getQuotes(usCodesDedup)));
     }
-    if (fundCodes.isNotEmpty) {
-      futures.add(_fetchWithRetry(() => _fundApi.getQuotes(fundCodes)));
+    if (fundCodesDedup.isNotEmpty) {
+      futures.add(_fetchWithRetry(() => _fundApi.getQuotes(fundCodesDedup)));
     }
 
     final allResults = await Future.wait(futures, eagerError: false);
@@ -146,9 +177,14 @@ class MarketDataNotifier extends StateNotifier<Map<String, MarketDataModel>> {
 
     // API 获取的代码集合
     final fetchedCodes = results.map((r) => r.assetCode).toSet();
+    final fetchedCodeKeys = results
+        .expand((r) => _codeAliases(r.assetCode))
+        .map(_normalizeCodeKey)
+        .toSet();
     // 美股兜底：新浪拿不到时，再尝试东财（部分美股可返回）
-    final missingUsCodes =
-        usCodes.where((c) => !fetchedCodes.contains(c)).toList();
+    final missingUsCodes = usCodesDedup
+        .where((c) => !fetchedCodeKeys.contains(_normalizeCodeKey(c)))
+        .toList();
     if (missingUsCodes.isNotEmpty) {
       try {
         final usFallback = await _fetchWithRetry(
@@ -158,6 +194,9 @@ class MarketDataNotifier extends StateNotifier<Map<String, MarketDataModel>> {
         if (usFallback.isNotEmpty) {
           results.addAll(usFallback);
           fetchedCodes.addAll(usFallback.map((e) => e.assetCode));
+          fetchedCodeKeys.addAll(usFallback
+              .expand((e) => _codeAliases(e.assetCode))
+              .map(_normalizeCodeKey));
           debugPrint(
               '[Market] us fallback by eastmoney: ${usFallback.length}/${missingUsCodes.length}');
         }
@@ -166,16 +205,71 @@ class MarketDataNotifier extends StateNotifier<Map<String, MarketDataModel>> {
       }
     }
 
-    final allRequestedCodes = {...aCodes, ...hkCodes, ...usCodes, ...fundCodes};
-    final missingCodes = allRequestedCodes.difference(fetchedCodes);
+    final allRequestedCodes = {
+      ...aCodesDedup,
+      ...hkCodesDedup,
+      ...usCodesDedup,
+      ...fundCodesDedup
+    };
+    var missingCodes = allRequestedCodes
+        .where((c) => !fetchedCodeKeys.contains(_normalizeCodeKey(c)))
+        .toSet();
 
-    // 对 API 失败的代码从数据库缓存回退
+    // 单只补拉：批量失败后逐只再尝试，提升成功率
+    if (missingCodes.isNotEmpty) {
+      final recoveredSingles = await _fetchSinglesForMissing(
+        missingCodes: missingCodes,
+        usCodes: usCodesDedup.toSet(),
+        fundCodes: fundCodesDedup.toSet(),
+      );
+      if (recoveredSingles.isNotEmpty) {
+        results.addAll(recoveredSingles);
+        fetchedCodes.addAll(recoveredSingles.map((e) => e.assetCode));
+        fetchedCodeKeys.addAll(
+          recoveredSingles
+              .expand((e) => _codeAliases(e.assetCode))
+              .map(_normalizeCodeKey),
+        );
+        missingCodes = allRequestedCodes
+            .where((c) => !fetchedCodeKeys.contains(_normalizeCodeKey(c)))
+            .toSet();
+        debugPrint(
+          '[Market] single fallback recovered: ${recoveredSingles.length}',
+        );
+      }
+    }
+
+    // 第二优先级：最近交易日收盘价（接口）
+    if (missingCodes.isNotEmpty) {
+      final closeFallback = await _fetchWithRetry(
+        () => _eastMoneyApi.getLastCloseQuotes(missingCodes.toList()),
+        attempts: 2,
+      );
+      if (closeFallback.isNotEmpty) {
+        results.addAll(closeFallback);
+        fetchedCodes.addAll(closeFallback.map((e) => e.assetCode));
+        fetchedCodeKeys.addAll(
+          closeFallback
+              .expand((e) => _codeAliases(e.assetCode))
+              .map(_normalizeCodeKey),
+        );
+        missingCodes = allRequestedCodes
+            .where((c) => !fetchedCodeKeys.contains(_normalizeCodeKey(c)))
+            .toSet();
+        debugPrint(
+          '[Market] close fallback recovered: ${closeFallback.length}',
+        );
+      }
+    }
+
+    // 第三优先级：数据库缓存回退
     if (missingCodes.isNotEmpty) {
       try {
         final db = _ref.read(databaseProvider);
         final cached = await db.getAllMarketCache();
+        final missingKeys = missingCodes.map(_normalizeCodeKey).toSet();
         for (final c in cached) {
-          if (missingCodes.contains(c.assetCode)) {
+          if (missingKeys.contains(_normalizeCodeKey(c.assetCode))) {
             results.add(MarketDataModel(
               assetCode: c.assetCode,
               name: c.name ?? c.assetCode,
@@ -187,11 +281,17 @@ class MarketDataNotifier extends StateNotifier<Map<String, MarketDataModel>> {
               currency: state[c.assetCode]?.currency ??
                   codeCurrencyHints[_normalizeCodeKey(c.assetCode)] ??
                   _inferCurrencyByCode(c.assetCode),
+              source: MarketDataModel.sourceCache,
             ));
           }
         }
-        final stillMissing =
-            missingCodes.difference(results.map((r) => r.assetCode).toSet());
+        final recoveredKeys = results
+            .expand((r) => _codeAliases(r.assetCode))
+            .map(_normalizeCodeKey)
+            .toSet();
+        final stillMissing = missingCodes
+            .where((c) => !recoveredKeys.contains(_normalizeCodeKey(c)))
+            .toSet();
         debugPrint(
             '[Market] cache fallback: ${missingCodes.length} missing, recovered ${missingCodes.length - stillMissing.length}');
         if (stillMissing.isNotEmpty)
@@ -204,9 +304,9 @@ class MarketDataNotifier extends StateNotifier<Map<String, MarketDataModel>> {
     // 更新状态
     final newState = Map<String, MarketDataModel>.from(state);
     for (final data in results) {
-      newState[data.assetCode] = data;
-      final upper = data.assetCode.toUpperCase();
-      if (upper != data.assetCode) newState[upper] = data;
+      for (final alias in _codeAliases(data.assetCode)) {
+        newState[alias] = data;
+      }
     }
     state = newState;
 
@@ -234,6 +334,30 @@ class MarketDataNotifier extends StateNotifier<Map<String, MarketDataModel>> {
         } catch (_) {}
       }
     } catch (_) {}
+  }
+
+  Future<List<MarketDataModel>> _fetchSinglesForMissing({
+    required Set<String> missingCodes,
+    required Set<String> usCodes,
+    required Set<String> fundCodes,
+  }) async {
+    final recovered = <MarketDataModel>[];
+    for (final code in missingCodes) {
+      try {
+        MarketDataModel? one;
+        if (usCodes.contains(code)) {
+          one = await _sinaApi.getQuote(code);
+          one ??= await _eastMoneyApi.getQuote(code);
+        } else if (fundCodes.contains(code)) {
+          one = await _fundApi.getQuote(code);
+          one ??= await _eastMoneyApi.getQuote(code);
+        } else {
+          one = await _eastMoneyApi.getQuote(code);
+        }
+        if (one != null && one.price > 0) recovered.add(one);
+      } catch (_) {}
+    }
+    return recovered;
   }
 
   /// 判断是否为交易所上市ETF（走股票行情接口而非基金净值接口）
