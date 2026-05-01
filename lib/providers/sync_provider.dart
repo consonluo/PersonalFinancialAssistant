@@ -110,15 +110,39 @@ class AutoSyncManager {
   Timer? _debounceTimer;
   DateTime? _lastSyncDownTime;
 
+  /// 持久化在 SharedPreferences 中的标记，表示有未上传的本地变更。
+  /// 防止 syncDown 在本地变更上传前覆盖本地数据库导致数据丢失。
+  static const _kPendingSyncKey = 'pending_sync';
+
   AutoSyncManager(this._ref);
 
-  /// 触发自动上传同步（带防抖，数据变更后 3 秒执行）
+  /// 标记有未上传的本地变更（应在每次 insert/update/delete 后立即调用）
+  static Future<void> markPendingSync() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_kPendingSyncKey, true);
+  }
+
+  static Future<bool> hasPendingSync() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_kPendingSyncKey) ?? false;
+  }
+
+  static Future<void> clearPendingSync() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_kPendingSyncKey, false);
+  }
+
+  /// 触发自动上传同步（带防抖，数据变更后 1.5 秒执行）
+  /// 同时立即写入 pendingSync 标记，防止防抖期间被 syncDown 覆盖。
   void triggerAutoSync() {
     final familyId = _ref.read(familyIdProvider);
     if (familyId == null || familyId.isEmpty) return;
 
+    // 立即标记 pending，以便此期间任何 syncDown 都会先把本地变更推上去
+    markPendingSync();
+
     _debounceTimer?.cancel();
-    _debounceTimer = Timer(const Duration(seconds: 3), () {
+    _debounceTimer = Timer(const Duration(milliseconds: 1500), () {
       syncUp();
     });
   }
@@ -175,8 +199,11 @@ class AutoSyncManager {
       await _ref.read(syncConfigProvider.notifier).updateConfig(
             SyncConfigModel(familyId: familyId, lastSyncTime: now),
           );
+      // 上传成功后清除 pending 标记
+      await clearPendingSync();
       return true;
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[Sync] syncUp error: $e');
       _ref.read(syncStatusProvider.notifier).state = SyncStatus.error;
       return false;
     }
@@ -186,11 +213,26 @@ class AutoSyncManager {
   ///
   /// [skipIfRecent] 为 true 时，若距上次 syncDown 不足 30 秒则跳过，
   /// 避免登录后 Dashboard 重复拉取导致数据闪清。
+  ///
+  /// 调用前会先检查 pendingSync 标记：若有未上传的本地变更，强制先 syncUp，
+  /// 防止云端旧数据覆盖本地新增/修改/删除。
   Future<bool> syncDown(String familyId, {bool skipIfRecent = false}) async {
     if (skipIfRecent && _lastSyncDownTime != null) {
       final elapsed = DateTime.now().difference(_lastSyncDownTime!);
       if (elapsed.inSeconds < 30) {
         return true;
+      }
+    }
+
+    // 关键：若有未上传的本地变更，先把它推上去，再拉云端
+    if (await hasPendingSync()) {
+      debugPrint('[Sync] syncDown: pending changes detected, force syncUp first');
+      _debounceTimer?.cancel(); // 取消防抖立即上传
+      final pushOk = await syncUp();
+      if (!pushOk) {
+        debugPrint('[Sync] syncDown: pre-syncUp failed, abort syncDown to avoid data loss');
+        // 本地变更未能上传时，跳过 syncDown（保留本地状态）
+        return false;
       }
     }
 
@@ -210,7 +252,8 @@ class AutoSyncManager {
         _ref.read(syncStatusProvider.notifier).state = SyncStatus.error;
       }
       return success;
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[Sync] syncDown error: $e');
       _ref.read(syncStatusProvider.notifier).state = SyncStatus.error;
       return false;
     }

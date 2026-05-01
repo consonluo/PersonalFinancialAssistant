@@ -15,24 +15,49 @@ class CategoryDetailPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final holdingsAsync = ref.watch(allHoldingsProvider);
     final marketData = ref.watch(marketDataProvider);
-    final type = AssetType.values.firstWhere((e) => e.name == categoryType, orElse: () => AssetType.other);
+    final type = AssetType.values.firstWhere((e) => e.name == categoryType,
+        orElse: () => AssetType.other);
     final dm = getDisplayModeForAssetType(type);
 
     return Scaffold(
       appBar: AppBar(title: Text(type.label)),
       body: holdingsAsync.when(
         data: (all) {
-          final filtered = all.where((h) => h.assetType == categoryType).toList();
+          final filtered =
+              all.where((h) => h.assetType == categoryType).toList();
           if (filtered.isEmpty) return const Center(child: Text('该分类暂无持仓'));
+          final merged = <String, _MergedTypeHolding>{};
+          for (final h in filtered) {
+            if (h.quantity == 0) continue;
+            final market = marketData[h.assetCode];
+            final price = market?.price ?? h.currentPrice;
+            final key =
+                h.assetCode.isNotEmpty ? h.assetCode : '__name:${h.assetName}';
+            final m = merged.putIfAbsent(
+              key,
+              () => _MergedTypeHolding(
+                assetName: h.assetName,
+                assetCode: h.assetCode,
+                quantity: 0,
+                totalCost: 0,
+                currentPrice: price,
+              ),
+            );
+            m.quantity += h.quantity;
+            m.totalCost += h.quantity * h.costPrice;
+            m.currentPrice = price;
+          }
+          final mergedList = merged.values.toList()
+            ..sort((a, b) => (b.quantity * b.currentPrice)
+                .compareTo(a.quantity * a.currentPrice));
           return ListView.builder(
             padding: const EdgeInsets.all(16),
-            itemCount: filtered.length,
+            itemCount: mergedList.length,
             itemBuilder: (context, index) {
-              final h = filtered[index];
-              final market = marketData[h.assetCode];
-              final price = market?.price ?? h.currentPrice;
+              final h = mergedList[index];
+              final price = h.currentPrice;
               final mv = h.quantity * price;
-              final cost = h.quantity * h.costPrice;
+              final cost = h.totalCost;
               final pnl = mv - cost;
               final pnlPct = cost != 0 ? pnl / cost * 100 : 0.0;
               return Card(
@@ -45,20 +70,34 @@ class CategoryDetailPage extends ConsumerWidget {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(h.assetName, style: const TextStyle(fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis),
-                            if (h.assetCode.isNotEmpty && h.assetCode != 'DEPOSIT' && h.assetCode != 'WEALTH' && h.assetCode != 'unknown')
-                              Text(h.assetCode, style: const TextStyle(color: AppColors.textHint, fontSize: 12)),
+                            Text(h.assetName,
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w600),
+                                overflow: TextOverflow.ellipsis),
+                            if (h.assetCode.isNotEmpty &&
+                                h.assetCode != 'DEPOSIT' &&
+                                h.assetCode != 'WEALTH' &&
+                                h.assetCode != 'unknown')
+                              Text(h.assetCode,
+                                  style: const TextStyle(
+                                      color: AppColors.textHint, fontSize: 12)),
                           ],
                         ),
                       ),
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
-                          Text(FormatUtils.formatFullCurrency(mv), style: const TextStyle(fontWeight: FontWeight.w600)),
+                          Text(FormatUtils.formatFullCurrency(mv),
+                              style:
+                                  const TextStyle(fontWeight: FontWeight.w600)),
                           if (dm != HoldingDisplayMode.deposit)
                             Text(
                               '${FormatUtils.formatChange(pnl)} (${FormatUtils.formatPercent(pnlPct)})',
-                              style: TextStyle(fontSize: 12, color: pnl >= 0 ? AppColors.gain : AppColors.loss),
+                              style: TextStyle(
+                                  fontSize: 12,
+                                  color: pnl >= 0
+                                      ? AppColors.gain
+                                      : AppColors.loss),
                             ),
                         ],
                       ),
@@ -74,4 +113,19 @@ class CategoryDetailPage extends ConsumerWidget {
       ),
     );
   }
+}
+
+class _MergedTypeHolding {
+  String assetName;
+  String assetCode;
+  double quantity;
+  double totalCost;
+  double currentPrice;
+  _MergedTypeHolding({
+    required this.assetName,
+    required this.assetCode,
+    required this.quantity,
+    required this.totalCost,
+    required this.currentPrice,
+  });
 }

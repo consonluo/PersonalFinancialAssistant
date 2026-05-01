@@ -23,7 +23,9 @@ class AccountFormPage extends ConsumerStatefulWidget {
 
 class _AccountFormPageState extends ConsumerState<AccountFormPage> {
   final _institutionController = TextEditingController();
+  final _financingAmountController = TextEditingController();
   AccountType _type = AccountType.securities;
+  String _financingCurrency = 'CNY';
   String? _selectedMemberId;
   bool _isEdit = false;
   String? _editAccountId;
@@ -44,18 +46,19 @@ class _AccountFormPageState extends ConsumerState<AccountFormPage> {
   }
 
   Future<void> _autoSelectMember() async {
-    // 等 currentRoleProvider 异步加载
-    await Future.delayed(const Duration(milliseconds: 300));
-    if (!mounted) return;
-    final role = ref.read(currentRoleProvider);
-    if (role != null) {
-      setState(() => _selectedMemberId = role);
-      return;
-    }
-    // 如果还是没有，取成员列表第一个
-    final members = ref.read(familyMembersProvider).valueOrNull ?? [];
-    if (members.isNotEmpty) {
-      setState(() => _selectedMemberId = members.first.id);
+    for (var i = 0; i < 10; i++) {
+      await Future.delayed(const Duration(milliseconds: 100));
+      if (!mounted || _selectedMemberId != null) return;
+      final role = ref.read(currentRoleProvider);
+      if (role != null) {
+        setState(() => _selectedMemberId = role);
+        return;
+      }
+      final members = ref.read(familyMembersProvider).valueOrNull ?? [];
+      if (members.isNotEmpty) {
+        setState(() => _selectedMemberId = members.first.id);
+        return;
+      }
     }
   }
 
@@ -66,9 +69,12 @@ class _AccountFormPageState extends ConsumerState<AccountFormPage> {
       setState(() {
         _institutionController.text = acc.institution;
         _selectedMemberId = acc.memberId;
-        _type = AccountType.values.firstWhere(
-            (e) => e.name == acc.type,
+        _type = AccountType.values.firstWhere((e) => e.name == acc.type,
             orElse: () => AccountType.securities);
+        _financingAmountController.text =
+            acc.financingAmount > 0 ? acc.financingAmount.toString() : '';
+        _financingCurrency =
+            acc.financingCurrency.isEmpty ? 'CNY' : acc.financingCurrency;
       });
     }
   }
@@ -97,15 +103,23 @@ class _AccountFormPageState extends ConsumerState<AccountFormPage> {
             membersAsync.when(
               data: (members) {
                 // 确保 value 在 items 中，否则设为 null
-                final validValue = members.any((m) => m.id == _selectedMemberId) ? _selectedMemberId : null;
+                final validValue = members.any((m) => m.id == _selectedMemberId)
+                    ? _selectedMemberId
+                    : null;
                 // 如果没有有效选中且有成员，自动选第一个
-                if (validValue == null && members.isNotEmpty && _selectedMemberId == null) {
-                  Future.microtask(() => setState(() => _selectedMemberId = members.first.id));
+                if (validValue == null &&
+                    members.isNotEmpty &&
+                    _selectedMemberId == null) {
+                  Future.microtask(() =>
+                      setState(() => _selectedMemberId = members.first.id));
                 }
                 return DropdownButtonFormField<String>(
                   value: validValue,
                   decoration: const InputDecoration(labelText: '所属成员'),
-                  items: members.map((m) => DropdownMenuItem(value: m.id, child: Text(m.name))).toList(),
+                  items: members
+                      .map((m) =>
+                          DropdownMenuItem(value: m.id, child: Text(m.name)))
+                      .toList(),
                   onChanged: (v) => setState(() => _selectedMemberId = v),
                 );
               },
@@ -115,9 +129,11 @@ class _AccountFormPageState extends ConsumerState<AccountFormPage> {
             const SizedBox(height: 20),
 
             // 机构名称
-            const Text('金融机构', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+            const Text('金融机构',
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
             const SizedBox(height: 4),
-            Text('输入或选择券商/银行名称', style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+            Text('输入或选择券商/银行名称',
+                style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
             const SizedBox(height: 8),
             TextField(
               controller: _institutionController,
@@ -133,9 +149,14 @@ class _AccountFormPageState extends ConsumerState<AccountFormPage> {
               children: ['富途证券', '微众银行', '东方财富', '天天基金', '招商银行'].map((inst) {
                 final selected = _institutionController.text == inst;
                 return ChoiceChip(
-                  label: Text(inst, style: TextStyle(fontSize: 12, color: selected ? Colors.white : AppColors.textPrimary)),
+                  label: Text(inst,
+                      style: TextStyle(
+                          fontSize: 12,
+                          color:
+                              selected ? Colors.white : AppColors.textPrimary)),
                   selected: selected,
-                  onSelected: (_) => setState(() => _institutionController.text = inst),
+                  onSelected: (_) =>
+                      setState(() => _institutionController.text = inst),
                   visualDensity: VisualDensity.compact,
                 );
               }).toList(),
@@ -146,9 +167,37 @@ class _AccountFormPageState extends ConsumerState<AccountFormPage> {
             DropdownButtonFormField<AccountType>(
               value: _type,
               decoration: const InputDecoration(labelText: '账户类型'),
-              items: AccountType.values.map((t) => DropdownMenuItem(value: t, child: Text(t.label))).toList(),
-              onChanged: (v) => setState(() => _type = v ?? AccountType.securities),
+              items: AccountType.values
+                  .map((t) => DropdownMenuItem(value: t, child: Text(t.label)))
+                  .toList(),
+              onChanged: (v) =>
+                  setState(() => _type = v ?? AccountType.securities),
             ),
+            if (_type == AccountType.securities) ...[
+              const SizedBox(height: 20),
+              TextField(
+                controller: _financingAmountController,
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+                decoration: const InputDecoration(
+                  labelText: '融资金额（负债）',
+                  hintText: '例如：50000',
+                  prefixIcon: Icon(Icons.money_off, size: 20),
+                ),
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                value: _financingCurrency,
+                decoration: const InputDecoration(labelText: '融资币种'),
+                items: const [
+                  DropdownMenuItem(value: 'CNY', child: Text('人民币 (CNY)')),
+                  DropdownMenuItem(value: 'USD', child: Text('美元 (USD)')),
+                  DropdownMenuItem(value: 'HKD', child: Text('港币 (HKD)')),
+                ],
+                onChanged: (v) =>
+                    setState(() => _financingCurrency = v ?? 'CNY'),
+              ),
+            ],
             const SizedBox(height: 32),
             SizedBox(
               width: double.infinity,
@@ -163,17 +212,39 @@ class _AccountFormPageState extends ConsumerState<AccountFormPage> {
   Future<void> _save() async {
     final institution = _institutionController.text.trim();
     if (institution.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('请输入机构名称')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('请输入机构名称')));
       return;
     }
+    // 如果成员尚未选中，尝试自动选择第一个可用成员
     if (_selectedMemberId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('请选择所属成员')));
+      final members = ref.read(familyMembersProvider).valueOrNull ?? [];
+      if (members.isNotEmpty) {
+        _selectedMemberId = members.first.id;
+      }
+    }
+    if (_selectedMemberId == null) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('请选择所属成员')));
       return;
     }
 
     final db = ref.read(databaseProvider);
     final now = DateTime.now();
     final accountName = '$institution ${_type.label}';
+    final financingAmountInput = _financingAmountController.text.trim();
+    final parsedFinancingAmount = financingAmountInput.isEmpty
+        ? 0.0
+        : double.tryParse(financingAmountInput);
+    if (parsedFinancingAmount == null || parsedFinancingAmount < 0) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('融资金额格式不正确')));
+      return;
+    }
+    final financingAmount =
+        _type == AccountType.securities ? parsedFinancingAmount : 0.0;
+    final financingCurrency =
+        _type == AccountType.securities ? _financingCurrency : 'CNY';
 
     if (_isEdit && _editAccountId != null) {
       final existing = await db.getAccountById(_editAccountId!);
@@ -184,6 +255,8 @@ class _AccountFormPageState extends ConsumerState<AccountFormPage> {
         type: Value(_type.name),
         institution: Value(institution),
         subType: Value(existing?.subType ?? ''),
+        financingAmount: Value(financingAmount),
+        financingCurrency: Value(financingCurrency),
         createdAt: Value(existing?.createdAt ?? now),
         updatedAt: Value(now),
       ));
@@ -194,6 +267,8 @@ class _AccountFormPageState extends ConsumerState<AccountFormPage> {
         name: Value(accountName),
         type: Value(_type.name),
         institution: Value(institution),
+        financingAmount: Value(financingAmount),
+        financingCurrency: Value(financingCurrency),
         createdAt: Value(now),
         updatedAt: Value(now),
       ));
@@ -211,8 +286,13 @@ class _AccountFormPageState extends ConsumerState<AccountFormPage> {
         title: const Text('删除账户'),
         content: const Text('删除账户将同时删除该账户下的所有持仓数据，确定删除？'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
-          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('删除', style: TextStyle(color: AppColors.error))),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('取消')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child:
+                  const Text('删除', style: TextStyle(color: AppColors.error))),
         ],
       ),
     );
@@ -230,7 +310,9 @@ class _AccountFormPageState extends ConsumerState<AccountFormPage> {
       }
       await db.deleteAccount(_editAccountId!);
       // 立即同步（不用防抖，确保删除立刻上传到云端）
-      try { await ref.read(autoSyncProvider).syncUp(); } catch (_) {}
+      try {
+        await ref.read(autoSyncProvider).syncUp();
+      } catch (_) {}
       ref.invalidate(allAccountsProvider);
       if (mounted) context.pop();
     }
@@ -239,6 +321,7 @@ class _AccountFormPageState extends ConsumerState<AccountFormPage> {
   @override
   void dispose() {
     _institutionController.dispose();
+    _financingAmountController.dispose();
     super.dispose();
   }
 }

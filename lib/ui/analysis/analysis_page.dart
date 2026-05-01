@@ -348,25 +348,40 @@ class _AssetTypeGroupTileState extends State<_AssetTypeGroupTile> {
               final itemPnlColor = a.totalPnl >= 0 ? AppColors.gain : AppColors.loss;
               return Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                child: Row(
+                child: Column(
                   children: [
-                    Expanded(child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                    Row(
                       children: [
-                        Text(a.assetName, style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13)),
-                        Text('${a.assetCode}  数量 ${FormatUtils.formatQuantity(a.totalQuantity)}',
-                            style: const TextStyle(fontSize: 11, color: AppColors.textHint)),
-                      ],
-                    )),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Text(FormatUtils.formatCurrency(a.totalMarketValue),
-                            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-                        Text(FormatUtils.formatPercent(a.pnlPercent),
-                            style: TextStyle(fontSize: 11, color: itemPnlColor)),
+                        Expanded(child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(a.assetName, style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13)),
+                            Text('${a.assetCode}  数量 ${FormatUtils.formatQuantity(a.totalQuantity)}',
+                                style: const TextStyle(fontSize: 11, color: AppColors.textHint)),
+                          ],
+                        )),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            if (a.currentPrice > 0)
+                              Text(FormatUtils.formatPrice(a.currentPrice),
+                                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
+                            Text(FormatUtils.formatCurrency(a.totalMarketValue),
+                                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textSecondary)),
+                          ],
+                        ),
                       ],
                     ),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        if (a.avgCostPrice > 0)
+                          _InfoCell(label: '均价', value: FormatUtils.formatPrice(a.avgCostPrice)),
+                        _InfoCell(label: '收益', value: FormatUtils.formatChange(a.totalPnl), color: itemPnlColor),
+                        _InfoCell(label: '收益率', value: FormatUtils.formatPercent(a.pnlPercent), color: itemPnlColor),
+                      ],
+                    ),
+                    const Divider(height: 12, thickness: 0.5),
                   ],
                 ),
               );
@@ -374,7 +389,7 @@ class _AssetTypeGroupTileState extends State<_AssetTypeGroupTile> {
             crossFadeState: _expanded ? CrossFadeState.showSecond : CrossFadeState.showFirst,
             duration: const Duration(milliseconds: 200),
           ),
-          if (_expanded) const SizedBox(height: 8),
+          if (_expanded) const SizedBox(height: 4),
         ],
       ),
     );
@@ -729,29 +744,40 @@ class _TagTab extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final holdings = ref.watch(allHoldingsProvider).valueOrNull ?? [];
 
-    // 收集所有标签并分组
+    // 第一步：按 assetCode 跨账户合并持仓（合并 quantity / 取最大 tags 集合）
+    final merged = <String, _MergedHolding>{};
+    for (final h in holdings) {
+      if (h.quantity == 0) continue;
+      final key = h.assetCode.isNotEmpty ? h.assetCode : '__name:${h.assetName}';
+      final m = merged.putIfAbsent(
+        key,
+        () => _MergedHolding(name: h.assetName, code: h.assetCode),
+      );
+      m.marketValue += h.quantity * h.currentPrice;
+      // 合并所有账户上设置过的标签
+      m.tags.addAll(_parseHoldingTags(h.tags));
+    }
+
+    // 第二步：按标签分组合并后的资产
     final tagGroups = <String, List<_TagHoldingItem>>{};
     double grandTotal = 0;
 
-    for (final h in holdings) {
-      if (h.quantity == 0) continue;
-      final tags = _parseHoldingTags(h.tags);
+    for (final m in merged.values) {
+      final tags = m.tags.toList();
       if (tags.isEmpty) {
-        // 没有标签的归入"未分类"
         tagGroups.putIfAbsent('未分类', () => []).add(_TagHoldingItem(
-          id: h.id, name: h.assetName, code: h.assetCode,
-          marketValue: h.quantity * h.currentPrice,
+          id: m.code, name: m.name, code: m.code,
+          marketValue: m.marketValue,
         ));
-        grandTotal += h.quantity * h.currentPrice;
+        grandTotal += m.marketValue;
       } else {
         for (final tag in tags) {
-          final mv = h.quantity * h.currentPrice;
           tagGroups.putIfAbsent(tag, () => []).add(_TagHoldingItem(
-            id: h.id, name: h.assetName, code: h.assetCode,
-            marketValue: mv,
+            id: m.code, name: m.name, code: m.code,
+            marketValue: m.marketValue,
           ));
-          grandTotal += mv / tags.length; // 避免重复计算
         }
+        grandTotal += m.marketValue; // 同一资产的多标签计入一次总和
       }
     }
 
@@ -817,6 +843,15 @@ class _TagHoldingItem {
   _TagHoldingItem({
     required this.id, required this.name, required this.code, required this.marketValue,
   });
+}
+
+/// 用于按 assetCode 跨账户合并持仓的临时累加结构
+class _MergedHolding {
+  final String name;
+  final String code;
+  double marketValue = 0;
+  final Set<String> tags = <String>{};
+  _MergedHolding({required this.name, required this.code});
 }
 
 class _TagGroupTile extends StatefulWidget {

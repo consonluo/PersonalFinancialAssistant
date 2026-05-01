@@ -481,6 +481,31 @@ class $AccountsTable extends Accounts with TableInfo<$AccountsTable, Account> {
     requiredDuringInsert: false,
     defaultValue: const Constant(''),
   );
+  static const VerificationMeta _financingAmountMeta = const VerificationMeta(
+    'financingAmount',
+  );
+  @override
+  late final GeneratedColumn<double> financingAmount = GeneratedColumn<double>(
+    'financing_amount',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0.0),
+  );
+  static const VerificationMeta _financingCurrencyMeta = const VerificationMeta(
+    'financingCurrency',
+  );
+  @override
+  late final GeneratedColumn<String> financingCurrency =
+      GeneratedColumn<String>(
+        'financing_currency',
+        aliasedName,
+        false,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+        defaultValue: const Constant('CNY'),
+      );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -513,6 +538,8 @@ class $AccountsTable extends Accounts with TableInfo<$AccountsTable, Account> {
     type,
     institution,
     subType,
+    financingAmount,
+    financingCurrency,
     createdAt,
     updatedAt,
   ];
@@ -572,6 +599,24 @@ class $AccountsTable extends Accounts with TableInfo<$AccountsTable, Account> {
         subType.isAcceptableOrUnknown(data['sub_type']!, _subTypeMeta),
       );
     }
+    if (data.containsKey('financing_amount')) {
+      context.handle(
+        _financingAmountMeta,
+        financingAmount.isAcceptableOrUnknown(
+          data['financing_amount']!,
+          _financingAmountMeta,
+        ),
+      );
+    }
+    if (data.containsKey('financing_currency')) {
+      context.handle(
+        _financingCurrencyMeta,
+        financingCurrency.isAcceptableOrUnknown(
+          data['financing_currency']!,
+          _financingCurrencyMeta,
+        ),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -623,6 +668,16 @@ class $AccountsTable extends Accounts with TableInfo<$AccountsTable, Account> {
             DriftSqlType.string,
             data['${effectivePrefix}sub_type'],
           )!,
+      financingAmount:
+          attachedDatabase.typeMapping.read(
+            DriftSqlType.double,
+            data['${effectivePrefix}financing_amount'],
+          )!,
+      financingCurrency:
+          attachedDatabase.typeMapping.read(
+            DriftSqlType.string,
+            data['${effectivePrefix}financing_currency'],
+          )!,
       createdAt:
           attachedDatabase.typeMapping.read(
             DriftSqlType.dateTime,
@@ -649,6 +704,8 @@ class Account extends DataClass implements Insertable<Account> {
   final String type;
   final String institution;
   final String subType;
+  final double financingAmount;
+  final String financingCurrency;
   final DateTime createdAt;
   final DateTime updatedAt;
   const Account({
@@ -658,6 +715,8 @@ class Account extends DataClass implements Insertable<Account> {
     required this.type,
     required this.institution,
     required this.subType,
+    required this.financingAmount,
+    required this.financingCurrency,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -670,6 +729,8 @@ class Account extends DataClass implements Insertable<Account> {
     map['type'] = Variable<String>(type);
     map['institution'] = Variable<String>(institution);
     map['sub_type'] = Variable<String>(subType);
+    map['financing_amount'] = Variable<double>(financingAmount);
+    map['financing_currency'] = Variable<String>(financingCurrency);
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
     return map;
@@ -683,6 +744,8 @@ class Account extends DataClass implements Insertable<Account> {
       type: Value(type),
       institution: Value(institution),
       subType: Value(subType),
+      financingAmount: Value(financingAmount),
+      financingCurrency: Value(financingCurrency),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
     );
@@ -700,6 +763,8 @@ class Account extends DataClass implements Insertable<Account> {
       type: serializer.fromJson<String>(json['type']),
       institution: serializer.fromJson<String>(json['institution']),
       subType: serializer.fromJson<String>(json['subType']),
+      financingAmount: serializer.fromJson<double>(json['financingAmount']),
+      financingCurrency: serializer.fromJson<String>(json['financingCurrency']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
     );
@@ -714,6 +779,8 @@ class Account extends DataClass implements Insertable<Account> {
       'type': serializer.toJson<String>(type),
       'institution': serializer.toJson<String>(institution),
       'subType': serializer.toJson<String>(subType),
+      'financingAmount': serializer.toJson<double>(financingAmount),
+      'financingCurrency': serializer.toJson<String>(financingCurrency),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
     };
@@ -726,6 +793,8 @@ class Account extends DataClass implements Insertable<Account> {
     String? type,
     String? institution,
     String? subType,
+    double? financingAmount,
+    String? financingCurrency,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) => Account(
@@ -735,6 +804,8 @@ class Account extends DataClass implements Insertable<Account> {
     type: type ?? this.type,
     institution: institution ?? this.institution,
     subType: subType ?? this.subType,
+    financingAmount: financingAmount ?? this.financingAmount,
+    financingCurrency: financingCurrency ?? this.financingCurrency,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
   );
@@ -747,6 +818,14 @@ class Account extends DataClass implements Insertable<Account> {
       institution:
           data.institution.present ? data.institution.value : this.institution,
       subType: data.subType.present ? data.subType.value : this.subType,
+      financingAmount:
+          data.financingAmount.present
+              ? data.financingAmount.value
+              : this.financingAmount,
+      financingCurrency:
+          data.financingCurrency.present
+              ? data.financingCurrency.value
+              : this.financingCurrency,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
     );
@@ -761,6 +840,8 @@ class Account extends DataClass implements Insertable<Account> {
           ..write('type: $type, ')
           ..write('institution: $institution, ')
           ..write('subType: $subType, ')
+          ..write('financingAmount: $financingAmount, ')
+          ..write('financingCurrency: $financingCurrency, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
@@ -775,6 +856,8 @@ class Account extends DataClass implements Insertable<Account> {
     type,
     institution,
     subType,
+    financingAmount,
+    financingCurrency,
     createdAt,
     updatedAt,
   );
@@ -788,6 +871,8 @@ class Account extends DataClass implements Insertable<Account> {
           other.type == this.type &&
           other.institution == this.institution &&
           other.subType == this.subType &&
+          other.financingAmount == this.financingAmount &&
+          other.financingCurrency == this.financingCurrency &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt);
 }
@@ -799,6 +884,8 @@ class AccountsCompanion extends UpdateCompanion<Account> {
   final Value<String> type;
   final Value<String> institution;
   final Value<String> subType;
+  final Value<double> financingAmount;
+  final Value<String> financingCurrency;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<int> rowid;
@@ -809,6 +896,8 @@ class AccountsCompanion extends UpdateCompanion<Account> {
     this.type = const Value.absent(),
     this.institution = const Value.absent(),
     this.subType = const Value.absent(),
+    this.financingAmount = const Value.absent(),
+    this.financingCurrency = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -820,6 +909,8 @@ class AccountsCompanion extends UpdateCompanion<Account> {
     required String type,
     this.institution = const Value.absent(),
     this.subType = const Value.absent(),
+    this.financingAmount = const Value.absent(),
+    this.financingCurrency = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -834,6 +925,8 @@ class AccountsCompanion extends UpdateCompanion<Account> {
     Expression<String>? type,
     Expression<String>? institution,
     Expression<String>? subType,
+    Expression<double>? financingAmount,
+    Expression<String>? financingCurrency,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<int>? rowid,
@@ -845,6 +938,8 @@ class AccountsCompanion extends UpdateCompanion<Account> {
       if (type != null) 'type': type,
       if (institution != null) 'institution': institution,
       if (subType != null) 'sub_type': subType,
+      if (financingAmount != null) 'financing_amount': financingAmount,
+      if (financingCurrency != null) 'financing_currency': financingCurrency,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (rowid != null) 'rowid': rowid,
@@ -858,6 +953,8 @@ class AccountsCompanion extends UpdateCompanion<Account> {
     Value<String>? type,
     Value<String>? institution,
     Value<String>? subType,
+    Value<double>? financingAmount,
+    Value<String>? financingCurrency,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
     Value<int>? rowid,
@@ -869,6 +966,8 @@ class AccountsCompanion extends UpdateCompanion<Account> {
       type: type ?? this.type,
       institution: institution ?? this.institution,
       subType: subType ?? this.subType,
+      financingAmount: financingAmount ?? this.financingAmount,
+      financingCurrency: financingCurrency ?? this.financingCurrency,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       rowid: rowid ?? this.rowid,
@@ -896,6 +995,12 @@ class AccountsCompanion extends UpdateCompanion<Account> {
     if (subType.present) {
       map['sub_type'] = Variable<String>(subType.value);
     }
+    if (financingAmount.present) {
+      map['financing_amount'] = Variable<double>(financingAmount.value);
+    }
+    if (financingCurrency.present) {
+      map['financing_currency'] = Variable<String>(financingCurrency.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -917,6 +1022,8 @@ class AccountsCompanion extends UpdateCompanion<Account> {
           ..write('type: $type, ')
           ..write('institution: $institution, ')
           ..write('subType: $subType, ')
+          ..write('financingAmount: $financingAmount, ')
+          ..write('financingCurrency: $financingCurrency, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('rowid: $rowid')
@@ -4724,6 +4831,8 @@ typedef $$AccountsTableCreateCompanionBuilder =
       required String type,
       Value<String> institution,
       Value<String> subType,
+      Value<double> financingAmount,
+      Value<String> financingCurrency,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<int> rowid,
@@ -4736,6 +4845,8 @@ typedef $$AccountsTableUpdateCompanionBuilder =
       Value<String> type,
       Value<String> institution,
       Value<String> subType,
+      Value<double> financingAmount,
+      Value<String> financingCurrency,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<int> rowid,
@@ -4777,6 +4888,16 @@ class $$AccountsTableFilterComposer
 
   ColumnFilters<String> get subType => $composableBuilder(
     column: $table.subType,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get financingAmount => $composableBuilder(
+    column: $table.financingAmount,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get financingCurrency => $composableBuilder(
+    column: $table.financingCurrency,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -4830,6 +4951,16 @@ class $$AccountsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<double> get financingAmount => $composableBuilder(
+    column: $table.financingAmount,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get financingCurrency => $composableBuilder(
+    column: $table.financingCurrency,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -4869,6 +5000,16 @@ class $$AccountsTableAnnotationComposer
 
   GeneratedColumn<String> get subType =>
       $composableBuilder(column: $table.subType, builder: (column) => column);
+
+  GeneratedColumn<double> get financingAmount => $composableBuilder(
+    column: $table.financingAmount,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get financingCurrency => $composableBuilder(
+    column: $table.financingCurrency,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
@@ -4911,6 +5052,8 @@ class $$AccountsTableTableManager
                 Value<String> type = const Value.absent(),
                 Value<String> institution = const Value.absent(),
                 Value<String> subType = const Value.absent(),
+                Value<double> financingAmount = const Value.absent(),
+                Value<String> financingCurrency = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -4921,6 +5064,8 @@ class $$AccountsTableTableManager
                 type: type,
                 institution: institution,
                 subType: subType,
+                financingAmount: financingAmount,
+                financingCurrency: financingCurrency,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 rowid: rowid,
@@ -4933,6 +5078,8 @@ class $$AccountsTableTableManager
                 required String type,
                 Value<String> institution = const Value.absent(),
                 Value<String> subType = const Value.absent(),
+                Value<double> financingAmount = const Value.absent(),
+                Value<String> financingCurrency = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -4943,6 +5090,8 @@ class $$AccountsTableTableManager
                 type: type,
                 institution: institution,
                 subType: subType,
+                financingAmount: financingAmount,
+                financingCurrency: financingCurrency,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 rowid: rowid,

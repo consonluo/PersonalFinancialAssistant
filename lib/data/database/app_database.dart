@@ -30,7 +30,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 4;
 
   @override
   MigrationStrategy get migration {
@@ -45,6 +45,10 @@ class AppDatabase extends _$AppDatabase {
         if (from < 3) {
           // 添加 currency 字段到 holdings 表
           await m.addColumn(holdings, holdings.currency);
+        }
+        if (from < 4) {
+          await m.addColumn(accounts, accounts.financingAmount);
+          await m.addColumn(accounts, accounts.financingCurrency);
         }
       },
     );
@@ -144,7 +148,8 @@ class AppDatabase extends _$AppDatabase {
           .getSingleOrNull();
   Future<int> upsertMarketCache(MarketCacheCompanion entry) =>
       into(marketCache).insertOnConflictUpdate(entry);
-  Future<void> upsertMarketCacheBatch(List<MarketCacheCompanion> entries) async {
+  Future<void> upsertMarketCacheBatch(
+      List<MarketCacheCompanion> entries) async {
     await batch((b) {
       for (final entry in entries) {
         b.insert(marketCache, entry, onConflict: DoUpdate((_) => entry));
@@ -153,26 +158,34 @@ class AppDatabase extends _$AppDatabase {
   }
 
   // ===== Asset Snapshots =====
-  Future<List<AssetSnapshot>> getAllSnapshots() =>
-      (select(assetSnapshots)..orderBy([(t) => OrderingTerm.asc(t.snapshotDate)])).get();
-  Future<List<AssetSnapshot>> getSnapshotsByDateRange(DateTime start, DateTime end) =>
-      (select(assetSnapshots)
-        ..where((t) => t.snapshotDate.isBiggerOrEqualValue(start) & t.snapshotDate.isSmallerOrEqualValue(end))
+  Future<List<AssetSnapshot>> getAllSnapshots() => (select(assetSnapshots)
         ..orderBy([(t) => OrderingTerm.asc(t.snapshotDate)]))
+      .get();
+  Future<List<AssetSnapshot>> getSnapshotsByDateRange(
+          DateTime start, DateTime end) =>
+      (select(assetSnapshots)
+            ..where((t) =>
+                t.snapshotDate.isBiggerOrEqualValue(start) &
+                t.snapshotDate.isSmallerOrEqualValue(end))
+            ..orderBy([(t) => OrderingTerm.asc(t.snapshotDate)]))
           .get();
   Future<AssetSnapshot?> getSnapshotByDate(DateTime date) async {
     final dayStart = DateTime(date.year, date.month, date.day);
     final dayEnd = dayStart.add(const Duration(days: 1));
     final results = await (select(assetSnapshots)
-      ..where((t) => t.snapshotDate.isBiggerOrEqualValue(dayStart) & t.snapshotDate.isSmallerThanValue(dayEnd))
-      ..orderBy([(t) => OrderingTerm.desc(t.id)]))
+          ..where((t) =>
+              t.snapshotDate.isBiggerOrEqualValue(dayStart) &
+              t.snapshotDate.isSmallerThanValue(dayEnd))
+          ..orderBy([(t) => OrderingTerm.desc(t.id)]))
         .get();
     return results.firstOrNull;
   }
+
   Future<int> insertSnapshot(AssetSnapshotsCompanion entry) =>
       into(assetSnapshots).insert(entry);
-  Future<void> deleteOldSnapshots(DateTime before) =>
-      (delete(assetSnapshots)..where((t) => t.snapshotDate.isSmallerThanValue(before))).go();
+  Future<void> deleteOldSnapshots(DateTime before) => (delete(assetSnapshots)
+        ..where((t) => t.snapshotDate.isSmallerThanValue(before)))
+      .go();
   Future<void> deleteSnapshotById(int id) =>
       (delete(assetSnapshots)..where((t) => t.id.equals(id))).go();
 

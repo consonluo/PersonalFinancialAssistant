@@ -145,35 +145,55 @@ class AssetTypeGroupData {
   });
 }
 
-/// 按市场分组的数据
+/// 按市场分组的数据（先按 assetCode 跨账户合并，再分组到市场）
 final marketGroupProvider = Provider<List<MarketGroupData>>((ref) {
   final holdings = ref.watch(allHoldingsProvider).valueOrNull ?? [];
   final marketData = ref.watch(marketDataProvider);
 
-  final map = <MarketGroup, List<HoldingDetail>>{};
-  double grandTotal = 0;
-
+  // 第一步：按 assetCode 合并（同代码不同账户的持仓加总）
+  final agg = <String, _MarketAcc>{};
   for (final h in holdings) {
-    final type = AssetType.parse(h.assetType);
-    final market = _resolveMarket(type, h.assetName);
-
+    if (h.quantity == 0) continue;
     final mkt = marketData[h.assetCode];
     final price = mkt?.price ?? h.currentPrice;
-    final mv = h.quantity * price;
-    final pnl = (price - h.costPrice) * h.quantity;
-    final pnlPct = h.costPrice != 0 ? (price - h.costPrice) / h.costPrice * 100 : 0.0;
+    final key = h.assetCode.isNotEmpty ? h.assetCode : h.assetName;
+    agg.putIfAbsent(
+      key,
+      () => _MarketAcc(
+        name: h.assetName,
+        code: h.assetCode,
+        type: h.assetType,
+        price: price,
+        changePercent: mkt?.changePercent ?? 0.0,
+      ),
+    );
+    agg[key]!.qty += h.quantity;
+    agg[key]!.totalCost += h.quantity * h.costPrice;
+    agg[key]!.price = price;
+    if (mkt != null) agg[key]!.changePercent = mkt.changePercent;
+  }
+
+  // 第二步：每个聚合后的资产分配到市场
+  final map = <MarketGroup, List<HoldingDetail>>{};
+  double grandTotal = 0;
+  for (final a in agg.values) {
+    final type = AssetType.parse(a.type);
+    final market = _resolveMarket(type, a.name);
+    final mv = a.qty * a.price;
+    final pnl = mv - a.totalCost;
+    final pnlPct = a.totalCost != 0 ? pnl / a.totalCost * 100 : 0.0;
 
     map.putIfAbsent(market, () => []).add(HoldingDetail(
-      assetName: h.assetName,
-      assetCode: h.assetCode,
-      assetType: h.assetType,
-      quantity: h.quantity,
-      costPrice: h.costPrice,
-      currentPrice: price,
+      assetName: a.name,
+      assetCode: a.code,
+      assetType: a.type,
+      quantity: a.qty,
+      costPrice: a.qty != 0 ? a.totalCost / a.qty : 0,
+      currentPrice: a.price,
       marketValue: mv,
       pnl: pnl,
       pnlPercent: pnlPct,
-      todayChangePercent: mkt?.changePercent ?? 0.0,
+      todayChangePercent: a.changePercent,
     ));
     grandTotal += mv;
   }
@@ -267,4 +287,17 @@ class _AggAcc {
   String name, code, type;
   double qty = 0, totalCost = 0, price;
   _AggAcc({required this.name, required this.code, required this.type, required this.price});
+}
+
+class _MarketAcc {
+  String name, code, type;
+  double qty = 0, totalCost = 0, price;
+  double changePercent;
+  _MarketAcc({
+    required this.name,
+    required this.code,
+    required this.type,
+    required this.price,
+    required this.changePercent,
+  });
 }

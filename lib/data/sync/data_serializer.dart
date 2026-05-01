@@ -34,59 +34,99 @@ class DataSerializer {
       'familyName': familyName,
       'version': 2,
       'exportedAt': DateTime.now().toIso8601String(),
-      'members': members.map((m) => {
-        'id': m.id, 'name': m.name, 'avatar': m.avatar,
-        'role': m.role, 'createdAt': m.createdAt.toIso8601String(),
-        'updatedAt': m.updatedAt.toIso8601String(),
-      }).toList(),
-      'accounts': accounts.map((a) => {
-        'id': a.id, 'memberId': a.memberId, 'name': a.name,
-        'type': a.type, 'institution': a.institution, 'subType': a.subType,
-        'createdAt': a.createdAt.toIso8601String(),
-        'updatedAt': a.updatedAt.toIso8601String(),
-      }).toList(),
-      'holdings': holdings.map((h) => {
-        'id': h.id, 'accountId': h.accountId, 'assetCode': h.assetCode,
-        'assetName': h.assetName, 'assetType': h.assetType,
-        'quantity': h.quantity, 'costPrice': h.costPrice,
-        'currentPrice': h.currentPrice, 'tags': h.tags, 'notes': h.notes,
-        'currency': h.currency,
-        'createdAt': h.createdAt.toIso8601String(),
-        'updatedAt': h.updatedAt.toIso8601String(),
-      }).toList(),
-      'fixedAssets': fixedAssets.map((f) => {
-        'id': f.id, 'memberId': f.memberId, 'type': f.type,
-        'name': f.name, 'estimatedValue': f.estimatedValue,
-        'details': f.details, 'notes': f.notes,
-        'createdAt': f.createdAt.toIso8601String(),
-        'updatedAt': f.updatedAt.toIso8601String(),
-      }).toList(),
-      'liabilities': liabilities.map((l) => {
-        'id': l.id, 'memberId': l.memberId, 'type': l.type,
-        'name': l.name, 'totalAmount': l.totalAmount,
-        'remainingAmount': l.remainingAmount,
-        'interestRate': l.interestRate,
-        'monthlyPayment': l.monthlyPayment, 'notes': l.notes,
-        'createdAt': l.createdAt.toIso8601String(),
-        'updatedAt': l.updatedAt.toIso8601String(),
-      }).toList(),
-      'investmentPlans': plans.map((p) => {
-        'id': p.id, 'accountId': p.accountId, 'assetCode': p.assetCode,
-        'assetName': p.assetName, 'amount': p.amount,
-        'frequency': p.frequency,
-        'nextDate': p.nextDate?.toIso8601String(),
-        'isActive': p.isActive,
-        'createdAt': p.createdAt.toIso8601String(),
-      }).toList(),
-      'assetSnapshots': snapshots.map((s) => {
-        'snapshotDate': s.snapshotDate.toIso8601String(),
-        'totalAssets': s.totalAssets,
-        'totalLiabilities': s.totalLiabilities,
-        'netWorth': s.netWorth,
-        'totalFixedAssets': s.totalFixedAssets,
-        'categoryBreakdown': s.categoryBreakdown,
-        'createdAt': s.createdAt.toIso8601String(),
-      }).toList(),
+      'members': members
+          .map((m) => {
+                'id': m.id,
+                'name': m.name,
+                'avatar': m.avatar,
+                'role': m.role,
+                'createdAt': m.createdAt.toIso8601String(),
+                'updatedAt': m.updatedAt.toIso8601String(),
+              })
+          .toList(),
+      'accounts': accounts
+          .map((a) => {
+                'id': a.id,
+                'memberId': a.memberId,
+                'name': a.name,
+                'type': a.type,
+                'institution': a.institution,
+                'subType': a.subType,
+                'financingAmount': a.financingAmount,
+                'financingCurrency': a.financingCurrency,
+                'createdAt': a.createdAt.toIso8601String(),
+                'updatedAt': a.updatedAt.toIso8601String(),
+              })
+          .toList(),
+      'holdings': holdings
+          .map((h) => {
+                'id': h.id,
+                'accountId': h.accountId,
+                'assetCode': h.assetCode,
+                'assetName': h.assetName,
+                'assetType': h.assetType,
+                'quantity': h.quantity,
+                'costPrice': h.costPrice,
+                'currentPrice': h.currentPrice,
+                'tags': h.tags,
+                'notes': h.notes,
+                'currency': h.currency,
+                'createdAt': h.createdAt.toIso8601String(),
+                'updatedAt': h.updatedAt.toIso8601String(),
+              })
+          .toList(),
+      'fixedAssets': fixedAssets
+          .map((f) => {
+                'id': f.id,
+                'memberId': f.memberId,
+                'type': f.type,
+                'name': f.name,
+                'estimatedValue': f.estimatedValue,
+                'details': f.details,
+                'notes': f.notes,
+                'createdAt': f.createdAt.toIso8601String(),
+                'updatedAt': f.updatedAt.toIso8601String(),
+              })
+          .toList(),
+      'liabilities': liabilities
+          .map((l) => {
+                'id': l.id,
+                'memberId': l.memberId,
+                'type': l.type,
+                'name': l.name,
+                'totalAmount': l.totalAmount,
+                'remainingAmount': l.remainingAmount,
+                'interestRate': l.interestRate,
+                'monthlyPayment': l.monthlyPayment,
+                'notes': l.notes,
+                'createdAt': l.createdAt.toIso8601String(),
+                'updatedAt': l.updatedAt.toIso8601String(),
+              })
+          .toList(),
+      'investmentPlans': plans
+          .map((p) => {
+                'id': p.id,
+                'accountId': p.accountId,
+                'assetCode': p.assetCode,
+                'assetName': p.assetName,
+                'amount': p.amount,
+                'frequency': p.frequency,
+                'nextDate': p.nextDate?.toIso8601String(),
+                'isActive': p.isActive,
+                'createdAt': p.createdAt.toIso8601String(),
+              })
+          .toList(),
+      'assetSnapshots': snapshots
+          .map((s) => {
+                'snapshotDate': s.snapshotDate.toIso8601String(),
+                'totalAssets': s.totalAssets,
+                'totalLiabilities': s.totalLiabilities,
+                'netWorth': s.netWorth,
+                'totalFixedAssets': s.totalFixedAssets,
+                'categoryBreakdown': s.categoryBreakdown,
+                'createdAt': s.createdAt.toIso8601String(),
+              })
+          .toList(),
       'userPreferences': userPrefs,
     };
   }
@@ -117,6 +157,9 @@ class DataSerializer {
           type: Value(a['type'] as String),
           institution: Value(a['institution'] as String? ?? ''),
           subType: Value(a['subType'] as String? ?? ''),
+          financingAmount:
+              Value((a['financingAmount'] as num?)?.toDouble() ?? 0),
+          financingCurrency: Value(a['financingCurrency'] as String? ?? 'CNY'),
           createdAt: Value(DateTime.parse(a['createdAt'] as String)),
           updatedAt: Value(DateTime.parse(a['updatedAt'] as String)),
         ));
@@ -140,7 +183,8 @@ class DataSerializer {
         if (type == AssetType.other.name) {
           final better = AssetClassifier.classify(code, name);
           if (better != AssetType.other) {
-            debugPrint('[Import] reclassified "$name" ($code): other → ${better.name}');
+            debugPrint(
+                '[Import] reclassified "$name" ($code): other → ${better.name}');
             type = better.name;
           }
         }
@@ -153,7 +197,9 @@ class DataSerializer {
           quantity: Value((h['quantity'] as num).toDouble()),
           costPrice: Value((h['costPrice'] as num).toDouble()),
           currentPrice: Value((h['currentPrice'] as num).toDouble()),
-          tags: Value(h['tags'] is List ? jsonEncode(h['tags']) : h['tags'] as String? ?? ''),
+          tags: Value(h['tags'] is List
+              ? jsonEncode(h['tags'])
+              : h['tags'] as String? ?? ''),
           notes: Value(h['notes'] as String? ?? ''),
           currency: Value(h['currency'] as String? ?? 'CNY'),
           createdAt: Value(DateTime.parse(h['createdAt'] as String)),
@@ -202,7 +248,9 @@ class DataSerializer {
           assetName: Value(p['assetName'] as String),
           amount: Value((p['amount'] as num).toDouble()),
           frequency: Value(p['frequency'] as String),
-          nextDate: Value(p['nextDate'] != null ? DateTime.parse(p['nextDate'] as String) : null),
+          nextDate: Value(p['nextDate'] != null
+              ? DateTime.parse(p['nextDate'] as String)
+              : null),
           isActive: Value(p['isActive'] as bool? ?? true),
           createdAt: Value(DateTime.parse(p['createdAt'] as String)),
         ));
@@ -215,7 +263,8 @@ class DataSerializer {
           totalAssets: Value((s['totalAssets'] as num).toDouble()),
           totalLiabilities: Value((s['totalLiabilities'] as num).toDouble()),
           netWorth: Value((s['netWorth'] as num).toDouble()),
-          totalFixedAssets: Value((s['totalFixedAssets'] as num?)?.toDouble() ?? 0),
+          totalFixedAssets:
+              Value((s['totalFixedAssets'] as num?)?.toDouble() ?? 0),
           categoryBreakdown: Value(s['categoryBreakdown'] as String? ?? '{}'),
           createdAt: Value(DateTime.parse(s['createdAt'] as String)),
         ));

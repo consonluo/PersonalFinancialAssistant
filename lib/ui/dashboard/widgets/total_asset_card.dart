@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/format_utils.dart';
+import '../../../providers/asset_summary_provider.dart' show CurrencyTotal;
 
 class TotalAssetCard extends StatelessWidget {
   final double totalAssets;
@@ -9,6 +10,8 @@ class TotalAssetCard extends StatelessWidget {
   final double todayChangePercent;
   final VoidCallback? onTapTotal;
   final VoidCallback? onTapToday;
+  /// 分币种细分（可选）。如果提供且包含多个非 CNY 币种，则显示原币明细
+  final List<CurrencyTotal>? currencyBreakdown;
 
   const TotalAssetCard({
     super.key,
@@ -18,6 +21,7 @@ class TotalAssetCard extends StatelessWidget {
     required this.todayChangePercent,
     this.onTapTotal,
     this.onTapToday,
+    this.currencyBreakdown,
   });
 
   @override
@@ -59,6 +63,15 @@ class TotalAssetCard extends StatelessWidget {
                   FormatUtils.formatFullCurrency(totalAssets),
                   style: const TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.w700, letterSpacing: 1),
                 ),
+                if (_shouldShowBreakdown()) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    _formatBreakdownLine(),
+                    style: TextStyle(color: Colors.white.withValues(alpha: 0.75), fontSize: 12),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
               ],
             ),
           ),
@@ -94,5 +107,21 @@ class TotalAssetCard extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  bool _shouldShowBreakdown() {
+    final cb = currencyBreakdown;
+    if (cb == null || cb.isEmpty) return false;
+    // 仅当存在非 CNY 币种时才展示
+    return cb.any((c) => c.currency != 'CNY' && c.amountInCurrency > 0);
+  }
+
+  String _formatBreakdownLine() {
+    final cb = currencyBreakdown!;
+    final parts = cb
+        .where((c) => c.amountInCurrency > 0)
+        .map((c) => FormatUtils.formatCurrency(c.amountInCurrency, currency: c.currency))
+        .toList();
+    return parts.join(' · ');
   }
 }

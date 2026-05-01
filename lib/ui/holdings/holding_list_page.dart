@@ -82,7 +82,7 @@ class HoldingListPage extends ConsumerWidget {
                               Expanded(
                                 child: Text(h.assetName, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15), overflow: TextOverflow.ellipsis),
                               ),
-                              Text(FormatUtils.formatFullCurrency(mv), style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+                              Text(FormatUtils.formatFullCurrency(mv, currency: h.currency), style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
                             ],
                           ),
                           const SizedBox(height: 8),
@@ -99,9 +99,9 @@ class HoldingListPage extends ConsumerWidget {
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                Text('投入成本 ${FormatUtils.formatCurrency(totalCost)}', style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+                                Text('投入成本 ${FormatUtils.formatCurrency(totalCost, currency: h.currency)}', style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
                                 Text(
-                                  '收益 ${pnl >= 0 ? "+" : ""}${FormatUtils.formatCurrency(pnl)}',
+                                  '收益 ${pnl >= 0 ? "+" : ""}${FormatUtils.formatCurrency(pnl, currency: h.currency)}',
                                   style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: isUp ? AppColors.gain : AppColors.loss),
                                 ),
                               ],
@@ -118,7 +118,7 @@ class HoldingListPage extends ConsumerWidget {
                                 if (h.quantity > 1)
                                   Text('净值 ${h.currentPrice.toStringAsFixed(4)}', style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
                                 Text(
-                                  '收益 ${pnl >= 0 ? "+" : ""}${FormatUtils.formatCurrency(pnl)}',
+                                  '收益 ${pnl >= 0 ? "+" : ""}${FormatUtils.formatCurrency(pnl, currency: h.currency)}',
                                   style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: isUp ? AppColors.gain : AppColors.loss),
                                 ),
                               ],

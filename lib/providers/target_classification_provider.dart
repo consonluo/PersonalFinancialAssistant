@@ -109,28 +109,117 @@ ${jsonEncode(holdingList)}
 - 名称含"港股通""港股""恒生"的一律归"港股"
 - 如果某个预定义分类没有对应持仓，则不输出该分类
 
-输出要求（必须遵守，否则解析失败）：
-- 只输出一个 JSON 对象，不要 markdown 代码块、不要前后解释文字
-- 每个 holdings 项的 reason 不超过 10 个字，description 不超过 20 个字，以控制总长度
+输出要求（必须严格遵守，否则解析失败）：
+- 只输出一个合法的 JSON 对象，**禁止**任何前后解释、说明、markdown 代码块（不要 ```json）
+- 字符串必须使用双引号 ""，不要使用单引号 ''
+- 不要在最后一个元素后添加多余逗号
+- 不要写注释（// 或 /* */）
+- 每个 holdings 项的 reason 不超过 10 个字，description 不超过 20 个字
+- id 字段必须使用上述持仓列表中实际存在的 uuid，不要自创
+
+第一个字符必须是 {，最后一个字符必须是 }。
 
 返回格式示例：
 {"groups":[{"name":"分类名","description":"短描述","holdings":[{"id":"持仓uuid","reason":"短理由"}]}]}''';
   }
 
+  /// 鲁棒地从 AI 响应中提取并解析 JSON 对象
+  ///
+  /// 处理常见问题：
+  /// - markdown 代码块包裹（```json ... ```）
+  /// - 前后夹杂自然语言/解释文字
+  /// - 尾部多余逗号 `,}` `,]`
+  /// - 单引号字符串
+  /// - 截断的 JSON（流式过早结束）
   static Map<String, dynamic> _parseGroupsJson(String raw) {
-    var s = raw
-        .replaceAll(RegExp(r'```json\s*'), '')
-        .replaceAll(RegExp(r'```\s*'), '')
-        .trim();
-    final m = RegExp(r'```(?:json)?\s*([\s\S]*?)\s*```', caseSensitive: false).firstMatch(s);
-    if (m != null) s = m.group(1)!.trim();
-    final start = s.indexOf('{');
-    final end = s.lastIndexOf('}');
-    if (start < 0 || end <= start) {
-      throw FormatException('响应中未找到 JSON 对象');
+    // 1. 先尝试提取 markdown 代码块内容
+    var s = raw.trim();
+    final mdMatch = RegExp(r'```(?:json)?\s*([\s\S]*?)\s*```', caseSensitive: false).firstMatch(s);
+    if (mdMatch != null) {
+      s = mdMatch.group(1)!.trim();
+    } else {
+      // 没有完整 markdown 包裹的情况下，去掉残留的 ```json / ```
+      s = s
+          .replaceAll(RegExp(r'```json\s*', caseSensitive: false), '')
+          .replaceAll(RegExp(r'```\s*'), '')
+          .trim();
     }
-    s = s.substring(start, end + 1);
-    return jsonDecode(s) as Map<String, dynamic>;
+
+    // 2. 用括号计数找到第一个完整闭合的 JSON 对象
+    final extracted = _extractFirstJsonObject(s);
+    if (extracted == null) {
+      throw FormatException('响应中未找到完整的 JSON 对象');
+    }
+    s = extracted;
+
+    // 3. 直接尝试解析
+    try {
+      return jsonDecode(s) as Map<String, dynamic>;
+    } catch (_) {
+      // 4. 容错修复后重试
+      var fixed = s
+          // 去掉对象/数组尾部多余逗号
+          .replaceAll(RegExp(r',(\s*[}\]])'), r'$1')
+          // 去掉行尾的 // 注释
+          .replaceAll(RegExp(r'//[^\n]*'), '');
+      try {
+        return jsonDecode(fixed) as Map<String, dynamic>;
+      } catch (e) {
+        // 5. 最后尝试：把单引号字符串转为双引号（仅当看起来是 JSON 形态）
+        fixed = _replaceUnquotedSingleStrings(fixed);
+        return jsonDecode(fixed) as Map<String, dynamic>;
+      }
+    }
+  }
+
+  /// 用括号计数从字符串中提取首个完整闭合的 JSON 对象
+  static String? _extractFirstJsonObject(String s) {
+    final start = s.indexOf('{');
+    if (start < 0) return null;
+
+    var depth = 0;
+    var inString = false;
+    var escape = false;
+    for (var i = start; i < s.length; i++) {
+      final c = s[i];
+      if (escape) {
+        escape = false;
+        continue;
+      }
+      if (c == r'\') {
+        escape = true;
+        continue;
+      }
+      if (c == '"') {
+        inString = !inString;
+        continue;
+      }
+      if (inString) continue;
+      if (c == '{') {
+        depth++;
+      } else if (c == '}') {
+        depth--;
+        if (depth == 0) {
+          return s.substring(start, i + 1);
+        }
+      }
+    }
+    // 如果整个字符串没有完整闭合，返回 null（AI 输出被截断）
+    return null;
+  }
+
+  /// 把不在双引号上下文中的单引号字符串改为双引号
+  /// 简单实现：仅处理形如 'xxx': 或 :'xxx' 这种模式
+  static String _replaceUnquotedSingleStrings(String s) {
+    // 把 'xxx' 替换为 "xxx"，但仅当 xxx 内部没有双引号时
+    return s.replaceAllMapped(
+      RegExp(r"'([^'\\]*(?:\\.[^'\\]*)*)'"),
+      (m) {
+        final content = m.group(1) ?? '';
+        if (content.contains('"')) return m.group(0)!;
+        return '"$content"';
+      },
+    );
   }
 
   TargetClassificationNotifier(this._ref) : super(const TargetClassificationState()) {
@@ -162,6 +251,25 @@ ${jsonEncode(holdingList)}
     if (holdings.isEmpty) return [];
 
     final holdingMap = {for (final h in holdings) h.id: h};
+    // 按 assetCode 跨账户合并：相同代码的持仓在 AI 分类里只展示一行
+    final codeAggregates = <String, _CodeAgg>{};
+    for (final h in holdings) {
+      final key = h.assetCode.isNotEmpty ? h.assetCode : '__id:${h.id}';
+      final mkt = marketData[h.assetCode];
+      final price = mkt?.price ?? h.currentPrice;
+      codeAggregates.putIfAbsent(key, () => _CodeAgg(
+        firstId: h.id, name: h.assetName, code: h.assetCode, price: price,
+      ));
+      final acc = codeAggregates[key]!;
+      acc.qty += h.quantity;
+      acc.totalCost += h.quantity * h.costPrice;
+      acc.price = price;
+    }
+    final idToCodeKey = {
+      for (final h in holdings)
+        h.id: h.assetCode.isNotEmpty ? h.assetCode : '__id:${h.id}'
+    };
+
     final aiGroups = data['groups'] as List? ?? [];
 
     double grandTotal = 0;
@@ -169,6 +277,7 @@ ${jsonEncode(holdingList)}
 
     for (final g in aiGroups) {
       final items = <TargetHolding>[];
+      final seenCodes = <String>{};
       double groupMv = 0, groupPnl = 0;
 
       for (final item in (g['holdings'] as List? ?? [])) {
@@ -177,14 +286,21 @@ ${jsonEncode(holdingList)}
         final h = holdingMap[id];
         if (h == null) continue;
 
-        final mkt = marketData[h.assetCode];
-        final price = mkt?.price ?? h.currentPrice;
-        final mv = h.quantity * price;
-        final pnl = (price - h.costPrice) * h.quantity;
-        final pnlPct = h.costPrice > 0 ? (price - h.costPrice) / h.costPrice * 100 : 0.0;
+        // 同一组内若 AI 给出多条相同代码，只保留第一条
+        final codeKey = idToCodeKey[id] ?? '__id:$id';
+        if (seenCodes.contains(codeKey)) continue;
+        seenCodes.add(codeKey);
+
+        final agg = codeAggregates[codeKey];
+        if (agg == null) continue;
+
+        final mv = agg.qty * agg.price;
+        final pnl = mv - agg.totalCost;
+        final avgCost = agg.qty != 0 ? agg.totalCost / agg.qty : 0.0;
+        final pnlPct = avgCost > 0 ? (agg.price - avgCost) / avgCost * 100 : 0.0;
 
         items.add(TargetHolding(
-          id: id, name: h.assetName, code: h.assetCode,
+          id: agg.firstId, name: agg.name, code: agg.code,
           reason: reason, marketValue: mv, pnl: pnl, pnlPercent: pnlPct,
         ));
         groupMv += mv;
@@ -320,4 +436,20 @@ class _TempGroup {
   final double mv, pnl;
   _TempGroup({required this.name, required this.description,
     required this.holdings, required this.mv, required this.pnl});
+}
+
+/// 按 assetCode 合并持仓的临时聚合
+class _CodeAgg {
+  final String firstId;
+  final String name;
+  final String code;
+  double qty = 0;
+  double totalCost = 0;
+  double price;
+  _CodeAgg({
+    required this.firstId,
+    required this.name,
+    required this.code,
+    required this.price,
+  });
 }

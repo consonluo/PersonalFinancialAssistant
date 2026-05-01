@@ -8,6 +8,10 @@ class MarketDataModel {
   final double volume;
   final DateTime updatedAt;
 
+  /// 行情币种（CNY/HKD/USD/EUR/GBP）。空字符串视为 CNY。
+  /// 由各 API 按数据来源标注：东财 A 股=CNY、东财港股=HKD、新浪美股=USD、基金=CNY。
+  final String currency;
+
   const MarketDataModel({
     required this.assetCode,
     this.name = '',
@@ -16,6 +20,7 @@ class MarketDataModel {
     this.changePercent = 0,
     this.volume = 0,
     required this.updatedAt,
+    this.currency = 'CNY',
   });
 
   bool get isUp => change > 0;
@@ -31,6 +36,7 @@ class MarketDataModel {
       changePercent: (json['changePercent'] as num?)?.toDouble() ?? 0,
       volume: (json['volume'] as num?)?.toDouble() ?? 0,
       updatedAt: DateTime.parse(json['updatedAt'] as String),
+      currency: json['currency'] as String? ?? 'CNY',
     );
   }
 
@@ -42,5 +48,6 @@ class MarketDataModel {
         'changePercent': changePercent,
         'volume': volume,
         'updatedAt': updatedAt.toIso8601String(),
+        'currency': currency,
       };
 }

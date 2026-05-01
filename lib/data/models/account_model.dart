@@ -8,6 +8,8 @@ class AccountModel {
   final AccountType type;
   final String institution;
   final AccountSubType? subType;
+  final double financingAmount;
+  final String financingCurrency;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -18,6 +20,8 @@ class AccountModel {
     required this.type,
     this.institution = '',
     this.subType,
+    this.financingAmount = 0,
+    this.financingCurrency = 'CNY',
     required this.createdAt,
     required this.updatedAt,
   });
@@ -38,6 +42,8 @@ class AccountModel {
               orElse: () => AccountSubType.checking,
             )
           : null,
+      financingAmount: (json['financingAmount'] as num?)?.toDouble() ?? 0,
+      financingCurrency: json['financingCurrency'] as String? ?? 'CNY',
       createdAt: DateTime.parse(json['createdAt'] as String),
       updatedAt: DateTime.parse(json['updatedAt'] as String),
     );
@@ -50,6 +56,8 @@ class AccountModel {
         'type': type.name,
         'institution': institution,
         'subType': subType?.name ?? '',
+        'financingAmount': financingAmount,
+        'financingCurrency': financingCurrency,
         'createdAt': createdAt.toIso8601String(),
         'updatedAt': updatedAt.toIso8601String(),
       };
@@ -61,6 +69,8 @@ class AccountModel {
     AccountType? type,
     String? institution,
     AccountSubType? subType,
+    double? financingAmount,
+    String? financingCurrency,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -71,6 +81,8 @@ class AccountModel {
       type: type ?? this.type,
       institution: institution ?? this.institution,
       subType: subType ?? this.subType,
+      financingAmount: financingAmount ?? this.financingAmount,
+      financingCurrency: financingCurrency ?? this.financingCurrency,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );

@@ -36,7 +36,8 @@ class MarketDataNotifier extends StateNotifier<Map<String, MarketDataModel>> {
   Future<void> refreshAll() async {
     var holdingsAsync = _ref.read(allHoldingsProvider);
     // StreamProvider 可能还没有数据，等待首次加载完成
-    if (holdingsAsync.isLoading || (!holdingsAsync.hasValue && !holdingsAsync.hasError)) {
+    if (holdingsAsync.isLoading ||
+        (!holdingsAsync.hasValue && !holdingsAsync.hasError)) {
       debugPrint('[Market] holdings not ready, waiting...');
       await Future.delayed(const Duration(seconds: 2));
       holdingsAsync = _ref.read(allHoldingsProvider);
@@ -54,19 +55,24 @@ class MarketDataNotifier extends StateNotifier<Map<String, MarketDataModel>> {
     final hkCodes = <String>[];
     final usCodes = <String>[];
     final fundCodes = <String>[];
+    final codeCurrencyHints = <String, String>{};
 
     for (final h in holdings) {
       if (h.quantity == 0) continue;
       final code = h.assetCode;
+      if (code.isNotEmpty && h.currency.isNotEmpty) {
+        codeCurrencyHints[_normalizeCodeKey(code)] = h.currency.toUpperCase();
+      }
       final type = AssetType.values.firstWhere(
         (e) => e.name == h.assetType,
         orElse: () => AssetType.other,
       );
 
       // 判断代码形态
-      final pureDigit = code.replaceAll(RegExp(r'\.(SH|SZ|HK|OF|US)$', caseSensitive: false), '');
+      final pureDigit = code.replaceAll(
+          RegExp(r'\.(SH|SZ|HK|OF|US)$', caseSensitive: false), '');
       final is6Digit = RegExp(r'^\d{6}$').hasMatch(pureDigit);
-      final is5Digit = RegExp(r'^\d{5}$').hasMatch(pureDigit);
+      final is5Digit = RegExp(r'^\d{1,5}$').hasMatch(pureDigit);
       final isUsLike = RegExp(r'^[A-Za-z]{1,5}$').hasMatch(pureDigit) ||
           code.toUpperCase().endsWith('.US');
       final isHkLike = is5Digit || code.toUpperCase().endsWith('.HK');
@@ -113,7 +119,8 @@ class MarketDataNotifier extends StateNotifier<Map<String, MarketDataModel>> {
       }
     }
 
-    debugPrint('[Market] codes: A=${aCodes.length} HK=${hkCodes.length} US=${usCodes.length} Fund=${fundCodes.length}');
+    debugPrint(
+        '[Market] codes: A=${aCodes.length} HK=${hkCodes.length} US=${usCodes.length} Fund=${fundCodes.length}');
     if (aCodes.isNotEmpty) debugPrint('[Market] aCodes: $aCodes');
     if (fundCodes.isNotEmpty) debugPrint('[Market] fundCodes: $fundCodes');
 
@@ -121,13 +128,14 @@ class MarketDataNotifier extends StateNotifier<Map<String, MarketDataModel>> {
 
     final futures = <Future<List<MarketDataModel>>>[];
     if (aCodes.isNotEmpty || hkCodes.isNotEmpty) {
-      futures.add(_eastMoneyApi.getQuotes([...aCodes, ...hkCodes]));
+      futures.add(_fetchWithRetry(
+          () => _eastMoneyApi.getQuotes([...aCodes, ...hkCodes])));
     }
     if (usCodes.isNotEmpty) {
-      futures.add(_sinaApi.getQuotes(usCodes));
+      futures.add(_fetchWithRetry(() => _sinaApi.getQuotes(usCodes)));
     }
     if (fundCodes.isNotEmpty) {
-      futures.add(_fundApi.getQuotes(fundCodes));
+      futures.add(_fetchWithRetry(() => _fundApi.getQuotes(fundCodes)));
     }
 
     final allResults = await Future.wait(futures, eagerError: false);
@@ -138,6 +146,26 @@ class MarketDataNotifier extends StateNotifier<Map<String, MarketDataModel>> {
 
     // API 获取的代码集合
     final fetchedCodes = results.map((r) => r.assetCode).toSet();
+    // 美股兜底：新浪拿不到时，再尝试东财（部分美股可返回）
+    final missingUsCodes =
+        usCodes.where((c) => !fetchedCodes.contains(c)).toList();
+    if (missingUsCodes.isNotEmpty) {
+      try {
+        final usFallback = await _fetchWithRetry(
+          () => _eastMoneyApi.getQuotes(missingUsCodes),
+          attempts: 2,
+        );
+        if (usFallback.isNotEmpty) {
+          results.addAll(usFallback);
+          fetchedCodes.addAll(usFallback.map((e) => e.assetCode));
+          debugPrint(
+              '[Market] us fallback by eastmoney: ${usFallback.length}/${missingUsCodes.length}');
+        }
+      } catch (e) {
+        debugPrint('[Market] us fallback failed: $e');
+      }
+    }
+
     final allRequestedCodes = {...aCodes, ...hkCodes, ...usCodes, ...fundCodes};
     final missingCodes = allRequestedCodes.difference(fetchedCodes);
 
@@ -156,12 +184,18 @@ class MarketDataNotifier extends StateNotifier<Map<String, MarketDataModel>> {
               changePercent: c.changePercent ?? 0,
               volume: c.volume ?? 0,
               updatedAt: c.updatedAt ?? DateTime.now(),
+              currency: state[c.assetCode]?.currency ??
+                  codeCurrencyHints[_normalizeCodeKey(c.assetCode)] ??
+                  _inferCurrencyByCode(c.assetCode),
             ));
           }
         }
-        final stillMissing = missingCodes.difference(results.map((r) => r.assetCode).toSet());
-        debugPrint('[Market] cache fallback: ${missingCodes.length} missing, recovered ${missingCodes.length - stillMissing.length}');
-        if (stillMissing.isNotEmpty) debugPrint('[Market] still missing: $stillMissing');
+        final stillMissing =
+            missingCodes.difference(results.map((r) => r.assetCode).toSet());
+        debugPrint(
+            '[Market] cache fallback: ${missingCodes.length} missing, recovered ${missingCodes.length - stillMissing.length}');
+        if (stillMissing.isNotEmpty)
+          debugPrint('[Market] still missing: $stillMissing');
       } catch (e) {
         debugPrint('[Market] cache fallback error: $e');
       }
@@ -177,7 +211,8 @@ class MarketDataNotifier extends StateNotifier<Map<String, MarketDataModel>> {
     state = newState;
 
     // 仅将新获取的数据更新到缓存（不用缓存覆盖缓存）
-    final freshResults = results.where((r) => fetchedCodes.contains(r.assetCode)).toList();
+    final freshResults =
+        results.where((r) => fetchedCodes.contains(r.assetCode)).toList();
     _updateDbCache(freshResults);
 
     // 自动更新持仓表中的现价
@@ -190,7 +225,8 @@ class MarketDataNotifier extends StateNotifier<Map<String, MarketDataModel>> {
     try {
       final db = _ref.read(databaseProvider);
       final gotLiveQuotes = fetchedCodes.isNotEmpty;
-      await SnapshotService(db).takeSnapshotIfNeeded(forceUpdateToday: gotLiveQuotes);
+      await SnapshotService(db)
+          .takeSnapshotIfNeeded(forceUpdateToday: gotLiveQuotes);
       if (gotLiveQuotes) {
         _ref.invalidate(snapshotListProvider);
         try {
@@ -205,50 +241,172 @@ class MarketDataNotifier extends StateNotifier<Map<String, MarketDataModel>> {
   /// 深圳: 159xxx
   /// 排除 519xxx（LOF/开放式基金，走净值接口）
   static bool _isExchangeListedETF(String code) {
-    final pure = code.replaceAll(
-        RegExp(r'\.(SH|SZ|OF)$', caseSensitive: false), '');
+    final pure =
+        code.replaceAll(RegExp(r'\.(SH|SZ|OF)$', caseSensitive: false), '');
     if (!RegExp(r'^\d{6}$').hasMatch(pure)) return false;
     if (pure.startsWith('159')) return true;
     final prefix3 = pure.substring(0, 3);
     return const {
-      '510', '511', '512', '513', '515', '516', '518',
-      '520', '523', '560', '561', '562', '563', '588',
+      '510',
+      '511',
+      '512',
+      '513',
+      '515',
+      '516',
+      '518',
+      '520',
+      '523',
+      '560',
+      '561',
+      '562',
+      '563',
+      '588',
     }.contains(prefix3);
   }
 
   /// 将最新行情价格写入持仓表的 currentPrice 字段
+  /// 包含异常检测：价格变化超过阈值时标注但不更新
   Future<void> _updateHoldingPrices(List<MarketDataModel> data) async {
     if (data.isEmpty) return;
     try {
       final db = _ref.read(databaseProvider);
       final holdings = _ref.read(allHoldingsProvider).valueOrNull ?? [];
-      final priceMap = {for (final d in data) d.assetCode: d.price};
+      final priceMap = <String, double>{};
+      for (final d in data) {
+        for (final key in _codeAliases(d.assetCode)) {
+          priceMap[key] = d.price;
+        }
+      }
+      var updated = 0;
+      var skipped = 0;
 
       for (final h in holdings) {
-        // 精确匹配或去后缀匹配（美股代码可能带.US/.O/.N后缀）
         final code = h.assetCode;
-        final normalizedCode = code.replaceAll(RegExp(r'\.(US|O|N|HK|SH|SZ|OF)$', caseSensitive: false), '').toUpperCase();
-        final newPrice = priceMap[code] ?? priceMap[normalizedCode];
-        if (newPrice != null && newPrice > 0 && newPrice != h.currentPrice) {
-          await db.updateHolding(HoldingsCompanion(
-            id: Value(h.id),
-            accountId: Value(h.accountId),
-            assetCode: Value(h.assetCode),
-            assetName: Value(h.assetName),
-            assetType: Value(h.assetType),
-            quantity: Value(h.quantity),
-            costPrice: Value(h.costPrice),
-            currentPrice: Value(newPrice),
-            tags: Value(h.tags),
-            notes: Value(h.notes),
-            createdAt: Value(h.createdAt),
-            updatedAt: Value(DateTime.now()),
-          ));
+        double? newPrice;
+        for (final key in _codeAliases(code)) {
+          if (priceMap.containsKey(key)) {
+            newPrice = priceMap[key];
+            break;
+          }
         }
+        if (newPrice == null || newPrice <= 0 || newPrice == h.currentPrice)
+          continue;
+
+        // 异常检测 1: 持仓数量异常（负数或极大值）
+        if (h.quantity < 0 || h.quantity > 1e9) {
+          debugPrint(
+              '[MarketData] ⚠️ 跳过异常持仓 "${h.assetName}"($code): 数量=${h.quantity}');
+          skipped++;
+          continue;
+        }
+
+        // 异常检测 2: 价格变化幅度过大（单次超过 50% 视为可疑）
+        if (h.currentPrice > 0) {
+          final changePct =
+              ((newPrice - h.currentPrice) / h.currentPrice).abs();
+          if (changePct > 0.5) {
+            final oldMv = h.quantity * h.currentPrice;
+            final newMv = h.quantity * newPrice;
+            debugPrint('[MarketData] ⚠️ 价格变化异常 "${h.assetName}"($code): '
+                '${h.currentPrice} → $newPrice (${(changePct * 100).toStringAsFixed(1)}%), '
+                '市值 ${oldMv.toStringAsFixed(0)} → ${newMv.toStringAsFixed(0)}');
+            // 将异常信息记录到 notes，但仍然更新价格（行情 API 返回的通常是对的）
+            final warning =
+                '[行情异常 ${DateTime.now().toString().substring(0, 16)}] '
+                '价格变化 ${(changePct * 100).toStringAsFixed(1)}%';
+            final existingNotes = h.notes ?? '';
+            final newNotes = existingNotes.contains('[行情异常')
+                ? existingNotes.replaceAll(
+                    RegExp(r'\[行情异常[^\]]*\][^\n]*'), warning)
+                : (existingNotes.isEmpty
+                    ? warning
+                    : '$existingNotes\n$warning');
+            await db.updateHolding(HoldingsCompanion(
+              id: Value(h.id),
+              accountId: Value(h.accountId),
+              assetCode: Value(h.assetCode),
+              assetName: Value(h.assetName),
+              assetType: Value(h.assetType),
+              quantity: Value(h.quantity),
+              costPrice: Value(h.costPrice),
+              currentPrice: Value(newPrice),
+              tags: Value(h.tags),
+              notes: Value(newNotes),
+              createdAt: Value(h.createdAt),
+              updatedAt: Value(DateTime.now()),
+            ));
+            updated++;
+            continue;
+          }
+        }
+
+        await db.updateHolding(HoldingsCompanion(
+          id: Value(h.id),
+          accountId: Value(h.accountId),
+          assetCode: Value(h.assetCode),
+          assetName: Value(h.assetName),
+          assetType: Value(h.assetType),
+          quantity: Value(h.quantity),
+          costPrice: Value(h.costPrice),
+          currentPrice: Value(newPrice),
+          tags: Value(h.tags),
+          notes: Value(h.notes),
+          createdAt: Value(h.createdAt),
+          updatedAt: Value(DateTime.now()),
+        ));
+        updated++;
+      }
+      if (updated > 0 || skipped > 0) {
+        debugPrint('[MarketData] 持仓现价更新: $updated 条更新, $skipped 条跳过');
       }
     } catch (e) {
       debugPrint('[MarketData] 更新持仓现价失败: $e');
     }
+  }
+
+  Future<List<MarketDataModel>> _fetchWithRetry(
+    Future<List<MarketDataModel>> Function() fn, {
+    int attempts = 2,
+  }) async {
+    Object? lastError;
+    for (var i = 1; i <= attempts; i++) {
+      try {
+        return await fn();
+      } catch (e) {
+        lastError = e;
+        if (i < attempts) {
+          await Future.delayed(Duration(milliseconds: 400 * i));
+        }
+      }
+    }
+    throw lastError ?? Exception('fetch failed');
+  }
+
+  static String _normalizeCodeKey(String code) {
+    final noSuffix =
+        code.toUpperCase().replaceAll(RegExp(r'\.(US|HK|SH|SZ|OF|O|N)$'), '');
+    return noSuffix;
+  }
+
+  static Iterable<String> _codeAliases(String code) sync* {
+    final raw = code.trim();
+    if (raw.isEmpty) return;
+    final upper = raw.toUpperCase();
+    final normalized = _normalizeCodeKey(raw);
+    yield raw;
+    yield upper;
+    yield normalized;
+    if (RegExp(r'^\d{1,5}$').hasMatch(normalized)) {
+      yield normalized.padLeft(5, '0');
+      yield normalized.replaceFirst(RegExp(r'^0+'), '');
+    }
+  }
+
+  static String _inferCurrencyByCode(String code) {
+    final c = _normalizeCodeKey(code);
+    if (RegExp(r'^[A-Z]{1,5}$').hasMatch(c)) return 'USD';
+    if (RegExp(r'^\d{1,5}$').hasMatch(c)) return 'HKD';
+    return 'CNY';
   }
 
   static const _classifierVersion = 3; // 每次分类器规则变更时递增
@@ -305,12 +463,15 @@ class MarketDataNotifier extends StateNotifier<Map<String, MarketDataModel>> {
             updatedAt: Value(h.updatedAt),
           ));
           fixed++;
-          debugPrint('[Market] reclassified "${h.assetName}": ${h.assetType} → $newType');
+          debugPrint(
+              '[Market] reclassified "${h.assetName}": ${h.assetType} → $newType');
         }
       }
 
-      if (fullRescan) await prefs.setInt('classifier_version', _classifierVersion);
-      debugPrint('[Market] reclassify: scanned ${holdings.length}, fixed $fixed${fullRescan ? ' (full rescan v$_classifierVersion)' : ''}');
+      if (fullRescan)
+        await prefs.setInt('classifier_version', _classifierVersion);
+      debugPrint(
+          '[Market] reclassify: scanned ${holdings.length}, fixed $fixed${fullRescan ? ' (full rescan v$_classifierVersion)' : ''}');
     } catch (e) {
       debugPrint('[Market] reclassify error: $e');
     }
@@ -318,15 +479,17 @@ class MarketDataNotifier extends StateNotifier<Map<String, MarketDataModel>> {
 
   Future<void> _updateDbCache(List<MarketDataModel> data) async {
     final db = _ref.read(databaseProvider);
-    final entries = data.map((d) => MarketCacheCompanion(
-      assetCode: Value(d.assetCode),
-      price: Value(d.price),
-      change: Value(d.change),
-      changePercent: Value(d.changePercent),
-      volume: Value(d.volume),
-      name: Value(d.name),
-      updatedAt: Value(d.updatedAt),
-    )).toList();
+    final entries = data
+        .map((d) => MarketCacheCompanion(
+              assetCode: Value(d.assetCode),
+              price: Value(d.price),
+              change: Value(d.change),
+              changePercent: Value(d.changePercent),
+              volume: Value(d.volume),
+              name: Value(d.name),
+              updatedAt: Value(d.updatedAt),
+            ))
+        .toList();
     await db.upsertMarketCacheBatch(entries);
   }
 

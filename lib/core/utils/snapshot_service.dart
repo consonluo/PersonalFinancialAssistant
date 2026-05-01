@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:drift/drift.dart';
 import '../../data/database/app_database.dart';
+import 'exchange_rate_service.dart';
 
 /// 资产快照服务 - 记录每日资产数据
 class SnapshotService {
@@ -45,6 +46,14 @@ class SnapshotService {
     for (final l in liabilities) {
       totalLiability += l.remainingAmount;
     }
+    final accounts = await db.getAllAccounts();
+    for (final a in accounts) {
+      if (a.type != 'securities' || a.financingAmount <= 0) continue;
+      final currency =
+          a.financingCurrency.isEmpty ? 'CNY' : a.financingCurrency;
+      final rate = await ExchangeRateService.getRate(currency);
+      totalLiability += a.financingAmount * rate;
+    }
 
     final totalAssets = totalInvestment + totalFixed;
     final netWorth = totalAssets - totalLiability;
@@ -52,7 +61,9 @@ class SnapshotService {
     if (existing != null) {
       if (!forceUpdateToday) {
         final needsUpdate = existing.totalAssets == 0 ||
-            (totalAssets > 0 && (existing.totalAssets - totalAssets).abs() / totalAssets > 0.01);
+            (totalAssets > 0 &&
+                (existing.totalAssets - totalAssets).abs() / totalAssets >
+                    0.01);
         if (!needsUpdate) return;
       }
       await db.deleteSnapshotById(existing.id);

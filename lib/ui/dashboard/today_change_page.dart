@@ -114,6 +114,7 @@ class _TodayChangePageState extends ConsumerState<TodayChangePage> {
         hasMarketData: market != null,
         currentPrice: market?.price,
         costPrice: h.costPrice,
+        currency: h.currency.isEmpty ? 'CNY' : h.currency,
         updatedAt: market?.updatedAt,
       ));
     }
@@ -144,6 +145,7 @@ class _HoldingItem {
   final bool hasMarketData;
   final double? currentPrice;
   final double costPrice;
+  final String currency;
   final DateTime? updatedAt;
 
   const _HoldingItem({
@@ -158,6 +160,7 @@ class _HoldingItem {
     required this.hasMarketData,
     this.currentPrice,
     this.costPrice = 0,
+    this.currency = 'CNY',
     this.updatedAt,
   });
 }
@@ -307,8 +310,8 @@ class _HoldingTile extends StatelessWidget {
             ),
             child: Row(
               children: [
-                _statCol('市值', FormatUtils.formatCurrency(item.marketValue), AppColors.textPrimary),
-                _statCol('总收益', FormatUtils.formatChange(item.totalProfit), profitColor),
+                _statCol('市值', FormatUtils.formatCurrency(item.marketValue, currency: item.currency), AppColors.textPrimary),
+                _statCol('总收益', FormatUtils.formatChange(item.totalProfit, currency: item.currency), profitColor),
                 _statCol('总收益率', FormatUtils.formatPercent(item.totalProfitPct), profitColor),
                 if (!item.hasMarketData)
                   Expanded(child: Row(
