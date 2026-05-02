@@ -156,10 +156,11 @@ class _TodayChangePageState extends ConsumerState<TodayChangePage> {
           hasMarketData: effectiveMarket != null,
           currentPrice: effectiveMarket?.price,
           costPrice: h.costPrice,
-          currency:
-              (effectiveMarket?.currency.isNotEmpty == true)
-                  ? effectiveMarket!.currency
-                  : (h.currency.isEmpty ? 'CNY' : h.currency),
+          currency: () {
+            final m = effectiveMarket;
+            if (m != null && m.currency.isNotEmpty) return m.currency;
+            return h.currency.isEmpty ? 'CNY' : h.currency;
+          }(),
           updatedAt: effectiveMarket?.updatedAt,
           quoteSource: effectiveMarket?.source,
         ),

@@ -31,17 +31,19 @@ class CategoryDetailPage extends ConsumerWidget {
             if (h.quantity == 0) continue;
             final market = marketData[h.assetCode];
             final price = market?.price ?? h.currentPrice;
+            final quoteCur = market?.currency;
+            final resolvedCur =
+                (quoteCur != null && quoteCur.isNotEmpty)
+                    ? quoteCur
+                    : (h.currency.isEmpty ? 'CNY' : h.currency);
             final key =
-                '${h.assetCode.isNotEmpty ? h.assetCode : '__name:${h.assetName}'}_${(market?.currency.isNotEmpty == true) ? market!.currency : (h.currency.isEmpty ? 'CNY' : h.currency)}';
+                '${h.assetCode.isNotEmpty ? h.assetCode : '__name:${h.assetName}'}_$resolvedCur';
             final m = merged.putIfAbsent(
               key,
               () => _MergedTypeHolding(
                 assetName: h.assetName,
                 assetCode: h.assetCode,
-                currency:
-                    (market?.currency.isNotEmpty == true)
-                        ? market!.currency
-                        : (h.currency.isEmpty ? 'CNY' : h.currency),
+                currency: resolvedCur,
                 quantity: 0,
                 totalCost: 0,
                 currentPrice: price,

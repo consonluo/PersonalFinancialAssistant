@@ -50,15 +50,18 @@ class CategoryGroupDetailPage extends ConsumerWidget {
                 final key = h.assetCode.isNotEmpty
                     ? h.assetCode
                     : '__name:${h.assetName}';
+                final quoteCur = market?.currency;
+                final resolvedCur =
+                    (quoteCur != null && quoteCur.isNotEmpty)
+                        ? quoteCur
+                        : (h.currency.isEmpty ? 'CNY' : h.currency);
                 final m = merged.putIfAbsent(
                   key,
                   () => _MergedCategoryHolding(
                     assetName: h.assetName,
                     assetCode: h.assetCode,
                     assetType: h.assetType,
-                    currency: (market?.currency.isNotEmpty == true)
-                        ? market!.currency
-                        : (h.currency.isEmpty ? 'CNY' : h.currency),
+                    currency: resolvedCur,
                     quantity: 0,
                     totalCost: 0,
                     currentPrice: price,

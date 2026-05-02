@@ -104,8 +104,18 @@ class AppDatabase extends _$AppDatabase {
       (select(holdings)..where((t) => t.id.equals(id))).getSingleOrNull();
   Future<int> insertHolding(HoldingsCompanion entry) =>
       into(holdings).insert(entry);
-  Future<bool> updateHolding(HoldingsCompanion entry) =>
-      update(holdings).replace(entry);
+
+  /// 按 id 部分更新。勿用 `update(table).replace`：SQLite INSERT OR REPLACE
+  /// 会丢弃 companion 中未出现的列，易把数量/成本等覆写为默认值（表现为资产变 0）。
+  Future<bool> updateHolding(HoldingsCompanion entry) async {
+    if (!entry.id.present) {
+      throw ArgumentError('updateHolding: companion must include id');
+    }
+    final n =
+        await (update(holdings)..where((t) => t.id.equals(entry.id.value)))
+            .write(entry);
+    return n > 0;
+  }
   Future<int> deleteHolding(String id) =>
       (delete(holdings)..where((t) => t.id.equals(id))).go();
   Future<void> insertHoldingsBatch(List<HoldingsCompanion> entries) async {

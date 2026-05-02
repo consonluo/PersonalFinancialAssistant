@@ -160,9 +160,10 @@ final marketGroupProvider = Provider<List<MarketGroupData>>((ref) {
     if (h.quantity == 0) continue;
     final mkt = marketData[h.assetCode];
     final price = mkt?.price ?? h.currentPrice;
+    final qc = mkt?.currency;
     final quoteCurrency =
-        (mkt?.currency.isNotEmpty == true)
-            ? mkt!.currency
+        (qc != null && qc.isNotEmpty)
+            ? qc
             : (h.currency.isEmpty ? 'CNY' : h.currency);
     final keyBase = h.assetCode.isNotEmpty ? h.assetCode : h.assetName;
     final key = '$keyBase@$quoteCurrency';
@@ -235,9 +236,10 @@ final assetAggregationProvider = Provider<List<AssetAggregation>>((ref) {
   for (final h in holdings) {
     final mkt = marketData[h.assetCode];
     final price = mkt?.price ?? h.currentPrice;
+    final qc2 = mkt?.currency;
     final quoteCurrency =
-        (mkt?.currency.isNotEmpty == true)
-            ? mkt!.currency
+        (qc2 != null && qc2.isNotEmpty)
+            ? qc2
             : (h.currency.isEmpty ? 'CNY' : h.currency);
     final keyBase = h.assetCode.isNotEmpty ? h.assetCode : h.assetName;
     final key = '$keyBase@$quoteCurrency';
