@@ -18,10 +18,11 @@ import 'package:drift/drift.dart';
 
 /// 行情数据缓存 Provider
 final marketDataProvider =
-    StateNotifierProvider<MarketDataNotifier, Map<String, MarketDataModel>>(
-        (ref) {
-  return MarketDataNotifier(ref);
-});
+    StateNotifierProvider<MarketDataNotifier, Map<String, MarketDataModel>>((
+      ref,
+    ) {
+      return MarketDataNotifier(ref);
+    });
 
 class MarketDataNotifier extends StateNotifier<Map<String, MarketDataModel>> {
   final Ref _ref;
@@ -70,10 +71,13 @@ class MarketDataNotifier extends StateNotifier<Map<String, MarketDataModel>> {
 
       // 判断代码形态
       final pureDigit = code.replaceAll(
-          RegExp(r'\.(SH|SZ|HK|OF|US)$', caseSensitive: false), '');
+        RegExp(r'\.(SH|SZ|HK|OF|US)$', caseSensitive: false),
+        '',
+      );
       final is6Digit = RegExp(r'^\d{6}$').hasMatch(pureDigit);
       final is5Digit = RegExp(r'^\d{1,5}$').hasMatch(pureDigit);
-      final isUsLike = RegExp(r'^[A-Za-z]{1,5}$').hasMatch(pureDigit) ||
+      final isUsLike =
+          RegExp(r'^[A-Za-z]{1,5}$').hasMatch(pureDigit) ||
           code.toUpperCase().endsWith('.US');
       final isHkLike = is5Digit || code.toUpperCase().endsWith('.HK');
 
@@ -149,22 +153,35 @@ class MarketDataNotifier extends StateNotifier<Map<String, MarketDataModel>> {
     final fundCodesDedup = fundCodes.toSet().toList();
 
     debugPrint(
-        '[Market] codes: A=${aCodesDedup.length} HK=${hkCodesDedup.length} US=${usCodesDedup.length} Fund=${fundCodesDedup.length}');
+      '[Market] codes: A=${aCodesDedup.length} HK=${hkCodesDedup.length} US=${usCodesDedup.length} Fund=${fundCodesDedup.length}',
+    );
     if (aCodesDedup.isNotEmpty) debugPrint('[Market] aCodes: $aCodesDedup');
     if (fundCodesDedup.isNotEmpty) {
       debugPrint('[Market] fundCodes: $fundCodesDedup');
     }
 
     final results = <MarketDataModel>[];
+    final cnTrading = _isCnTradingNow();
+    final hkTrading = _isHkTradingNow();
+    final usTrading = _isUsTradingNow();
+    debugPrint(
+      '[Market] trading session: CN=$cnTrading HK=$hkTrading US=$usTrading',
+    );
 
     final futures = <Future<List<MarketDataModel>>>[];
-    if (aCodesDedup.isNotEmpty || hkCodesDedup.isNotEmpty) {
-      futures.add(_fetchWithRetry(
-          () => _eastMoneyApi.getQuotes([...aCodesDedup, ...hkCodesDedup])));
+    final eastLiveCodes = <String>[
+      if (cnTrading) ...aCodesDedup,
+      if (hkTrading) ...hkCodesDedup,
+    ];
+    if (eastLiveCodes.isNotEmpty) {
+      futures.add(
+        _fetchWithRetry(() => _eastMoneyApi.getQuotes(eastLiveCodes)),
+      );
     }
-    if (usCodesDedup.isNotEmpty) {
+    if (usTrading && usCodesDedup.isNotEmpty) {
       futures.add(_fetchWithRetry(() => _sinaApi.getQuotes(usCodesDedup)));
     }
+    // 基金净值接口不严格区分交易时段，统一尝试最新可得值。
     if (fundCodesDedup.isNotEmpty) {
       futures.add(_fetchWithRetry(() => _fundApi.getQuotes(fundCodesDedup)));
     }
@@ -177,15 +194,17 @@ class MarketDataNotifier extends StateNotifier<Map<String, MarketDataModel>> {
 
     // API 获取的代码集合
     final fetchedCodes = results.map((r) => r.assetCode).toSet();
-    final fetchedCodeKeys = results
-        .expand((r) => _codeAliases(r.assetCode))
-        .map(_normalizeCodeKey)
-        .toSet();
+    final fetchedCodeKeys =
+        results
+            .expand((r) => _codeAliases(r.assetCode))
+            .map(_normalizeCodeKey)
+            .toSet();
     // 美股兜底：新浪拿不到时，再尝试东财（部分美股可返回）
-    final missingUsCodes = usCodesDedup
-        .where((c) => !fetchedCodeKeys.contains(_normalizeCodeKey(c)))
-        .toList();
-    if (missingUsCodes.isNotEmpty) {
+    final missingUsCodes =
+        usCodesDedup
+            .where((c) => !fetchedCodeKeys.contains(_normalizeCodeKey(c)))
+            .toList();
+    if (usTrading && missingUsCodes.isNotEmpty) {
       try {
         final usFallback = await _fetchWithRetry(
           () => _eastMoneyApi.getQuotes(missingUsCodes),
@@ -194,11 +213,14 @@ class MarketDataNotifier extends StateNotifier<Map<String, MarketDataModel>> {
         if (usFallback.isNotEmpty) {
           results.addAll(usFallback);
           fetchedCodes.addAll(usFallback.map((e) => e.assetCode));
-          fetchedCodeKeys.addAll(usFallback
-              .expand((e) => _codeAliases(e.assetCode))
-              .map(_normalizeCodeKey));
+          fetchedCodeKeys.addAll(
+            usFallback
+                .expand((e) => _codeAliases(e.assetCode))
+                .map(_normalizeCodeKey),
+          );
           debugPrint(
-              '[Market] us fallback by eastmoney: ${usFallback.length}/${missingUsCodes.length}');
+            '[Market] us fallback by eastmoney: ${usFallback.length}/${missingUsCodes.length}',
+          );
         }
       } catch (e) {
         debugPrint('[Market] us fallback failed: $e');
@@ -209,16 +231,25 @@ class MarketDataNotifier extends StateNotifier<Map<String, MarketDataModel>> {
       ...aCodesDedup,
       ...hkCodesDedup,
       ...usCodesDedup,
-      ...fundCodesDedup
+      ...fundCodesDedup,
     };
-    var missingCodes = allRequestedCodes
-        .where((c) => !fetchedCodeKeys.contains(_normalizeCodeKey(c)))
-        .toSet();
+    var missingCodes =
+        allRequestedCodes
+            .where((c) => !fetchedCodeKeys.contains(_normalizeCodeKey(c)))
+            .toSet();
 
     // 单只补拉：批量失败后逐只再尝试，提升成功率
-    if (missingCodes.isNotEmpty) {
+    final openMarketMissing =
+        missingCodes.where((code) {
+          if (fundCodesDedup.contains(code)) return true;
+          if (usCodesDedup.contains(code)) return usTrading;
+          if (hkCodesDedup.contains(code)) return hkTrading;
+          if (aCodesDedup.contains(code)) return cnTrading;
+          return false;
+        }).toSet();
+    if (openMarketMissing.isNotEmpty) {
       final recoveredSingles = await _fetchSinglesForMissing(
-        missingCodes: missingCodes,
+        missingCodes: openMarketMissing,
         usCodes: usCodesDedup.toSet(),
         fundCodes: fundCodesDedup.toSet(),
       );
@@ -230,9 +261,10 @@ class MarketDataNotifier extends StateNotifier<Map<String, MarketDataModel>> {
               .expand((e) => _codeAliases(e.assetCode))
               .map(_normalizeCodeKey),
         );
-        missingCodes = allRequestedCodes
-            .where((c) => !fetchedCodeKeys.contains(_normalizeCodeKey(c)))
-            .toSet();
+        missingCodes =
+            allRequestedCodes
+                .where((c) => !fetchedCodeKeys.contains(_normalizeCodeKey(c)))
+                .toSet();
         debugPrint(
           '[Market] single fallback recovered: ${recoveredSingles.length}',
         );
@@ -240,9 +272,16 @@ class MarketDataNotifier extends StateNotifier<Map<String, MarketDataModel>> {
     }
 
     // 第二优先级：最近交易日收盘价（接口）
-    if (missingCodes.isNotEmpty) {
+    final closeCandidates =
+        missingCodes.where((code) {
+          if (aCodesDedup.contains(code)) return !cnTrading;
+          if (hkCodesDedup.contains(code)) return !hkTrading;
+          if (usCodesDedup.contains(code)) return !usTrading;
+          return false;
+        }).toList();
+    if (closeCandidates.isNotEmpty) {
       final closeFallback = await _fetchWithRetry(
-        () => _eastMoneyApi.getLastCloseQuotes(missingCodes.toList()),
+        () => _eastMoneyApi.getLastCloseQuotes(closeCandidates),
         attempts: 2,
       );
       if (closeFallback.isNotEmpty) {
@@ -253,11 +292,89 @@ class MarketDataNotifier extends StateNotifier<Map<String, MarketDataModel>> {
               .expand((e) => _codeAliases(e.assetCode))
               .map(_normalizeCodeKey),
         );
-        missingCodes = allRequestedCodes
-            .where((c) => !fetchedCodeKeys.contains(_normalizeCodeKey(c)))
-            .toSet();
+        missingCodes =
+            allRequestedCodes
+                .where((c) => !fetchedCodeKeys.contains(_normalizeCodeKey(c)))
+                .toSet();
         debugPrint(
           '[Market] close fallback recovered: ${closeFallback.length}',
+        );
+      }
+    }
+
+    // 收盘价接口在部分网络环境可能不可达，降级用常规报价接口兜底最近可用价。
+    if (missingCodes.isNotEmpty) {
+      final aCloseCandidates =
+          missingCodes.where((c) => aCodesDedup.contains(c) && !cnTrading).toList();
+      final hkCloseCandidates =
+          missingCodes.where((c) => hkCodesDedup.contains(c) && !hkTrading).toList();
+      final usCloseCandidates =
+          missingCodes.where((c) => usCodesDedup.contains(c) && !usTrading).toList();
+
+      final closeByQuote = <MarketDataModel>[];
+      // 非交易时段收盘回退：updatedAt 使用各市场最近交易日，不信任 API 返回的时间戳
+      // （API 在休市时可能返回今日凌晨时间，导致界面显示错误日期）
+      final cnLastClose = _lastMarketCloseDay(isUs: false);
+      final usLastClose = _lastMarketCloseDay(isUs: true);
+
+      if (aCloseCandidates.isNotEmpty || hkCloseCandidates.isNotEmpty) {
+        final east = await _fetchWithRetry(
+          () => _eastMoneyApi.getQuotes([
+            ...aCloseCandidates,
+            ...hkCloseCandidates,
+          ]),
+          attempts: 2,
+        );
+        closeByQuote.addAll(
+          east.map(
+            (e) => MarketDataModel(
+              assetCode: e.assetCode,
+              name: e.name,
+              price: e.price,
+              change: e.change,
+              changePercent: e.changePercent,
+              volume: e.volume,
+              updatedAt: cnLastClose,
+              currency: e.currency,
+              source: MarketDataModel.sourceClose,
+            ),
+          ),
+        );
+      }
+      if (usCloseCandidates.isNotEmpty) {
+        final us = await _fetchWithRetry(
+          () => _sinaApi.getQuotes(usCloseCandidates),
+          attempts: 2,
+        );
+        closeByQuote.addAll(
+          us.map(
+            (e) => MarketDataModel(
+              assetCode: e.assetCode,
+              name: e.name,
+              price: e.price,
+              change: e.change,
+              changePercent: e.changePercent,
+              volume: e.volume,
+              updatedAt: usLastClose,
+              currency: e.currency,
+              source: MarketDataModel.sourceClose,
+            ),
+          ),
+        );
+      }
+      if (closeByQuote.isNotEmpty) {
+        results.addAll(closeByQuote);
+        fetchedCodeKeys.addAll(
+          closeByQuote
+              .expand((e) => _codeAliases(e.assetCode))
+              .map(_normalizeCodeKey),
+        );
+        missingCodes =
+            allRequestedCodes
+                .where((c) => !fetchedCodeKeys.contains(_normalizeCodeKey(c)))
+                .toSet();
+        debugPrint(
+          '[Market] close fallback(by quote api) recovered: ${closeByQuote.length}',
         );
       }
     }
@@ -270,34 +387,75 @@ class MarketDataNotifier extends StateNotifier<Map<String, MarketDataModel>> {
         final missingKeys = missingCodes.map(_normalizeCodeKey).toSet();
         for (final c in cached) {
           if (missingKeys.contains(_normalizeCodeKey(c.assetCode))) {
-            results.add(MarketDataModel(
-              assetCode: c.assetCode,
-              name: c.name ?? c.assetCode,
-              price: c.price ?? 0,
-              change: c.change ?? 0,
-              changePercent: c.changePercent ?? 0,
-              volume: c.volume ?? 0,
-              updatedAt: c.updatedAt ?? DateTime.now(),
-              currency: state[c.assetCode]?.currency ??
-                  codeCurrencyHints[_normalizeCodeKey(c.assetCode)] ??
-                  _inferCurrencyByCode(c.assetCode),
-              source: MarketDataModel.sourceCache,
-            ));
+            results.add(
+              MarketDataModel(
+                assetCode: c.assetCode,
+                name: c.name,
+                price: c.price,
+                change: c.change,
+                changePercent: c.changePercent,
+                volume: c.volume,
+                updatedAt: _sanitizeQuoteTime(c.updatedAt),
+                currency:
+                    state[c.assetCode]?.currency ??
+                    codeCurrencyHints[_normalizeCodeKey(c.assetCode)] ??
+                    _inferCurrencyByCode(c.assetCode),
+                source: MarketDataModel.sourceCache,
+              ),
+            );
           }
         }
-        final recoveredKeys = results
+        final recoveredKeys =
+            results
+                .expand((r) => _codeAliases(r.assetCode))
+                .map(_normalizeCodeKey)
+                .toSet();
+        final stillMissing =
+            missingCodes
+                .where((c) => !recoveredKeys.contains(_normalizeCodeKey(c)))
+                .toSet();
+        debugPrint(
+          '[Market] cache fallback: ${missingCodes.length} missing, recovered ${missingCodes.length - stillMissing.length}',
+        );
+        if (stillMissing.isNotEmpty) {
+          debugPrint('[Market] still missing: $stillMissing');
+        }
+      } catch (e) {
+        debugPrint('[Market] cache fallback error: $e');
+      }
+    }
+
+    // 第四优先级：录入价回退（从未拉到行情 / 无可用接口）
+    final recoveredKeysBeforeEntry =
+        results
             .expand((r) => _codeAliases(r.assetCode))
             .map(_normalizeCodeKey)
             .toSet();
-        final stillMissing = missingCodes
-            .where((c) => !recoveredKeys.contains(_normalizeCodeKey(c)))
+    final entryFallbackCodes =
+        allRequestedCodes
+            .where((c) => !recoveredKeysBeforeEntry.contains(_normalizeCodeKey(c)))
             .toSet();
-        debugPrint(
-            '[Market] cache fallback: ${missingCodes.length} missing, recovered ${missingCodes.length - stillMissing.length}');
-        if (stillMissing.isNotEmpty)
-          debugPrint('[Market] still missing: $stillMissing');
-      } catch (e) {
-        debugPrint('[Market] cache fallback error: $e');
+    if (entryFallbackCodes.isNotEmpty) {
+      for (final h in holdings) {
+        final key = _normalizeCodeKey(h.assetCode);
+        if (!entryFallbackCodes.contains(key) && !entryFallbackCodes.contains(h.assetCode)) {
+          continue;
+        }
+        final entryPrice = h.initialPrice > 0 ? h.initialPrice : h.currentPrice;
+        if (entryPrice <= 0) continue;
+        results.add(
+          MarketDataModel(
+            assetCode: h.assetCode,
+            name: h.assetName,
+            price: entryPrice,
+            change: entryPrice - h.costPrice,
+            changePercent:
+                h.costPrice > 0 ? ((entryPrice - h.costPrice) / h.costPrice) * 100 : 0,
+            updatedAt: h.initialValuationDate,
+            currency: h.currency.isEmpty ? 'CNY' : h.currency,
+            source: MarketDataModel.sourceEntry,
+          ),
+        );
       }
     }
 
@@ -325,8 +483,9 @@ class MarketDataNotifier extends StateNotifier<Map<String, MarketDataModel>> {
     try {
       final db = _ref.read(databaseProvider);
       final gotLiveQuotes = fetchedCodes.isNotEmpty;
-      await SnapshotService(db)
-          .takeSnapshotIfNeeded(forceUpdateToday: gotLiveQuotes);
+      await SnapshotService(
+        db,
+      ).takeSnapshotIfNeeded(forceUpdateToday: gotLiveQuotes);
       if (gotLiveQuotes) {
         _ref.invalidate(snapshotListProvider);
         try {
@@ -365,8 +524,10 @@ class MarketDataNotifier extends StateNotifier<Map<String, MarketDataModel>> {
   /// 深圳: 159xxx
   /// 排除 519xxx（LOF/开放式基金，走净值接口）
   static bool _isExchangeListedETF(String code) {
-    final pure =
-        code.replaceAll(RegExp(r'\.(SH|SZ|OF)$', caseSensitive: false), '');
+    final pure = code.replaceAll(
+      RegExp(r'\.(SH|SZ|OF)$', caseSensitive: false),
+      '',
+    );
     if (!RegExp(r'^\d{6}$').hasMatch(pure)) return false;
     if (pure.startsWith('159')) return true;
     final prefix3 = pure.substring(0, 3);
@@ -413,13 +574,15 @@ class MarketDataNotifier extends StateNotifier<Map<String, MarketDataModel>> {
             break;
           }
         }
-        if (newPrice == null || newPrice <= 0 || newPrice == h.currentPrice)
+        if (newPrice == null || newPrice <= 0 || newPrice == h.currentPrice) {
           continue;
+        }
 
         // 异常检测 1: 持仓数量异常（负数或极大值）
         if (h.quantity < 0 || h.quantity > 1e9) {
           debugPrint(
-              '[MarketData] ⚠️ 跳过异常持仓 "${h.assetName}"($code): 数量=${h.quantity}');
+            '[MarketData] ⚠️ 跳过异常持仓 "${h.assetName}"($code): 数量=${h.quantity}',
+          );
           skipped++;
           continue;
         }
@@ -431,53 +594,66 @@ class MarketDataNotifier extends StateNotifier<Map<String, MarketDataModel>> {
           if (changePct > 0.5) {
             final oldMv = h.quantity * h.currentPrice;
             final newMv = h.quantity * newPrice;
-            debugPrint('[MarketData] ⚠️ 价格变化异常 "${h.assetName}"($code): '
-                '${h.currentPrice} → $newPrice (${(changePct * 100).toStringAsFixed(1)}%), '
-                '市值 ${oldMv.toStringAsFixed(0)} → ${newMv.toStringAsFixed(0)}');
+            debugPrint(
+              '[MarketData] ⚠️ 价格变化异常 "${h.assetName}"($code): '
+              '${h.currentPrice} → $newPrice (${(changePct * 100).toStringAsFixed(1)}%), '
+              '市值 ${oldMv.toStringAsFixed(0)} → ${newMv.toStringAsFixed(0)}',
+            );
             // 将异常信息记录到 notes，但仍然更新价格（行情 API 返回的通常是对的）
             final warning =
                 '[行情异常 ${DateTime.now().toString().substring(0, 16)}] '
                 '价格变化 ${(changePct * 100).toStringAsFixed(1)}%';
-            final existingNotes = h.notes ?? '';
-            final newNotes = existingNotes.contains('[行情异常')
-                ? existingNotes.replaceAll(
-                    RegExp(r'\[行情异常[^\]]*\][^\n]*'), warning)
-                : (existingNotes.isEmpty
-                    ? warning
-                    : '$existingNotes\n$warning');
-            await db.updateHolding(HoldingsCompanion(
-              id: Value(h.id),
-              accountId: Value(h.accountId),
-              assetCode: Value(h.assetCode),
-              assetName: Value(h.assetName),
-              assetType: Value(h.assetType),
-              quantity: Value(h.quantity),
-              costPrice: Value(h.costPrice),
-              currentPrice: Value(newPrice),
-              tags: Value(h.tags),
-              notes: Value(newNotes),
-              createdAt: Value(h.createdAt),
-              updatedAt: Value(DateTime.now()),
-            ));
+            final existingNotes = h.notes;
+            final newNotes =
+                existingNotes.contains('[行情异常')
+                    ? existingNotes.replaceAll(
+                      RegExp(r'\[行情异常[^\]]*\][^\n]*'),
+                      warning,
+                    )
+                    : (existingNotes.isEmpty
+                        ? warning
+                        : '$existingNotes\n$warning');
+            await db.updateHolding(
+              HoldingsCompanion(
+                id: Value(h.id),
+                accountId: Value(h.accountId),
+                assetCode: Value(h.assetCode),
+                assetName: Value(h.assetName),
+                assetType: Value(h.assetType),
+                quantity: Value(h.quantity),
+                costPrice: Value(h.costPrice),
+                currentPrice: Value(newPrice),
+                initialPrice: Value(h.initialPrice),
+                initialValuationDate: Value(h.initialValuationDate),
+                tags: Value(h.tags),
+                notes: Value(newNotes),
+                createdAt: Value(h.createdAt),
+                updatedAt: Value(DateTime.now()),
+              ),
+            );
             updated++;
             continue;
           }
         }
 
-        await db.updateHolding(HoldingsCompanion(
-          id: Value(h.id),
-          accountId: Value(h.accountId),
-          assetCode: Value(h.assetCode),
-          assetName: Value(h.assetName),
-          assetType: Value(h.assetType),
-          quantity: Value(h.quantity),
-          costPrice: Value(h.costPrice),
-          currentPrice: Value(newPrice),
-          tags: Value(h.tags),
-          notes: Value(h.notes),
-          createdAt: Value(h.createdAt),
-          updatedAt: Value(DateTime.now()),
-        ));
+        await db.updateHolding(
+          HoldingsCompanion(
+            id: Value(h.id),
+            accountId: Value(h.accountId),
+            assetCode: Value(h.assetCode),
+            assetName: Value(h.assetName),
+            assetType: Value(h.assetType),
+            quantity: Value(h.quantity),
+            costPrice: Value(h.costPrice),
+            currentPrice: Value(newPrice),
+            initialPrice: Value(h.initialPrice),
+            initialValuationDate: Value(h.initialValuationDate),
+            tags: Value(h.tags),
+            notes: Value(h.notes),
+            createdAt: Value(h.createdAt),
+            updatedAt: Value(DateTime.now()),
+          ),
+        );
         updated++;
       }
       if (updated > 0 || skipped > 0) {
@@ -507,9 +683,107 @@ class MarketDataNotifier extends StateNotifier<Map<String, MarketDataModel>> {
   }
 
   static String _normalizeCodeKey(String code) {
-    final noSuffix =
-        code.toUpperCase().replaceAll(RegExp(r'\.(US|HK|SH|SZ|OF|O|N)$'), '');
+    final noSuffix = code.toUpperCase().replaceAll(
+      RegExp(r'\.(US|HK|SH|SZ|OF|O|N)$'),
+      '',
+    );
     return noSuffix;
+  }
+
+  static DateTime _sanitizeQuoteTime(DateTime? dt) {
+    if (dt == null) return DateTime.now();
+    if (dt.year < 2000) return DateTime.now();
+    return dt;
+  }
+
+  static bool _isCnTradingNow() {
+    final now = _nowInUtc8();
+    if (now.weekday == DateTime.saturday || now.weekday == DateTime.sunday) {
+      return false;
+    }
+    final m = now.hour * 60 + now.minute;
+    return (m >= 9 * 60 + 30 && m < 11 * 60 + 30) ||
+        (m >= 13 * 60 && m < 15 * 60);
+  }
+
+  static bool _isHkTradingNow() {
+    final now = _nowInUtc8();
+    if (now.weekday == DateTime.saturday || now.weekday == DateTime.sunday) {
+      return false;
+    }
+    final m = now.hour * 60 + now.minute;
+    return (m >= 9 * 60 + 30 && m < 12 * 60) || (m >= 13 * 60 && m < 16 * 60);
+  }
+
+  static bool _isUsTradingNow() {
+    final utcNow = DateTime.now().toUtc();
+    if (utcNow.weekday == DateTime.saturday ||
+        utcNow.weekday == DateTime.sunday) {
+      return false;
+    }
+    final m = utcNow.hour * 60 + utcNow.minute;
+    final isDst = _isUsDst(utcNow);
+    if (isDst) {
+      return m >= 13 * 60 + 30 && m < 20 * 60;
+    }
+    return m >= 14 * 60 + 30 && m < 21 * 60;
+  }
+
+  static DateTime _nowInUtc8() =>
+      DateTime.now().toUtc().add(const Duration(hours: 8));
+
+  static bool _isUsDst(DateTime utcNow) {
+    final year = utcNow.year;
+    final dstStart = _nthWeekdayOfMonthUtc(
+      year: year,
+      month: 3,
+      weekday: DateTime.sunday,
+      nth: 2,
+      hourUtc: 7, // 2:00 EST == 07:00 UTC
+    );
+    final dstEnd = _nthWeekdayOfMonthUtc(
+      year: year,
+      month: 11,
+      weekday: DateTime.sunday,
+      nth: 1,
+      hourUtc: 6, // 2:00 EDT == 06:00 UTC
+    );
+    return utcNow.isAfter(dstStart) && utcNow.isBefore(dstEnd);
+  }
+
+  static DateTime _nthWeekdayOfMonthUtc({
+    required int year,
+    required int month,
+    required int weekday,
+    required int nth,
+    required int hourUtc,
+  }) {
+    var day = DateTime.utc(year, month, 1, hourUtc);
+    while (day.weekday != weekday) {
+      day = day.add(const Duration(days: 1));
+    }
+    day = day.add(Duration(days: (nth - 1) * 7));
+    return day;
+  }
+
+  /// 计算最近已收盘交易日（A/HK 用 UTC+8；US 用 UTC-4/EDT）
+  static DateTime _lastMarketCloseDay({required bool isUs}) {
+    final DateTime ref;
+    if (isUs) {
+      // US EDT 近似 UTC-4（忽略夏冬令时偏差，仅影响边界 ±1 小时）
+      ref = DateTime.now().toUtc().subtract(const Duration(hours: 4));
+    } else {
+      ref = _nowInUtc8();
+    }
+    final closeHour = isUs ? 16 : 15; // 16:00 EDT / 15:00 CST
+    var d = DateTime(ref.year, ref.month, ref.day);
+    if (ref.hour < closeHour) {
+      d = d.subtract(const Duration(days: 1));
+    }
+    while (d.weekday == DateTime.saturday || d.weekday == DateTime.sunday) {
+      d = d.subtract(const Duration(days: 1));
+    }
+    return DateTime(d.year, d.month, d.day, closeHour);
   }
 
   static Iterable<String> _codeAliases(String code) sync* {
@@ -572,30 +846,37 @@ class MarketDataNotifier extends StateNotifier<Map<String, MarketDataModel>> {
         }
 
         if (newType != null && newType != h.assetType) {
-          await db.updateHolding(HoldingsCompanion(
-            id: Value(h.id),
-            accountId: Value(h.accountId),
-            assetCode: Value(h.assetCode),
-            assetName: Value(h.assetName),
-            assetType: Value(newType),
-            quantity: Value(h.quantity),
-            costPrice: Value(h.costPrice),
-            currentPrice: Value(h.currentPrice),
-            tags: Value(h.tags),
-            notes: Value(h.notes),
-            createdAt: Value(h.createdAt),
-            updatedAt: Value(h.updatedAt),
-          ));
+          await db.updateHolding(
+            HoldingsCompanion(
+              id: Value(h.id),
+              accountId: Value(h.accountId),
+              assetCode: Value(h.assetCode),
+              assetName: Value(h.assetName),
+              assetType: Value(newType),
+              quantity: Value(h.quantity),
+              costPrice: Value(h.costPrice),
+              currentPrice: Value(h.currentPrice),
+              initialPrice: Value(h.initialPrice),
+              initialValuationDate: Value(h.initialValuationDate),
+              tags: Value(h.tags),
+              notes: Value(h.notes),
+              createdAt: Value(h.createdAt),
+              updatedAt: Value(h.updatedAt),
+            ),
+          );
           fixed++;
           debugPrint(
-              '[Market] reclassified "${h.assetName}": ${h.assetType} → $newType');
+            '[Market] reclassified "${h.assetName}": ${h.assetType} → $newType',
+          );
         }
       }
 
-      if (fullRescan)
+      if (fullRescan) {
         await prefs.setInt('classifier_version', _classifierVersion);
+      }
       debugPrint(
-          '[Market] reclassify: scanned ${holdings.length}, fixed $fixed${fullRescan ? ' (full rescan v$_classifierVersion)' : ''}');
+        '[Market] reclassify: scanned ${holdings.length}, fixed $fixed${fullRescan ? ' (full rescan v$_classifierVersion)' : ''}',
+      );
     } catch (e) {
       debugPrint('[Market] reclassify error: $e');
     }
@@ -603,17 +884,20 @@ class MarketDataNotifier extends StateNotifier<Map<String, MarketDataModel>> {
 
   Future<void> _updateDbCache(List<MarketDataModel> data) async {
     final db = _ref.read(databaseProvider);
-    final entries = data
-        .map((d) => MarketCacheCompanion(
-              assetCode: Value(d.assetCode),
-              price: Value(d.price),
-              change: Value(d.change),
-              changePercent: Value(d.changePercent),
-              volume: Value(d.volume),
-              name: Value(d.name),
-              updatedAt: Value(d.updatedAt),
-            ))
-        .toList();
+    final entries =
+        data
+            .map(
+              (d) => MarketCacheCompanion(
+                assetCode: Value(d.assetCode),
+                price: Value(d.price),
+                change: Value(d.change),
+                changePercent: Value(d.changePercent),
+                volume: Value(d.volume),
+                name: Value(d.name),
+                updatedAt: Value(d.updatedAt),
+              ),
+            )
+            .toList();
     await db.upsertMarketCacheBatch(entries);
   }
 

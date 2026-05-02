@@ -80,6 +80,7 @@ class HoldingDetail {
   final String assetName;
   final String assetCode;
   final String assetType;
+  final String currency;
   final double quantity;
   final double costPrice;
   final double currentPrice;
@@ -92,6 +93,7 @@ class HoldingDetail {
     required this.assetName,
     required this.assetCode,
     required this.assetType,
+    this.currency = 'CNY',
     required this.quantity,
     required this.costPrice,
     required this.currentPrice,
@@ -106,6 +108,7 @@ class AssetAggregation {
   final String assetName;
   final String assetCode;
   final String assetType;
+  final String currency;
   final double totalQuantity;
   final double avgCostPrice;
   final double currentPrice;
@@ -117,6 +120,7 @@ class AssetAggregation {
     required this.assetName,
     required this.assetCode,
     required this.assetType,
+    this.currency = 'CNY',
     required this.totalQuantity,
     required this.avgCostPrice,
     required this.currentPrice,
@@ -156,7 +160,12 @@ final marketGroupProvider = Provider<List<MarketGroupData>>((ref) {
     if (h.quantity == 0) continue;
     final mkt = marketData[h.assetCode];
     final price = mkt?.price ?? h.currentPrice;
-    final key = h.assetCode.isNotEmpty ? h.assetCode : h.assetName;
+    final quoteCurrency =
+        (mkt?.currency.isNotEmpty == true)
+            ? mkt!.currency
+            : (h.currency.isEmpty ? 'CNY' : h.currency);
+    final keyBase = h.assetCode.isNotEmpty ? h.assetCode : h.assetName;
+    final key = '$keyBase@$quoteCurrency';
     agg.putIfAbsent(
       key,
       () => _MarketAcc(
@@ -165,6 +174,7 @@ final marketGroupProvider = Provider<List<MarketGroupData>>((ref) {
         type: h.assetType,
         price: price,
         changePercent: mkt?.changePercent ?? 0.0,
+        currency: quoteCurrency,
       ),
     );
     agg[key]!.qty += h.quantity;
@@ -187,6 +197,7 @@ final marketGroupProvider = Provider<List<MarketGroupData>>((ref) {
       assetName: a.name,
       assetCode: a.code,
       assetType: a.type,
+      currency: a.currency,
       quantity: a.qty,
       costPrice: a.qty != 0 ? a.totalCost / a.qty : 0,
       currentPrice: a.price,
@@ -224,8 +235,22 @@ final assetAggregationProvider = Provider<List<AssetAggregation>>((ref) {
   for (final h in holdings) {
     final mkt = marketData[h.assetCode];
     final price = mkt?.price ?? h.currentPrice;
-    final key = h.assetCode.isNotEmpty ? h.assetCode : h.assetName;
-    map.putIfAbsent(key, () => _AggAcc(name: h.assetName, code: h.assetCode, type: h.assetType, price: price));
+    final quoteCurrency =
+        (mkt?.currency.isNotEmpty == true)
+            ? mkt!.currency
+            : (h.currency.isEmpty ? 'CNY' : h.currency);
+    final keyBase = h.assetCode.isNotEmpty ? h.assetCode : h.assetName;
+    final key = '$keyBase@$quoteCurrency';
+    map.putIfAbsent(
+      key,
+      () => _AggAcc(
+        name: h.assetName,
+        code: h.assetCode,
+        type: h.assetType,
+        price: price,
+        currency: quoteCurrency,
+      ),
+    );
     map[key]!.qty += h.quantity;
     map[key]!.totalCost += h.quantity * h.costPrice;
     map[key]!.price = price;
@@ -239,6 +264,7 @@ final assetAggregationProvider = Provider<List<AssetAggregation>>((ref) {
       assetName: a.name,
       assetCode: a.code,
       assetType: a.type,
+      currency: a.currency,
       totalQuantity: a.qty,
       avgCostPrice: avgCost,
       currentPrice: a.price,
@@ -284,13 +310,19 @@ final assetTypeGroupProvider = Provider<List<AssetTypeGroupData>>((ref) {
 });
 
 class _AggAcc {
-  String name, code, type;
+  String name, code, type, currency;
   double qty = 0, totalCost = 0, price;
-  _AggAcc({required this.name, required this.code, required this.type, required this.price});
+  _AggAcc({
+    required this.name,
+    required this.code,
+    required this.type,
+    required this.price,
+    this.currency = 'CNY',
+  });
 }
 
 class _MarketAcc {
-  String name, code, type;
+  String name, code, type, currency;
   double qty = 0, totalCost = 0, price;
   double changePercent;
   _MarketAcc({
@@ -299,5 +331,6 @@ class _MarketAcc {
     required this.type,
     required this.price,
     required this.changePercent,
+    this.currency = 'CNY',
   });
 }

@@ -11,6 +11,8 @@ class HoldingModel {
   final double quantity;
   final double costPrice;
   final double currentPrice;
+  final double initialPrice;
+  final DateTime initialValuationDate;
   final List<String> tags;
   final String notes;
   final String currency; // 币种: CNY/HKD/USD/EUR/GBP
@@ -26,6 +28,8 @@ class HoldingModel {
     this.quantity = 0,
     this.costPrice = 0,
     this.currentPrice = 0,
+    this.initialPrice = 0,
+    required this.initialValuationDate,
     this.tags = const [],
     this.notes = '',
     this.currency = 'CNY',
@@ -68,6 +72,14 @@ class HoldingModel {
       quantity: (json['quantity'] as num?)?.toDouble() ?? 0,
       costPrice: (json['costPrice'] as num?)?.toDouble() ?? 0,
       currentPrice: (json['currentPrice'] as num?)?.toDouble() ?? 0,
+      initialPrice:
+          (json['initialPrice'] as num?)?.toDouble() ??
+          (json['currentPrice'] as num?)?.toDouble() ??
+          0,
+      initialValuationDate:
+          json['initialValuationDate'] != null
+              ? DateTime.parse(json['initialValuationDate'] as String)
+              : DateTime.parse(json['createdAt'] as String),
       tags: parseTags(json['tags']),
       notes: json['notes'] as String? ?? '',
       currency: json['currency'] as String? ?? 'CNY',
@@ -85,6 +97,8 @@ class HoldingModel {
         'quantity': quantity,
         'costPrice': costPrice,
         'currentPrice': currentPrice,
+        'initialPrice': initialPrice,
+        'initialValuationDate': initialValuationDate.toIso8601String(),
         'tags': tags,
         'notes': notes,
         'currency': currency,
@@ -101,6 +115,8 @@ class HoldingModel {
     double? quantity,
     double? costPrice,
     double? currentPrice,
+    double? initialPrice,
+    DateTime? initialValuationDate,
     List<String>? tags,
     String? notes,
     String? currency,
@@ -116,6 +132,8 @@ class HoldingModel {
       quantity: quantity ?? this.quantity,
       costPrice: costPrice ?? this.costPrice,
       currentPrice: currentPrice ?? this.currentPrice,
+      initialPrice: initialPrice ?? this.initialPrice,
+      initialValuationDate: initialValuationDate ?? this.initialValuationDate,
       tags: tags ?? this.tags,
       notes: notes ?? this.notes,
       currency: currency ?? this.currency,

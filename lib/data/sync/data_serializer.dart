@@ -68,6 +68,9 @@ class DataSerializer {
                 'quantity': h.quantity,
                 'costPrice': h.costPrice,
                 'currentPrice': h.currentPrice,
+                'initialPrice': h.initialPrice,
+                'initialValuationDate':
+                    h.initialValuationDate.toIso8601String(),
                 'tags': h.tags,
                 'notes': h.notes,
                 'currency': h.currency,
@@ -197,6 +200,15 @@ class DataSerializer {
           quantity: Value((h['quantity'] as num).toDouble()),
           costPrice: Value((h['costPrice'] as num).toDouble()),
           currentPrice: Value((h['currentPrice'] as num).toDouble()),
+          initialPrice: Value(
+            (h['initialPrice'] as num?)?.toDouble() ??
+                (h['currentPrice'] as num).toDouble(),
+          ),
+          initialValuationDate: Value(
+            h['initialValuationDate'] != null
+                ? DateTime.parse(h['initialValuationDate'] as String)
+                : DateTime.parse(h['createdAt'] as String),
+          ),
           tags: Value(h['tags'] is List
               ? jsonEncode(h['tags'])
               : h['tags'] as String? ?? ''),

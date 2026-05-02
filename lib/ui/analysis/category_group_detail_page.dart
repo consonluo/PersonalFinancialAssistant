@@ -56,6 +56,9 @@ class CategoryGroupDetailPage extends ConsumerWidget {
                     assetName: h.assetName,
                     assetCode: h.assetCode,
                     assetType: h.assetType,
+                    currency: (market?.currency.isNotEmpty == true)
+                        ? market!.currency
+                        : (h.currency.isEmpty ? 'CNY' : h.currency),
                     quantity: 0,
                     totalCost: 0,
                     currentPrice: price,
@@ -163,7 +166,10 @@ class CategoryGroupDetailPage extends ConsumerWidget {
                                   crossAxisAlignment: CrossAxisAlignment.end,
                                   children: [
                                     Text(
-                                      FormatUtils.formatFullCurrency(mv),
+                                      FormatUtils.formatFullCurrency(
+                                        mv,
+                                        currency: h.currency,
+                                      ),
                                       style: const TextStyle(
                                         fontWeight: FontWeight.w600,
                                         fontSize: 15,
@@ -171,7 +177,7 @@ class CategoryGroupDetailPage extends ConsumerWidget {
                                     ),
                                     if (dm != HoldingDisplayMode.deposit)
                                       Text(
-                                        '${pnl >= 0 ? "+" : ""}${FormatUtils.formatCurrency(pnl)} (${FormatUtils.formatPercent(pnlPct)})',
+                                        '${pnl >= 0 ? "+" : ""}${FormatUtils.formatFullCurrency(pnl, currency: h.currency)} (${FormatUtils.formatPercent(pnlPct)})',
                                         style: TextStyle(
                                           fontSize: 12,
                                           color: pnl >= 0
@@ -193,8 +199,10 @@ class CategoryGroupDetailPage extends ConsumerWidget {
                                   ),
                                   _InfoItem(
                                     label: '现价',
-                                    value:
-                                        FormatUtils.formatPrice(h.currentPrice),
+                                    value: FormatUtils.formatPrice(
+                                      h.currentPrice,
+                                      currency: h.currency,
+                                    ),
                                   ),
                                   _InfoItem(
                                     label: '成本',
@@ -202,6 +210,7 @@ class CategoryGroupDetailPage extends ConsumerWidget {
                                       h.quantity != 0
                                           ? h.totalCost / h.quantity
                                           : 0,
+                                      currency: h.currency,
                                     ),
                                   ),
                                   _InfoItem(
@@ -230,15 +239,23 @@ class CategoryGroupDetailPage extends ConsumerWidget {
                                     value: h.currentPrice < 100
                                         ? h.currentPrice.toStringAsFixed(4)
                                         : FormatUtils.formatPrice(
-                                            h.currentPrice),
+                                            h.currentPrice,
+                                            currency: h.currency,
+                                          ),
                                   ),
                                   _InfoItem(
                                     label: '成本',
-                                    value: FormatUtils.formatCurrency(cost),
+                                    value: FormatUtils.formatCurrency(
+                                      cost,
+                                      currency: h.currency,
+                                    ),
                                   ),
                                   _InfoItem(
                                     label: '收益',
-                                    value: FormatUtils.formatChange(pnl),
+                                    value: FormatUtils.formatChange(
+                                      pnl,
+                                      currency: h.currency,
+                                    ),
                                     color: pnl >= 0
                                         ? AppColors.gain
                                         : AppColors.loss,
@@ -251,11 +268,17 @@ class CategoryGroupDetailPage extends ConsumerWidget {
                                 children: [
                                   _InfoItem(
                                     label: '投入成本',
-                                    value: FormatUtils.formatCurrency(cost),
+                                    value: FormatUtils.formatCurrency(
+                                      cost,
+                                      currency: h.currency,
+                                    ),
                                   ),
                                   _InfoItem(
                                     label: '累计收益',
-                                    value: FormatUtils.formatChange(pnl),
+                                    value: FormatUtils.formatChange(
+                                      pnl,
+                                      currency: h.currency,
+                                    ),
                                     color: pnl >= 0
                                         ? AppColors.gain
                                         : AppColors.loss,
@@ -284,6 +307,7 @@ class _MergedCategoryHolding {
   String assetName;
   String assetCode;
   String assetType;
+  String currency;
   double quantity;
   double totalCost;
   double currentPrice;
@@ -292,6 +316,7 @@ class _MergedCategoryHolding {
     required this.assetName,
     required this.assetCode,
     required this.assetType,
+    this.currency = 'CNY',
     required this.quantity,
     required this.totalCost,
     required this.currentPrice,
@@ -330,7 +355,7 @@ class _SummaryCard extends StatelessWidget {
                           fontWeight: FontWeight.w700,
                           color: group.color)),
                   const SizedBox(height: 4),
-                  Text(FormatUtils.formatCurrency(totalMv),
+                  Text(FormatUtils.formatCurrency(totalMv, currency: 'CNY'),
                       style: const TextStyle(
                           fontSize: 22, fontWeight: FontWeight.w700)),
                 ],
@@ -344,7 +369,7 @@ class _SummaryCard extends StatelessWidget {
                         color: AppColors.textSecondary, fontSize: 13)),
                 const SizedBox(height: 4),
                 Text(
-                  '盈亏 ${totalPnl >= 0 ? "+" : ""}${FormatUtils.formatCurrency(totalPnl)}',
+                  '盈亏 ${totalPnl >= 0 ? "+" : ""}${FormatUtils.formatCurrency(totalPnl, currency: 'CNY')}',
                   style: TextStyle(
                       fontSize: 13,
                       color: totalPnl >= 0 ? AppColors.gain : AppColors.loss,

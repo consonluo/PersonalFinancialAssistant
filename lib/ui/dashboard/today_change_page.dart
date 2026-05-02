@@ -42,12 +42,13 @@ class _TodayChangePageState extends ConsumerState<TodayChangePage> {
             icon: const Icon(Icons.sort, size: 22),
             tooltip: '排序',
             onSelected: (mode) => setState(() => _sortMode = mode),
-            itemBuilder: (_) => [
-              _sortItem(_SortMode.changeDesc, '涨跌幅 高→低'),
-              _sortItem(_SortMode.changeAsc, '涨跌幅 低→高'),
-              _sortItem(_SortMode.profitDesc, '收益额 高→低'),
-              _sortItem(_SortMode.profitAsc, '收益额 低→高'),
-            ],
+            itemBuilder:
+                (_) => [
+                  _sortItem(_SortMode.changeDesc, '涨跌幅 高→低'),
+                  _sortItem(_SortMode.changeAsc, '涨跌幅 低→高'),
+                  _sortItem(_SortMode.profitDesc, '收益额 高→低'),
+                  _sortItem(_SortMode.profitAsc, '收益额 低→高'),
+                ],
           ),
         ],
       ),
@@ -56,22 +57,27 @@ class _TodayChangePageState extends ConsumerState<TodayChangePage> {
           final items = _buildItems(holdings, marketData);
           if (items.isEmpty) {
             return const Center(
-                child: Text('暂无持仓数据',
-                    style: TextStyle(color: AppColors.textSecondary)));
+              child: Text(
+                '暂无持仓数据',
+                style: TextStyle(color: AppColors.textSecondary),
+              ),
+            );
           }
-          return CustomScrollView(slivers: [
-            SliverToBoxAdapter(child: _SummaryHeader(overview: overview)),
-            SliverPadding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              sliver: SliverList(
-                delegate: SliverChildBuilderDelegate(
-                  (ctx, i) => _HoldingTile(item: items[i]),
-                  childCount: items.length,
+          return CustomScrollView(
+            slivers: [
+              SliverToBoxAdapter(child: _SummaryHeader(overview: overview)),
+              SliverPadding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                sliver: SliverList(
+                  delegate: SliverChildBuilderDelegate(
+                    (ctx, i) => _HoldingTile(item: items[i]),
+                    childCount: items.length,
+                  ),
                 ),
               ),
-            ),
-            const SliverToBoxAdapter(child: SizedBox(height: 32)),
-          ]);
+              const SliverToBoxAdapter(child: SizedBox(height: 32)),
+            ],
+          );
         },
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('加载失败: $e')),
@@ -82,51 +88,82 @@ class _TodayChangePageState extends ConsumerState<TodayChangePage> {
   PopupMenuItem<_SortMode> _sortItem(_SortMode mode, String label) {
     return PopupMenuItem(
       value: mode,
-      child: Row(children: [
-        if (_sortMode == mode)
-          const Icon(Icons.check, size: 18, color: AppColors.primary)
-        else
-          const SizedBox(width: 18),
-        const SizedBox(width: 8),
-        Text(label),
-      ]),
+      child: Row(
+        children: [
+          if (_sortMode == mode)
+            const Icon(Icons.check, size: 18, color: AppColors.primary)
+          else
+            const SizedBox(width: 18),
+          const SizedBox(width: 8),
+          Text(label),
+        ],
+      ),
     );
   }
 
   List<_HoldingItem> _buildItems(
-      List<Holding> holdings, Map<String, MarketDataModel> marketData) {
+    List<Holding> holdings,
+    Map<String, MarketDataModel> marketData,
+  ) {
     final items = <_HoldingItem>[];
     for (final h in holdings) {
       if (h.quantity == 0) continue;
       final market = marketData[h.assetCode];
-      final currentPrice = market?.price ?? h.currentPrice;
+      final entryPrice = h.initialPrice > 0 ? h.initialPrice : h.currentPrice;
+      final effectiveMarket =
+          market ??
+          (entryPrice > 0
+              ? MarketDataModel(
+                assetCode: h.assetCode,
+                name: h.assetName,
+                price: entryPrice,
+                change: entryPrice - h.costPrice,
+                changePercent:
+                    h.costPrice > 0
+                        ? ((entryPrice - h.costPrice) / h.costPrice) * 100
+                        : 0,
+                updatedAt: h.initialValuationDate,
+                currency: h.currency.isEmpty ? 'CNY' : h.currency,
+                source: MarketDataModel.sourceEntry,
+              )
+              : null);
+      final currentPrice = effectiveMarket?.price ?? h.currentPrice;
       final mv = h.quantity * currentPrice;
       final cost = h.quantity * h.costPrice;
       final totalProfit = mv - cost;
-      final totalProfitPct = h.costPrice > 0
-          ? (currentPrice - h.costPrice) / h.costPrice * 100
-          : 0.0;
-      final todayChangePct = market?.changePercent ?? 0.0;
-      final todayChange = market != null ? mv * todayChangePct / 100 : 0.0;
-      final type = AssetType.values.firstWhere((e) => e.name == h.assetType,
-          orElse: () => AssetType.other);
+      final totalProfitPct =
+          h.costPrice > 0
+              ? (currentPrice - h.costPrice) / h.costPrice * 100
+              : 0.0;
+      final todayChangePct = effectiveMarket?.changePercent ?? 0.0;
+      final todayChange =
+          effectiveMarket != null ? mv * todayChangePct / 100 : 0.0;
+      final type = AssetType.values.firstWhere(
+        (e) => e.name == h.assetType,
+        orElse: () => AssetType.other,
+      );
 
-      items.add(_HoldingItem(
-        name: h.assetName,
-        code: h.assetCode,
-        assetType: type,
-        marketValue: mv,
-        todayChange: todayChange,
-        todayChangePct: todayChangePct,
-        totalProfit: totalProfit,
-        totalProfitPct: totalProfitPct,
-        hasMarketData: market != null,
-        currentPrice: market?.price,
-        costPrice: h.costPrice,
-        currency: h.currency.isEmpty ? 'CNY' : h.currency,
-        updatedAt: market?.updatedAt,
-        quoteSource: market?.source,
-      ));
+      items.add(
+        _HoldingItem(
+          name: h.assetName,
+          code: h.assetCode,
+          assetType: type,
+          marketValue: mv,
+          todayChange: todayChange,
+          todayChangePct: todayChangePct,
+          totalProfit: totalProfit,
+          totalProfitPct: totalProfitPct,
+          hasMarketData: effectiveMarket != null,
+          currentPrice: effectiveMarket?.price,
+          costPrice: h.costPrice,
+          currency:
+              (effectiveMarket?.currency.isNotEmpty == true)
+                  ? effectiveMarket!.currency
+                  : (h.currency.isEmpty ? 'CNY' : h.currency),
+          updatedAt: effectiveMarket?.updatedAt,
+          quoteSource: effectiveMarket?.source,
+        ),
+      );
     }
 
     switch (_sortMode) {
@@ -194,42 +231,56 @@ class _SummaryHeader extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-              color: color.withValues(alpha: 0.25),
-              blurRadius: 12,
-              offset: const Offset(0, 4))
+            color: color.withValues(alpha: 0.25),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
         ],
       ),
       child: Column(
         children: [
-          Text('今日总收益',
-              style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.8), fontSize: 13)),
+          Text(
+            '今日总收益',
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.8),
+              fontSize: 13,
+            ),
+          ),
           const SizedBox(height: 8),
           Text(
             FormatUtils.formatChange(overview.todayChange),
             style: const TextStyle(
-                color: Colors.white, fontSize: 30, fontWeight: FontWeight.w700),
+              color: Colors.white,
+              fontSize: 30,
+              fontWeight: FontWeight.w700,
+            ),
           ),
           const SizedBox(height: 4),
           Text(
             FormatUtils.formatPercent(overview.todayChangePercent),
             style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.9),
-                fontSize: 16,
-                fontWeight: FontWeight.w500),
+              color: Colors.white.withValues(alpha: 0.9),
+              fontSize: 16,
+              fontWeight: FontWeight.w500,
+            ),
           ),
           const SizedBox(height: 12),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
               _miniStat(
-                  '总资产', FormatUtils.formatCurrency(overview.totalAssets)),
+                '总资产',
+                FormatUtils.formatCurrency(overview.totalAssets),
+              ),
               Container(
-                  width: 1,
-                  height: 24,
-                  color: Colors.white.withValues(alpha: 0.3)),
-              _miniStat('持仓数',
-                  '${overview.categories.fold(0, (s, c) => s + c.holdingCount)}'),
+                width: 1,
+                height: 24,
+                color: Colors.white.withValues(alpha: 0.3),
+              ),
+              _miniStat(
+                '持仓数',
+                '${overview.categories.fold(0, (s, c) => s + c.holdingCount)}',
+              ),
             ],
           ),
         ],
@@ -238,15 +289,26 @@ class _SummaryHeader extends StatelessWidget {
   }
 
   Widget _miniStat(String label, String value) {
-    return Column(children: [
-      Text(label,
+    return Column(
+      children: [
+        Text(
+          label,
           style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.7), fontSize: 11)),
-      const SizedBox(height: 2),
-      Text(value,
+            color: Colors.white.withValues(alpha: 0.7),
+            fontSize: 11,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          value,
           style: const TextStyle(
-              color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600)),
-    ]);
+            color: Colors.white,
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
+    );
   }
 }
 
@@ -258,14 +320,16 @@ class _HoldingTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final group = getGroupForAssetType(item.assetType);
     final groupColor = group?.color ?? AppColors.textSecondary;
-    final changeColor = item.todayChangePct > 0
-        ? AppColors.gain
-        : item.todayChangePct < 0
+    final changeColor =
+        item.todayChangePct > 0
+            ? AppColors.gain
+            : item.todayChangePct < 0
             ? AppColors.loss
             : AppColors.textSecondary;
-    final profitColor = item.totalProfit > 0
-        ? AppColors.gain
-        : item.totalProfit < 0
+    final profitColor =
+        item.totalProfit > 0
+            ? AppColors.gain
+            : item.totalProfit < 0
             ? AppColors.loss
             : AppColors.textSecondary;
 
@@ -289,70 +353,102 @@ class _HoldingTile extends StatelessWidget {
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Center(
-                    child: Text(
-                  item.assetType.code,
-                  style: TextStyle(
+                  child: Text(
+                    item.assetType.code,
+                    style: TextStyle(
                       fontSize: 9,
                       fontWeight: FontWeight.w700,
-                      color: groupColor),
-                )),
+                      color: groupColor,
+                    ),
+                  ),
+                ),
               ),
               const SizedBox(width: 10),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(item.name,
-                        style: const TextStyle(
-                            fontSize: 14, fontWeight: FontWeight.w600),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis),
+                    Text(
+                      item.name,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                     const SizedBox(height: 2),
                     Text(
                       '${item.assetType.label} · ${item.code}',
                       style: const TextStyle(
-                          fontSize: 11, color: AppColors.textSecondary),
+                        fontSize: 11,
+                        color: AppColors.textSecondary,
+                      ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
                   ],
                 ),
               ),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  if (item.hasMarketData &&
-                      item.currentPrice != null &&
-                      item.currentPrice! > 0) ...[
-                    Text(
-                      FormatUtils.formatPrice(item.currentPrice!),
-                      style: const TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.textPrimary),
-                    ),
-                    if (item.costPrice > 0)
+              const SizedBox(width: 8),
+              SizedBox(
+                width: 96,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    if (item.hasMarketData &&
+                        item.currentPrice != null &&
+                        item.currentPrice! > 0) ...[
                       Text(
-                        '成本 ${FormatUtils.formatPrice(item.costPrice)}',
+                        FormatUtils.formatPrice(
+                          item.currentPrice!,
+                          currency: item.currency,
+                        ),
                         style: const TextStyle(
-                            fontSize: 10, color: AppColors.textHint),
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.textPrimary,
+                        ),
+                        textAlign: TextAlign.end,
                       ),
-                  ],
-                  Text(
-                    FormatUtils.formatPercent(item.todayChangePct),
-                    style: TextStyle(
+                      if (item.costPrice > 0)
+                        Text(
+                          '成本 ${FormatUtils.formatPrice(item.costPrice, currency: item.currency)}',
+                          style: const TextStyle(
+                            fontSize: 9,
+                            color: AppColors.textHint,
+                          ),
+                          textAlign: TextAlign.end,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                    ],
+                    Text(
+                      item.hasMarketData
+                          ? FormatUtils.formatPercent(item.todayChangePct)
+                          : '--',
+                      style: TextStyle(
                         fontSize:
                             item.hasMarketData && item.currentPrice != null
                                 ? 13
                                 : 16,
                         fontWeight: FontWeight.w700,
-                        color: changeColor),
-                  ),
-                  Text(
-                    FormatUtils.formatChange(item.todayChange),
-                    style: TextStyle(fontSize: 11, color: changeColor),
-                  ),
-                ],
+                        color: changeColor,
+                      ),
+                      textAlign: TextAlign.end,
+                    ),
+                    Text(
+                      item.hasMarketData
+                          ? FormatUtils.formatChange(
+                            item.todayChange,
+                            currency: item.currency,
+                          )
+                          : '--',
+                      style: TextStyle(fontSize: 11, color: changeColor),
+                      textAlign: TextAlign.end,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
@@ -366,61 +462,85 @@ class _HoldingTile extends StatelessWidget {
             child: Row(
               children: [
                 _statCol(
-                    '市值',
-                    FormatUtils.formatCurrency(item.marketValue,
-                        currency: item.currency),
-                    AppColors.textPrimary),
+                  '市值',
+                  FormatUtils.formatCurrency(
+                    item.marketValue,
+                    currency: item.currency,
+                  ),
+                  AppColors.textPrimary,
+                ),
                 _statCol(
-                    '总收益',
-                    FormatUtils.formatChange(item.totalProfit,
-                        currency: item.currency),
-                    profitColor),
-                _statCol('总收益率', FormatUtils.formatPercent(item.totalProfitPct),
-                    profitColor),
+                  '总收益',
+                  FormatUtils.formatChange(
+                    item.totalProfit,
+                    currency: item.currency,
+                  ),
+                  profitColor,
+                ),
+                _statCol(
+                  '总收益率',
+                  FormatUtils.formatPercent(item.totalProfitPct),
+                  profitColor,
+                ),
                 if (!item.hasMarketData)
                   Expanded(
-                      child: Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      Icon(Icons.cloud_off,
-                          size: 12, color: AppColors.textHint),
-                      const SizedBox(width: 2),
-                      Text('无行情',
-                          style: TextStyle(
-                              fontSize: 10, color: AppColors.textHint)),
-                    ],
-                  ))
-                else if (item.updatedAt != null)
-                  Expanded(
-                      child: Align(
-                    alignment: Alignment.centerRight,
                     child: Row(
-                      mainAxisSize: MainAxisSize.min,
+                      mainAxisAlignment: MainAxisAlignment.end,
                       children: [
-                        if (_sourceLabel(item.quoteSource) != null) ...[
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 4, vertical: 1),
-                            decoration: BoxDecoration(
-                              color: AppColors.backgroundCard,
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: Text(
-                              _sourceLabel(item.quoteSource)!,
-                              style: const TextStyle(
-                                  fontSize: 9, color: AppColors.textSecondary),
-                            ),
-                          ),
-                          const SizedBox(width: 4),
-                        ],
+                        Icon(
+                          Icons.cloud_off,
+                          size: 12,
+                          color: AppColors.textHint,
+                        ),
+                        const SizedBox(width: 2),
                         Text(
-                          _formatDataTime(item.updatedAt!, item.quoteSource),
-                          style: const TextStyle(
-                              fontSize: 10, color: AppColors.textHint),
+                          '未拉到行情',
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: AppColors.textHint,
+                          ),
                         ),
                       ],
                     ),
-                  )),
+                  )
+                else if (item.updatedAt != null)
+                  Expanded(
+                    child: Align(
+                      alignment: Alignment.centerRight,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (_sourceLabel(item.quoteSource) != null) ...[
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 4,
+                                vertical: 1,
+                              ),
+                              decoration: BoxDecoration(
+                                color: AppColors.backgroundCard,
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                _sourceLabel(item.quoteSource)!,
+                                style: const TextStyle(
+                                  fontSize: 9,
+                                  color: AppColors.textSecondary,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                          ],
+                          Text(
+                            _formatDataTime(item.updatedAt!, item.quoteSource),
+                            style: const TextStyle(
+                              fontSize: 10,
+                              color: AppColors.textHint,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
               ],
             ),
           ),
@@ -434,28 +554,49 @@ class _HoldingTile extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label,
-              style: const TextStyle(
-                  fontSize: 10, color: AppColors.textSecondary)),
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 10,
+              color: AppColors.textSecondary,
+            ),
+          ),
           const SizedBox(height: 1),
-          Text(value,
-              style: TextStyle(
-                  fontSize: 12, fontWeight: FontWeight.w600, color: valueColor),
-              overflow: TextOverflow.ellipsis),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: valueColor,
+            ),
+            overflow: TextOverflow.ellipsis,
+          ),
         ],
       ),
     );
   }
 
   String _formatDataTime(DateTime dt, String? source) {
+    if (dt.year < 2000) return '未知';
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final dataDay = DateTime(dt.year, dt.month, dt.day);
     final diff = today.difference(dataDay).inDays;
 
     if (source == MarketDataModel.sourceCache) {
-      return '${dt.month}/${dt.day}';
+      return '缓存 ${dt.month}/${dt.day}';
     }
+    if (source == MarketDataModel.sourceClose) {
+      if (diff == 0) return '今日收盘';
+      if (diff == 1) return '昨日收盘';
+      return '收盘 ${dt.month}/${dt.day}';
+    }
+    if (source == MarketDataModel.sourceEntry) {
+      return '录入 ${dt.month}/${dt.day}';
+    }
+
+    // diff < 0 表示数据日期是未来（API 时间戳异常），直接显示日期
+    if (diff < 0) return '${dt.month}/${dt.day}';
 
     if (diff == 0) {
       // 今天的数据：交易时间内显示"实时"，收盘后显示"今日 HH:mm"
@@ -479,6 +620,8 @@ class _HoldingTile extends StatelessWidget {
         return '收盘价';
       case MarketDataModel.sourceCache:
         return '缓存价';
+      case MarketDataModel.sourceEntry:
+        return '录入价';
       default:
         return null;
     }

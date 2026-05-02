@@ -323,8 +323,11 @@ class HoldingListPage extends ConsumerWidget {
               quantity: Value(existing.quantity),
               costPrice: Value(existing.costPrice),
               currentPrice: Value(existing.currentPrice),
+              initialPrice: Value(existing.initialPrice),
+              initialValuationDate: Value(existing.initialValuationDate),
               tags: Value(existing.tags),
               notes: Value(existing.notes),
+              currency: Value(existing.currency),
               createdAt: Value(existing.createdAt),
               updatedAt: Value(DateTime.now()),
             ));

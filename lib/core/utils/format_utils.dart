@@ -32,7 +32,11 @@ class FormatUtils {
 
   /// 格式化金额（带千分位）
   /// [currency] 优先于 [prefix]：传了 currency 时按对应币种符号显示。
-  static String formatCurrency(double amount, {String prefix = '¥', String? currency}) {
+  static String formatCurrency(
+    double amount, {
+    String prefix = '¥',
+    String? currency,
+  }) {
     final p = currency != null ? currencySymbol(currency) : prefix;
     if (amount.abs() >= 100000000) {
       return '$p${_percentFormat.format(amount / 100000000)}亿';
@@ -44,13 +48,21 @@ class FormatUtils {
   }
 
   /// 格式化完整金额（不缩略）
-  static String formatFullCurrency(double amount, {String prefix = '¥', String? currency}) {
+  static String formatFullCurrency(
+    double amount, {
+    String prefix = '¥',
+    String? currency,
+  }) {
     final p = currency != null ? currencySymbol(currency) : prefix;
     return '$p${_currencyFormat.format(amount)}';
   }
 
   /// 格式化整数金额
-  static String formatIntCurrency(double amount, {String prefix = '¥', String? currency}) {
+  static String formatIntCurrency(
+    double amount, {
+    String prefix = '¥',
+    String? currency,
+  }) {
     final p = currency != null ? currencySymbol(currency) : prefix;
     return '$p${_intFormat.format(amount)}';
   }
@@ -62,7 +74,11 @@ class FormatUtils {
   }
 
   /// 格式化涨跌额
-  static String formatChange(double value, {String prefix = '¥', String? currency}) {
+  static String formatChange(
+    double value, {
+    String prefix = '¥',
+    String? currency,
+  }) {
     final p = currency != null ? currencySymbol(currency) : prefix;
     final sign = value >= 0 ? '+' : '';
     return '$sign$p${_currencyFormat.format(value)}';
@@ -104,7 +120,10 @@ class FormatUtils {
   }
 
   /// 格式化价格（不带前缀）
-  static String formatPrice(double value) {
-    return _currencyFormat.format(value);
+  static String formatPrice(double value, {String? currency}) {
+    if (currency == null || currency.isEmpty) {
+      return _currencyFormat.format(value);
+    }
+    return '${currencySymbol(currency)}${_currencyFormat.format(value)}';
   }
 }

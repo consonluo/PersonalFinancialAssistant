@@ -1126,6 +1126,30 @@ class $HoldingsTable extends Holdings with TableInfo<$HoldingsTable, Holding> {
     requiredDuringInsert: false,
     defaultValue: const Constant(0),
   );
+  static const VerificationMeta _initialPriceMeta = const VerificationMeta(
+    'initialPrice',
+  );
+  @override
+  late final GeneratedColumn<double> initialPrice = GeneratedColumn<double>(
+    'initial_price',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _initialValuationDateMeta =
+      const VerificationMeta('initialValuationDate');
+  @override
+  late final GeneratedColumn<DateTime> initialValuationDate =
+      GeneratedColumn<DateTime>(
+    'initial_valuation_date',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
   static const VerificationMeta _tagsMeta = const VerificationMeta('tags');
   @override
   late final GeneratedColumn<String> tags = GeneratedColumn<String>(
@@ -1192,6 +1216,8 @@ class $HoldingsTable extends Holdings with TableInfo<$HoldingsTable, Holding> {
     quantity,
     costPrice,
     currentPrice,
+    initialPrice,
+    initialValuationDate,
     tags,
     notes,
     currency,
@@ -1265,6 +1291,24 @@ class $HoldingsTable extends Holdings with TableInfo<$HoldingsTable, Holding> {
         currentPrice.isAcceptableOrUnknown(
           data['current_price']!,
           _currentPriceMeta,
+        ),
+      );
+    }
+    if (data.containsKey('initial_price')) {
+      context.handle(
+        _initialPriceMeta,
+        initialPrice.isAcceptableOrUnknown(
+          data['initial_price']!,
+          _initialPriceMeta,
+        ),
+      );
+    }
+    if (data.containsKey('initial_valuation_date')) {
+      context.handle(
+        _initialValuationDateMeta,
+        initialValuationDate.isAcceptableOrUnknown(
+          data['initial_valuation_date']!,
+          _initialValuationDateMeta,
         ),
       );
     }
@@ -1347,6 +1391,16 @@ class $HoldingsTable extends Holdings with TableInfo<$HoldingsTable, Holding> {
             DriftSqlType.double,
             data['${effectivePrefix}current_price'],
           )!,
+      initialPrice:
+          attachedDatabase.typeMapping.read(
+            DriftSqlType.double,
+            data['${effectivePrefix}initial_price'],
+          )!,
+      initialValuationDate:
+          attachedDatabase.typeMapping.read(
+            DriftSqlType.dateTime,
+            data['${effectivePrefix}initial_valuation_date'],
+          )!,
       tags:
           attachedDatabase.typeMapping.read(
             DriftSqlType.string,
@@ -1390,6 +1444,8 @@ class Holding extends DataClass implements Insertable<Holding> {
   final double quantity;
   final double costPrice;
   final double currentPrice;
+  final double initialPrice;
+  final DateTime initialValuationDate;
   final String tags;
   final String notes;
   final String currency;
@@ -1404,6 +1460,8 @@ class Holding extends DataClass implements Insertable<Holding> {
     required this.quantity,
     required this.costPrice,
     required this.currentPrice,
+    required this.initialPrice,
+    required this.initialValuationDate,
     required this.tags,
     required this.notes,
     required this.currency,
@@ -1421,6 +1479,8 @@ class Holding extends DataClass implements Insertable<Holding> {
     map['quantity'] = Variable<double>(quantity);
     map['cost_price'] = Variable<double>(costPrice);
     map['current_price'] = Variable<double>(currentPrice);
+    map['initial_price'] = Variable<double>(initialPrice);
+    map['initial_valuation_date'] = Variable<DateTime>(initialValuationDate);
     map['tags'] = Variable<String>(tags);
     map['notes'] = Variable<String>(notes);
     map['currency'] = Variable<String>(currency);
@@ -1439,6 +1499,8 @@ class Holding extends DataClass implements Insertable<Holding> {
       quantity: Value(quantity),
       costPrice: Value(costPrice),
       currentPrice: Value(currentPrice),
+      initialPrice: Value(initialPrice),
+      initialValuationDate: Value(initialValuationDate),
       tags: Value(tags),
       notes: Value(notes),
       currency: Value(currency),
@@ -1461,6 +1523,12 @@ class Holding extends DataClass implements Insertable<Holding> {
       quantity: serializer.fromJson<double>(json['quantity']),
       costPrice: serializer.fromJson<double>(json['costPrice']),
       currentPrice: serializer.fromJson<double>(json['currentPrice']),
+      initialPrice: serializer.fromJson<double>(
+        json['initialPrice'] ?? json['currentPrice'],
+      ),
+      initialValuationDate: serializer.fromJson<DateTime>(
+        json['initialValuationDate'] ?? json['createdAt'],
+      ),
       tags: serializer.fromJson<String>(json['tags']),
       notes: serializer.fromJson<String>(json['notes']),
       currency: serializer.fromJson<String>(json['currency']),
@@ -1480,6 +1548,8 @@ class Holding extends DataClass implements Insertable<Holding> {
       'quantity': serializer.toJson<double>(quantity),
       'costPrice': serializer.toJson<double>(costPrice),
       'currentPrice': serializer.toJson<double>(currentPrice),
+      'initialPrice': serializer.toJson<double>(initialPrice),
+      'initialValuationDate': serializer.toJson<DateTime>(initialValuationDate),
       'tags': serializer.toJson<String>(tags),
       'notes': serializer.toJson<String>(notes),
       'currency': serializer.toJson<String>(currency),
@@ -1497,6 +1567,8 @@ class Holding extends DataClass implements Insertable<Holding> {
     double? quantity,
     double? costPrice,
     double? currentPrice,
+    double? initialPrice,
+    DateTime? initialValuationDate,
     String? tags,
     String? notes,
     String? currency,
@@ -1511,6 +1583,8 @@ class Holding extends DataClass implements Insertable<Holding> {
     quantity: quantity ?? this.quantity,
     costPrice: costPrice ?? this.costPrice,
     currentPrice: currentPrice ?? this.currentPrice,
+    initialPrice: initialPrice ?? this.initialPrice,
+    initialValuationDate: initialValuationDate ?? this.initialValuationDate,
     tags: tags ?? this.tags,
     notes: notes ?? this.notes,
     currency: currency ?? this.currency,
@@ -1530,6 +1604,14 @@ class Holding extends DataClass implements Insertable<Holding> {
           data.currentPrice.present
               ? data.currentPrice.value
               : this.currentPrice,
+      initialPrice:
+          data.initialPrice.present
+              ? data.initialPrice.value
+              : this.initialPrice,
+      initialValuationDate:
+          data.initialValuationDate.present
+              ? data.initialValuationDate.value
+              : this.initialValuationDate,
       tags: data.tags.present ? data.tags.value : this.tags,
       notes: data.notes.present ? data.notes.value : this.notes,
       currency: data.currency.present ? data.currency.value : this.currency,
@@ -1549,6 +1631,8 @@ class Holding extends DataClass implements Insertable<Holding> {
           ..write('quantity: $quantity, ')
           ..write('costPrice: $costPrice, ')
           ..write('currentPrice: $currentPrice, ')
+          ..write('initialPrice: $initialPrice, ')
+          ..write('initialValuationDate: $initialValuationDate, ')
           ..write('tags: $tags, ')
           ..write('notes: $notes, ')
           ..write('currency: $currency, ')
@@ -1568,6 +1652,8 @@ class Holding extends DataClass implements Insertable<Holding> {
     quantity,
     costPrice,
     currentPrice,
+    initialPrice,
+    initialValuationDate,
     tags,
     notes,
     currency,
@@ -1586,6 +1672,8 @@ class Holding extends DataClass implements Insertable<Holding> {
           other.quantity == this.quantity &&
           other.costPrice == this.costPrice &&
           other.currentPrice == this.currentPrice &&
+          other.initialPrice == this.initialPrice &&
+          other.initialValuationDate == this.initialValuationDate &&
           other.tags == this.tags &&
           other.notes == this.notes &&
           other.currency == this.currency &&
@@ -1602,6 +1690,8 @@ class HoldingsCompanion extends UpdateCompanion<Holding> {
   final Value<double> quantity;
   final Value<double> costPrice;
   final Value<double> currentPrice;
+  final Value<double> initialPrice;
+  final Value<DateTime> initialValuationDate;
   final Value<String> tags;
   final Value<String> notes;
   final Value<String> currency;
@@ -1617,6 +1707,8 @@ class HoldingsCompanion extends UpdateCompanion<Holding> {
     this.quantity = const Value.absent(),
     this.costPrice = const Value.absent(),
     this.currentPrice = const Value.absent(),
+    this.initialPrice = const Value.absent(),
+    this.initialValuationDate = const Value.absent(),
     this.tags = const Value.absent(),
     this.notes = const Value.absent(),
     this.currency = const Value.absent(),
@@ -1633,6 +1725,8 @@ class HoldingsCompanion extends UpdateCompanion<Holding> {
     this.quantity = const Value.absent(),
     this.costPrice = const Value.absent(),
     this.currentPrice = const Value.absent(),
+    this.initialPrice = const Value.absent(),
+    this.initialValuationDate = const Value.absent(),
     this.tags = const Value.absent(),
     this.notes = const Value.absent(),
     this.currency = const Value.absent(),
@@ -1653,6 +1747,8 @@ class HoldingsCompanion extends UpdateCompanion<Holding> {
     Expression<double>? quantity,
     Expression<double>? costPrice,
     Expression<double>? currentPrice,
+    Expression<double>? initialPrice,
+    Expression<DateTime>? initialValuationDate,
     Expression<String>? tags,
     Expression<String>? notes,
     Expression<String>? currency,
@@ -1669,6 +1765,9 @@ class HoldingsCompanion extends UpdateCompanion<Holding> {
       if (quantity != null) 'quantity': quantity,
       if (costPrice != null) 'cost_price': costPrice,
       if (currentPrice != null) 'current_price': currentPrice,
+      if (initialPrice != null) 'initial_price': initialPrice,
+      if (initialValuationDate != null)
+        'initial_valuation_date': initialValuationDate,
       if (tags != null) 'tags': tags,
       if (notes != null) 'notes': notes,
       if (currency != null) 'currency': currency,
@@ -1687,6 +1786,8 @@ class HoldingsCompanion extends UpdateCompanion<Holding> {
     Value<double>? quantity,
     Value<double>? costPrice,
     Value<double>? currentPrice,
+    Value<double>? initialPrice,
+    Value<DateTime>? initialValuationDate,
     Value<String>? tags,
     Value<String>? notes,
     Value<String>? currency,
@@ -1703,6 +1804,8 @@ class HoldingsCompanion extends UpdateCompanion<Holding> {
       quantity: quantity ?? this.quantity,
       costPrice: costPrice ?? this.costPrice,
       currentPrice: currentPrice ?? this.currentPrice,
+      initialPrice: initialPrice ?? this.initialPrice,
+      initialValuationDate: initialValuationDate ?? this.initialValuationDate,
       tags: tags ?? this.tags,
       notes: notes ?? this.notes,
       currency: currency ?? this.currency,
@@ -1739,6 +1842,14 @@ class HoldingsCompanion extends UpdateCompanion<Holding> {
     if (currentPrice.present) {
       map['current_price'] = Variable<double>(currentPrice.value);
     }
+    if (initialPrice.present) {
+      map['initial_price'] = Variable<double>(initialPrice.value);
+    }
+    if (initialValuationDate.present) {
+      map['initial_valuation_date'] = Variable<DateTime>(
+        initialValuationDate.value,
+      );
+    }
     if (tags.present) {
       map['tags'] = Variable<String>(tags.value);
     }
@@ -1771,6 +1882,8 @@ class HoldingsCompanion extends UpdateCompanion<Holding> {
           ..write('quantity: $quantity, ')
           ..write('costPrice: $costPrice, ')
           ..write('currentPrice: $currentPrice, ')
+          ..write('initialPrice: $initialPrice, ')
+          ..write('initialValuationDate: $initialValuationDate, ')
           ..write('tags: $tags, ')
           ..write('notes: $notes, ')
           ..write('currency: $currency, ')
@@ -5135,6 +5248,8 @@ typedef $$HoldingsTableCreateCompanionBuilder =
       Value<double> quantity,
       Value<double> costPrice,
       Value<double> currentPrice,
+      Value<double> initialPrice,
+      Value<DateTime> initialValuationDate,
       Value<String> tags,
       Value<String> notes,
       Value<String> currency,
@@ -5152,6 +5267,8 @@ typedef $$HoldingsTableUpdateCompanionBuilder =
       Value<double> quantity,
       Value<double> costPrice,
       Value<double> currentPrice,
+      Value<double> initialPrice,
+      Value<DateTime> initialValuationDate,
       Value<String> tags,
       Value<String> notes,
       Value<String> currency,
@@ -5206,6 +5323,16 @@ class $$HoldingsTableFilterComposer
 
   ColumnFilters<double> get currentPrice => $composableBuilder(
     column: $table.currentPrice,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get initialPrice => $composableBuilder(
+    column: $table.initialPrice,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get initialValuationDate => $composableBuilder(
+    column: $table.initialValuationDate,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -5284,6 +5411,16 @@ class $$HoldingsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<double> get initialPrice => $composableBuilder(
+    column: $table.initialPrice,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get initialValuationDate => $composableBuilder(
+    column: $table.initialValuationDate,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get tags => $composableBuilder(
     column: $table.tags,
     builder: (column) => ColumnOrderings(column),
@@ -5345,6 +5482,14 @@ class $$HoldingsTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<double> get initialPrice =>
+      $composableBuilder(column: $table.initialPrice, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get initialValuationDate => $composableBuilder(
+    column: $table.initialValuationDate,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<String> get tags =>
       $composableBuilder(column: $table.tags, builder: (column) => column);
 
@@ -5397,6 +5542,8 @@ class $$HoldingsTableTableManager
                 Value<double> quantity = const Value.absent(),
                 Value<double> costPrice = const Value.absent(),
                 Value<double> currentPrice = const Value.absent(),
+                Value<double> initialPrice = const Value.absent(),
+                Value<DateTime> initialValuationDate = const Value.absent(),
                 Value<String> tags = const Value.absent(),
                 Value<String> notes = const Value.absent(),
                 Value<String> currency = const Value.absent(),
@@ -5412,6 +5559,8 @@ class $$HoldingsTableTableManager
                 quantity: quantity,
                 costPrice: costPrice,
                 currentPrice: currentPrice,
+                initialPrice: initialPrice,
+                initialValuationDate: initialValuationDate,
                 tags: tags,
                 notes: notes,
                 currency: currency,
@@ -5429,6 +5578,8 @@ class $$HoldingsTableTableManager
                 Value<double> quantity = const Value.absent(),
                 Value<double> costPrice = const Value.absent(),
                 Value<double> currentPrice = const Value.absent(),
+                Value<double> initialPrice = const Value.absent(),
+                Value<DateTime> initialValuationDate = const Value.absent(),
                 Value<String> tags = const Value.absent(),
                 Value<String> notes = const Value.absent(),
                 Value<String> currency = const Value.absent(),
@@ -5444,6 +5595,8 @@ class $$HoldingsTableTableManager
                 quantity: quantity,
                 costPrice: costPrice,
                 currentPrice: currentPrice,
+                initialPrice: initialPrice,
+                initialValuationDate: initialValuationDate,
                 tags: tags,
                 notes: notes,
                 currency: currency,

@@ -3,6 +3,7 @@ class MarketDataModel {
   static const String sourceLive = 'live';
   static const String sourceClose = 'close';
   static const String sourceCache = 'cache';
+  static const String sourceEntry = 'entry';
 
   final String assetCode;
   final String name;
@@ -16,7 +17,7 @@ class MarketDataModel {
   /// 由各 API 按数据来源标注：东财 A 股=CNY、东财港股=HKD、新浪美股=USD、基金=CNY。
   final String currency;
 
-  /// 行情来源：live(实时接口) / close(最近交易日收盘价) / cache(数据库缓存)
+  /// 行情来源：live(实时接口) / close(最近交易日收盘价) / cache(数据库缓存) / entry(录入价兜底)
   final String source;
 
   const MarketDataModel({

@@ -5,6 +5,7 @@ import '../core/utils/exchange_rate_service.dart';
 import 'account_provider.dart';
 import 'holding_provider.dart';
 import 'market_provider.dart';
+import 'liability_provider.dart';
 
 /// 汇率缓存 Provider
 final exchangeRatesProvider = FutureProvider<Map<String, double>>((ref) async {
@@ -45,26 +46,27 @@ final accountFinancingLiabilityProvider = Provider<double>((ref) {
 });
 
 /// 指定成员的证券账户融资负债（折算 CNY）
-final memberAccountFinancingLiabilityProvider =
-    Provider.family<double, String>((ref, memberId) {
-  final accounts = ref.watch(allAccountsProvider).valueOrNull ?? [];
-  final rates = ref.watch(exchangeRatesProvider).valueOrNull ?? {};
-  double getRate(String currency) {
-    if (currency == 'CNY' || currency.isEmpty) return 1.0;
-    return rates[currency] ?? ExchangeRateService.getFallbackRate(currency);
-  }
+final memberAccountFinancingLiabilityProvider = Provider.family<double, String>(
+  (ref, memberId) {
+    final accounts = ref.watch(allAccountsProvider).valueOrNull ?? [];
+    final rates = ref.watch(exchangeRatesProvider).valueOrNull ?? {};
+    double getRate(String currency) {
+      if (currency == 'CNY' || currency.isEmpty) return 1.0;
+      return rates[currency] ?? ExchangeRateService.getFallbackRate(currency);
+    }
 
-  double total = 0;
-  for (final account in accounts) {
-    if (account.memberId != memberId) continue;
-    if (account.type != AccountType.securities.name) continue;
-    if (account.financingAmount <= 0) continue;
-    final currency =
-        account.financingCurrency.isEmpty ? 'CNY' : account.financingCurrency;
-    total += account.financingAmount * getRate(currency);
-  }
-  return total;
-});
+    double total = 0;
+    for (final account in accounts) {
+      if (account.memberId != memberId) continue;
+      if (account.type != AccountType.securities.name) continue;
+      if (account.financingAmount <= 0) continue;
+      final currency =
+          account.financingCurrency.isEmpty ? 'CNY' : account.financingCurrency;
+      total += account.financingAmount * getRate(currency);
+    }
+    return total;
+  },
+);
 
 /// 资产汇总 Provider
 final assetSummaryProvider = Provider<FamilyAssetOverview>((ref) {
@@ -116,24 +118,26 @@ final assetSummaryProvider = Provider<FamilyAssetOverview>((ref) {
     totalTodayChange += todayChg;
   }
 
-  final categories = categoryMap.entries.map((e) {
-    final acc = e.value;
-    return AssetSummaryModel(
-      assetType: e.key,
-      categoryName: e.key.label,
-      totalMarketValue: acc.totalMV,
-      totalCost: acc.totalCost,
-      profitLoss: acc.totalMV - acc.totalCost,
-      profitLossPercent: acc.totalCost != 0
-          ? (acc.totalMV - acc.totalCost) / acc.totalCost * 100
-          : 0,
-      proportion:
-          totalInvestment != 0 ? acc.totalMV / totalInvestment * 100 : 0,
-      holdingCount: acc.codes.length,
-      todayChange: acc.todayChange,
-    );
-  }).toList()
-    ..sort((a, b) => b.totalMarketValue.compareTo(a.totalMarketValue));
+  final categories =
+      categoryMap.entries.map((e) {
+          final acc = e.value;
+          return AssetSummaryModel(
+            assetType: e.key,
+            categoryName: e.key.label,
+            totalMarketValue: acc.totalMV,
+            totalCost: acc.totalCost,
+            profitLoss: acc.totalMV - acc.totalCost,
+            profitLossPercent:
+                acc.totalCost != 0
+                    ? (acc.totalMV - acc.totalCost) / acc.totalCost * 100
+                    : 0,
+            proportion:
+                totalInvestment != 0 ? acc.totalMV / totalInvestment * 100 : 0,
+            holdingCount: acc.codes.length,
+            todayChange: acc.todayChange,
+          );
+        }).toList()
+        ..sort((a, b) => b.totalMarketValue.compareTo(a.totalMarketValue));
 
   return FamilyAssetOverview(
     totalAssets: totalInvestment,
@@ -181,16 +185,92 @@ final currencyTotalsProvider = Provider<List<CurrencyTotal>>((ref) {
   }
 
   // 按 CNY 等值降序
-  final list = byCurrency.entries.map((e) {
-    final rate = getRate(e.key);
-    return CurrencyTotal(
-      currency: e.key,
-      amountInCurrency: e.value,
-      amountInCny: e.value * rate,
-    );
-  }).toList()
-    ..sort((a, b) => b.amountInCny.compareTo(a.amountInCny));
+  final list =
+      byCurrency.entries.map((e) {
+          final rate = getRate(e.key);
+          return CurrencyTotal(
+            currency: e.key,
+            amountInCurrency: e.value,
+            amountInCny: e.value * rate,
+          );
+        }).toList()
+        ..sort((a, b) => b.amountInCny.compareTo(a.amountInCny));
   return list;
+});
+
+/// 按币种汇总净资产（原币）：
+/// - 资产：持仓按原币汇总
+/// - 负债：手工负债当前仅支持 CNY；证券融资按 financingCurrency 计入
+class CurrencyNetTotal {
+  final String currency;
+  final double assetsInCurrency;
+  final double liabilitiesInCurrency;
+  final double netInCurrency;
+  final double netInCny;
+  const CurrencyNetTotal({
+    required this.currency,
+    required this.assetsInCurrency,
+    required this.liabilitiesInCurrency,
+    required this.netInCurrency,
+    required this.netInCny,
+  });
+}
+
+final netCurrencyTotalsProvider = Provider<List<CurrencyNetTotal>>((ref) {
+  final holdings = ref.watch(allHoldingsProvider).valueOrNull ?? [];
+  final marketData = ref.watch(marketDataProvider);
+  final rates = ref.watch(exchangeRatesProvider).valueOrNull ?? {};
+  final liabilities = ref.watch(allLiabilitiesProvider).valueOrNull ?? [];
+  final accounts = ref.watch(allAccountsProvider).valueOrNull ?? [];
+
+  double getRate(String currency) {
+    if (currency.isEmpty || currency == 'CNY') return 1.0;
+    return rates[currency] ?? ExchangeRateService.getFallbackRate(currency);
+  }
+
+  final assetsByCurrency = <String, double>{};
+  for (final h in holdings) {
+    if (h.quantity == 0) continue;
+    final currency = h.currency.isEmpty ? 'CNY' : h.currency;
+    final price = marketData[h.assetCode]?.price ?? h.currentPrice;
+    assetsByCurrency[currency] =
+        (assetsByCurrency[currency] ?? 0) + h.quantity * price;
+  }
+
+  final liabilitiesByCurrency = <String, double>{};
+  final manualLiabilityCny = liabilities.fold<double>(
+    0,
+    (sum, l) => sum + l.remainingAmount,
+  );
+  liabilitiesByCurrency['CNY'] = manualLiabilityCny;
+
+  for (final account in accounts) {
+    if (account.type != AccountType.securities.name) continue;
+    if (account.financingAmount <= 0) continue;
+    final c =
+        account.financingCurrency.isEmpty ? 'CNY' : account.financingCurrency;
+    liabilitiesByCurrency[c] =
+        (liabilitiesByCurrency[c] ?? 0) + account.financingAmount;
+  }
+
+  final currencies = {...assetsByCurrency.keys, ...liabilitiesByCurrency.keys};
+
+  final result =
+      currencies.map((c) {
+          final assets = assetsByCurrency[c] ?? 0;
+          final liabilities = liabilitiesByCurrency[c] ?? 0;
+          final net = assets - liabilities;
+          return CurrencyNetTotal(
+            currency: c,
+            assetsInCurrency: assets,
+            liabilitiesInCurrency: liabilities,
+            netInCurrency: net,
+            netInCny: net * getRate(c),
+          );
+        }).toList()
+        ..sort((a, b) => b.netInCny.abs().compareTo(a.netInCny.abs()));
+
+  return result;
 });
 
 /// 按成员的资产汇总 — 监听 allHoldingsProvider 确保持仓变化后自动更新

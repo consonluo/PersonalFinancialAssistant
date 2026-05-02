@@ -30,7 +30,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 4;
+  int get schemaVersion => 5;
 
   @override
   MigrationStrategy get migration {
@@ -49,6 +49,17 @@ class AppDatabase extends _$AppDatabase {
         if (from < 4) {
           await m.addColumn(accounts, accounts.financingAmount);
           await m.addColumn(accounts, accounts.financingCurrency);
+        }
+        if (from < 5) {
+          await m.addColumn(holdings, holdings.initialPrice);
+          await m.addColumn(holdings, holdings.initialValuationDate);
+          await m.database.customStatement(
+            'UPDATE holdings SET initial_price = current_price '
+            'WHERE initial_price = 0 OR initial_price IS NULL',
+          );
+          await m.database.customStatement(
+            'UPDATE holdings SET initial_valuation_date = created_at',
+          );
         }
       },
     );

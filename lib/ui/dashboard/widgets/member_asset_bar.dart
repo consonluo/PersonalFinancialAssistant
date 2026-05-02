@@ -105,7 +105,7 @@ class _MemberRow extends ConsumerWidget {
           ),
           const SizedBox(width: 10),
           Text(
-            FormatUtils.formatCurrency(myAsset),
+            FormatUtils.formatCurrency(myAsset, currency: 'CNY'),
             style: const TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,

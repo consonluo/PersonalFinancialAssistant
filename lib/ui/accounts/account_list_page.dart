@@ -218,8 +218,11 @@ class AccountListPage extends ConsumerWidget {
               quantity: Value(existing.quantity),
               costPrice: Value(existing.costPrice),
               currentPrice: Value(existing.currentPrice),
+              initialPrice: Value(existing.initialPrice),
+              initialValuationDate: Value(existing.initialValuationDate),
               tags: Value(existing.tags),
               notes: Value(existing.notes),
+              currency: Value(existing.currency),
               createdAt: Value(existing.createdAt),
               updatedAt: Value(DateTime.now()),
             ));
@@ -400,7 +403,16 @@ class _InstitutionTileState extends State<_InstitutionTile> {
                       const SizedBox(width: 46), // 对齐图标
                       Text('${g.categories.length}个分类 · ${g.holdingCount}笔资产', style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
                       const Spacer(),
-                      Text(FormatUtils.formatCurrency(g.totalMarketValue), style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+                      Text(
+                        FormatUtils.formatCurrency(
+                          g.totalMarketValue,
+                          currency: 'CNY',
+                        ),
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 15,
+                        ),
+                      ),
                       const SizedBox(width: 4),
                       if (g.accountIds.isNotEmpty)
                         IconButton(
@@ -478,10 +490,28 @@ class _CategorySubTileState extends State<_CategorySubTile> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             if (!isDeposit) ...[
-              Text('成本${isWealth ? "总额" : "价"}: ${FormatUtils.formatCurrency(isWealth ? (holding.quantity as double) * (holding.costPrice as double) : (holding.costPrice as double))}', style: const TextStyle(fontSize: 13, color: AppColors.textSecondary)),
-              Text('当前${isWealth ? "总市值" : "现价"}: ${FormatUtils.formatCurrency(initialValue)}', style: const TextStyle(fontSize: 13, color: AppColors.textSecondary)),
+              Text(
+                '成本${isWealth ? "总额" : "价"}: ${FormatUtils.formatCurrency(isWealth ? (holding.quantity as double) * (holding.costPrice as double) : (holding.costPrice as double), currency: holding.currency as String)}',
+                style: const TextStyle(
+                  fontSize: 13,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+              Text(
+                '当前${isWealth ? "总市值" : "现价"}: ${FormatUtils.formatCurrency(initialValue, currency: holding.currency as String)}',
+                style: const TextStyle(
+                  fontSize: 13,
+                  color: AppColors.textSecondary,
+                ),
+              ),
             ] else ...[
-              Text('当前金额: ${FormatUtils.formatCurrency(initialValue)}', style: const TextStyle(fontSize: 13, color: AppColors.textSecondary)),
+              Text(
+                '当前金额: ${FormatUtils.formatCurrency(initialValue, currency: holding.currency as String)}',
+                style: const TextStyle(
+                  fontSize: 13,
+                  color: AppColors.textSecondary,
+                ),
+              ),
             ],
             const SizedBox(height: 12),
             TextField(
@@ -536,14 +566,23 @@ class _CategorySubTileState extends State<_CategorySubTile> {
       quantity: Value(newQuantity),
       costPrice: Value(isDeposit ? newCost : (holding.costPrice as double)),
       currentPrice: Value(newPrice),
+      initialPrice: Value(holding.initialPrice as double),
+      initialValuationDate: Value(holding.initialValuationDate as DateTime),
       tags: Value(holding.tags as String),
       notes: Value(holding.notes as String),
+      currency: Value(holding.currency as String),
       createdAt: Value(holding.createdAt as DateTime),
       updatedAt: Value(DateTime.now()),
     ));
     try { await sync.syncUp(); } catch (_) {}
     if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${holding.assetName} 现价已更新为 ${FormatUtils.formatCurrency(newPrice)}')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '${holding.assetName} 现价已更新为 ${FormatUtils.formatCurrency(newPrice, currency: holding.currency as String)}',
+          ),
+        ),
+      );
     }
   }
 
@@ -571,7 +610,13 @@ class _CategorySubTileState extends State<_CategorySubTile> {
                     Text('${cs.holdings.length}笔', style: const TextStyle(fontSize: 11, color: AppColors.textSecondary)),
                   ],
                 )),
-                Text(FormatUtils.formatCurrency(cs.totalMarketValue), style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                Text(
+                  FormatUtils.formatCurrency(
+                    cs.totalMarketValue,
+                    currency: 'CNY',
+                  ),
+                  style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                ),
                 const SizedBox(width: 4),
                 AnimatedRotation(turns: _expanded ? 0.5 : 0, duration: const Duration(milliseconds: 150), child: const Icon(Icons.expand_more, size: 20, color: AppColors.textHint)),
               ],
@@ -613,7 +658,10 @@ class _CategorySubTileState extends State<_CategorySubTile> {
                 Text(memberName, style: const TextStyle(fontSize: 11, color: AppColors.textHint)),
             ],
           )),
-          Text(FormatUtils.formatCurrency(amount), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+          Text(
+            FormatUtils.formatCurrency(amount, currency: h.currency),
+            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+          ),
           const SizedBox(width: 4),
           const Icon(Icons.chevron_right, size: 16, color: AppColors.textHint),
         ],
@@ -631,7 +679,10 @@ class _CategorySubTileState extends State<_CategorySubTile> {
           Row(
             children: [
               Expanded(child: Text(h.assetName, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500), overflow: TextOverflow.ellipsis, maxLines: 1)),
-              Text(FormatUtils.formatCurrency(totalMv), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+              Text(
+                FormatUtils.formatCurrency(totalMv, currency: h.currency),
+                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+              ),
               const SizedBox(width: 4),
               const Icon(Icons.chevron_right, size: 16, color: AppColors.textHint),
             ],
@@ -642,9 +693,12 @@ class _CategorySubTileState extends State<_CategorySubTile> {
               if (memberName.isNotEmpty)
                 Text('$memberName  ', style: const TextStyle(fontSize: 11, color: AppColors.textHint)),
               const Spacer(),
-              Text('成本${FormatUtils.formatCurrency(totalCost)}  ', style: const TextStyle(fontSize: 11, color: AppColors.textHint)),
               Text(
-                '${pnl >= 0 ? "+" : ""}${FormatUtils.formatCurrency(pnl)}',
+                '成本${FormatUtils.formatCurrency(totalCost, currency: h.currency)}  ',
+                style: const TextStyle(fontSize: 11, color: AppColors.textHint),
+              ),
+              Text(
+                '${pnl >= 0 ? "+" : ""}${FormatUtils.formatCurrency(pnl, currency: h.currency)}',
                 style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: pnl >= 0 ? AppColors.gain : AppColors.loss),
               ),
             ],
@@ -664,7 +718,10 @@ class _CategorySubTileState extends State<_CategorySubTile> {
           Row(
             children: [
               Expanded(child: Text(h.assetName, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500), overflow: TextOverflow.ellipsis, maxLines: 1)),
-              Text(FormatUtils.formatCurrency(totalMv), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+              Text(
+                FormatUtils.formatCurrency(totalMv, currency: h.currency),
+                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+              ),
               const SizedBox(width: 4),
               const Icon(Icons.chevron_right, size: 16, color: AppColors.textHint),
             ],
@@ -682,7 +739,7 @@ class _CategorySubTileState extends State<_CategorySubTile> {
               if (h.quantity > 1)
                 Text('${FormatUtils.formatNumber(h.quantity)}份  净值${h.currentPrice.toStringAsFixed(4)}  ', style: const TextStyle(fontSize: 11, color: AppColors.textHint)),
               Text(
-                '${pnl >= 0 ? "+" : ""}${FormatUtils.formatCurrency(pnl)}',
+                '${pnl >= 0 ? "+" : ""}${FormatUtils.formatCurrency(pnl, currency: h.currency)}',
                 style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: pnl >= 0 ? AppColors.gain : AppColors.loss),
               ),
             ],
@@ -701,7 +758,10 @@ class _CategorySubTileState extends State<_CategorySubTile> {
         Row(
           children: [
             Expanded(child: Text(h.assetName, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500), overflow: TextOverflow.ellipsis, maxLines: 1)),
-            Text(FormatUtils.formatCurrency(mv), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+            Text(
+              FormatUtils.formatCurrency(mv, currency: h.currency),
+              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+            ),
             const SizedBox(width: 4),
             const Icon(Icons.chevron_right, size: 16, color: AppColors.textHint),
           ],
@@ -717,7 +777,7 @@ class _CategorySubTileState extends State<_CategorySubTile> {
               Text(memberName, style: const TextStyle(fontSize: 11, color: AppColors.textHint)),
             const Spacer(),
             Text(
-              '${FormatUtils.formatNumber(h.quantity)}股  ${FormatUtils.formatCurrency(h.costPrice)}→${FormatUtils.formatCurrency(h.currentPrice)}  ',
+              '${FormatUtils.formatNumber(h.quantity)}股  ${FormatUtils.formatCurrency(h.costPrice, currency: h.currency)}→${FormatUtils.formatCurrency(h.currentPrice, currency: h.currency)}  ',
               style: const TextStyle(fontSize: 11, color: AppColors.textHint),
             ),
             Text(

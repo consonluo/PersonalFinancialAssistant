@@ -74,8 +74,8 @@ class _CategoryTab extends ConsumerWidget {
           child: ListView(
             scrollDirection: Axis.horizontal,
             children: [
-              _StatChip(label: '投资总额', value: FormatUtils.formatCurrency(overview.totalInvestment), color: AppColors.primary),
-              _StatChip(label: '今日收益', value: FormatUtils.formatChange(overview.todayChange), color: overview.todayChange >= 0 ? AppColors.gain : AppColors.loss),
+              _StatChip(label: '投资总额', value: FormatUtils.formatCurrency(overview.totalInvestment, currency: 'CNY'), color: AppColors.primary),
+              _StatChip(label: '今日收益', value: FormatUtils.formatChange(overview.todayChange, currency: 'CNY'), color: overview.todayChange >= 0 ? AppColors.gain : AppColors.loss),
               _StatChip(label: '分类数', value: '${grouped.length}', color: AppColors.info),
             ],
           ),
@@ -154,7 +154,7 @@ class _CategoryTab extends ConsumerWidget {
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
-                        Text(FormatUtils.formatCurrency(g.totalMarketValue),
+                        Text(FormatUtils.formatCurrency(g.totalMarketValue, currency: 'CNY'),
                           style: const TextStyle(fontWeight: FontWeight.w600)),
                         Text(
                           FormatUtils.formatChange(g.profitLoss),
@@ -229,7 +229,7 @@ class _MarketGroupTileState extends State<_MarketGroupTile> {
                       ],
                     ),
                   ),
-                  Text(FormatUtils.formatCurrency(g.totalMarketValue),
+                  Text(FormatUtils.formatCurrency(g.totalMarketValue, currency: 'CNY'),
                       style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
                   const SizedBox(width: 4),
                   AnimatedRotation(
@@ -252,10 +252,21 @@ class _MarketGroupTileState extends State<_MarketGroupTile> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    Text(FormatUtils.formatCurrency(h.marketValue), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                    Text(
+                      FormatUtils.formatFullCurrency(
+                        h.marketValue,
+                        currency: h.currency,
+                      ),
+                      style: const TextStyle(
+                          fontSize: 13, fontWeight: FontWeight.w600),
+                    ),
                     Text(
                       FormatUtils.formatPercent(h.pnlPercent),
-                      style: TextStyle(fontSize: 11, color: h.pnl >= 0 ? AppColors.gain : AppColors.loss),
+                      style: TextStyle(
+                          fontSize: 11,
+                          color: h.pnl >= 0
+                              ? AppColors.gain
+                              : AppColors.loss),
                     ),
                   ],
                 ),
@@ -326,9 +337,9 @@ class _AssetTypeGroupTileState extends State<_AssetTypeGroupTile> {
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
-                      Text(FormatUtils.formatCurrency(g.totalMarketValue),
+                      Text(FormatUtils.formatCurrency(g.totalMarketValue, currency: 'CNY'),
                           style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
-                      Text(FormatUtils.formatChange(g.totalPnl),
+                      Text(FormatUtils.formatChange(g.totalPnl, currency: 'CNY'),
                           style: TextStyle(fontSize: 12, color: pnlColor)),
                     ],
                   ),
@@ -364,10 +375,25 @@ class _AssetTypeGroupTileState extends State<_AssetTypeGroupTile> {
                           crossAxisAlignment: CrossAxisAlignment.end,
                           children: [
                             if (a.currentPrice > 0)
-                              Text(FormatUtils.formatPrice(a.currentPrice),
-                                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
-                            Text(FormatUtils.formatCurrency(a.totalMarketValue),
-                                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textSecondary)),
+                              Text(
+                                FormatUtils.formatPrice(
+                                  a.currentPrice,
+                                  currency: a.currency,
+                                ),
+                                style: const TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w700),
+                              ),
+                            Text(
+                              FormatUtils.formatFullCurrency(
+                                a.totalMarketValue,
+                                currency: a.currency,
+                              ),
+                              style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.textSecondary),
+                            ),
                           ],
                         ),
                       ],
@@ -376,9 +402,26 @@ class _AssetTypeGroupTileState extends State<_AssetTypeGroupTile> {
                     Row(
                       children: [
                         if (a.avgCostPrice > 0)
-                          _InfoCell(label: '均价', value: FormatUtils.formatPrice(a.avgCostPrice)),
-                        _InfoCell(label: '收益', value: FormatUtils.formatChange(a.totalPnl), color: itemPnlColor),
-                        _InfoCell(label: '收益率', value: FormatUtils.formatPercent(a.pnlPercent), color: itemPnlColor),
+                          _InfoCell(
+                            label: '均价',
+                            value: FormatUtils.formatPrice(
+                              a.avgCostPrice,
+                              currency: a.currency,
+                            ),
+                          ),
+                        _InfoCell(
+                          label: '收益',
+                          value: FormatUtils.formatChange(
+                            a.totalPnl,
+                            currency: a.currency,
+                          ),
+                          color: itemPnlColor,
+                        ),
+                        _InfoCell(
+                          label: '收益率',
+                          value: FormatUtils.formatPercent(a.pnlPercent),
+                          color: itemPnlColor,
+                        ),
                       ],
                     ),
                     const Divider(height: 12, thickness: 0.5),
@@ -668,9 +711,9 @@ class _TargetGroupTileState extends State<_TargetGroupTile> {
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
-                      Text(FormatUtils.formatCurrency(g.totalMarketValue),
+                      Text(FormatUtils.formatCurrency(g.totalMarketValue, currency: 'CNY'),
                           style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
-                      Text(FormatUtils.formatChange(g.totalPnl),
+                      Text(FormatUtils.formatChange(g.totalPnl, currency: 'CNY'),
                           style: TextStyle(fontSize: 11, color: pnlColor)),
                     ],
                   ),
@@ -713,7 +756,7 @@ class _TargetGroupTileState extends State<_TargetGroupTile> {
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.end,
                           children: [
-                            Text(FormatUtils.formatCurrency(h.marketValue),
+                            Text(FormatUtils.formatCurrency(h.marketValue, currency: 'CNY'),
                                 style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
                             Text(FormatUtils.formatPercent(h.pnlPercent),
                                 style: TextStyle(fontSize: 11, color: hPnlColor)),
@@ -928,7 +971,7 @@ class _TagGroupTileState extends State<_TagGroupTile> {
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
-                      Text(FormatUtils.formatCurrency(widget.totalValue),
+                      Text(FormatUtils.formatCurrency(widget.totalValue, currency: 'CNY'),
                           style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
                     ],
                   ),
@@ -957,7 +1000,7 @@ class _TagGroupTileState extends State<_TagGroupTile> {
                           Text(item.code, style: const TextStyle(fontSize: 10, color: AppColors.textHint)),
                         ],
                       )),
-                      Text(FormatUtils.formatCurrency(item.marketValue),
+                      Text(FormatUtils.formatCurrency(item.marketValue, currency: 'CNY'),
                           style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
                     ],
                   ),

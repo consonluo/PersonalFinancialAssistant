@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import '../models/market_data_model.dart';
@@ -8,18 +10,28 @@ class EastMoneyApi implements MarketApiClient {
   final Dio _dio;
 
   EastMoneyApi({Dio? dio})
-      : _dio = dio ??
-            Dio(BaseOptions(
+    : _dio =
+          dio ??
+          Dio(
+            BaseOptions(
               connectTimeout: const Duration(seconds: 10),
               receiveTimeout: const Duration(seconds: 10),
-            ));
+              headers: const {
+                'User-Agent':
+                    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
+                'Referer': 'https://quote.eastmoney.com/',
+              },
+            ),
+          );
 
   @override
   Future<List<MarketDataModel>> getQuotes(List<String> codes) async {
     final results = <MarketDataModel>[];
     for (var i = 0; i < codes.length; i += 50) {
-      final batch =
-          codes.sublist(i, i + 50 > codes.length ? codes.length : i + 50);
+      final batch = codes.sublist(
+        i,
+        i + 50 > codes.length ? codes.length : i + 50,
+      );
       try {
         final batchResults = await _fetchBatchWithRetry(batch);
         results.addAll(batchResults);
@@ -51,48 +63,86 @@ class EastMoneyApi implements MarketApiClient {
   }
 
   Future<MarketDataModel?> getLastCloseQuote(String code) async {
-    final secId = _toSecId(code);
-    if (secId.isEmpty) return null;
-    final marketId = int.tryParse(secId.split('.').first) ?? 0;
-    final pureCode = secId.split('.').last;
+    final secIds = _closeSecIds(code);
+    if (secIds.isEmpty) return null;
 
-    final url = ApiProxy.eastmoney('/api/qt/stock/kline/get');
-    final response = await _dio.get(url, queryParameters: {
-      'secid': secId,
+    for (final secId in secIds) {
+      final marketId = int.tryParse(secId.split('.').first) ?? 0;
+      final pureCode = secId.split('.').last;
+      final quote = await _tryGetLastCloseBySecId(
+        secId: secId,
+        marketId: marketId,
+        pureCode: pureCode,
+      );
+      if (quote != null) return quote;
+    }
+    return null;
+  }
+
+  Future<MarketDataModel?> _tryGetLastCloseBySecId({
+    required String secId,
+    required int marketId,
+    required String pureCode,
+  }) async {
+    const hosts = <String>[
+      'https://push2his.eastmoney.com',
+      'https://push2.eastmoney.com',
+    ];
+    const query = <String, dynamic>{
       'klt': 101, // 日K
       'fqt': 0,
       'lmt': 5,
       'end': '20500000',
       'iscca': 1,
+      // 东方财富常用 ut 参数，部分市场缺失会返回空 klines
+      'ut': 'fa5fd1943c7b386f172d6893dbfba10b',
       'fields1': 'f1,f2,f3,f4,f5,f6,f7,f8',
       'fields2': 'f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61',
-    });
-    if (response.statusCode != 200) return null;
-    final data = response.data;
-    final kdata = data?['data'];
-    final klines = kdata?['klines'] as List?;
-    if (klines == null || klines.isEmpty) return null;
+    };
 
-    // 格式: 2026-04-30,31.12,31.45,30.90,31.20,...
-    final last = (klines.last as String).split(',');
-    if (last.length < 4) return null;
-    final date = DateTime.tryParse(last[0]);
-    final close = double.tryParse(last[2]) ?? 0;
-    final prevClose = last.length > 7 ? double.tryParse(last[7]) ?? 0 : 0;
-    final change = prevClose > 0 ? close - prevClose : 0.0;
-    final changePct = prevClose > 0 ? (change / prevClose * 100) : 0.0;
+    for (final host in hosts) {
+      try {
+        final response = await _dio.get(
+          '$host/api/qt/stock/kline/get',
+          queryParameters: {...query, 'secid': secId},
+        );
+        if (response.statusCode != 200) continue;
+        final data = _asMap(response.data);
+        final kdata = data?['data'];
+        final klines = kdata?['klines'];
+        if (klines is! List || klines.isEmpty) continue;
 
-    if (close <= 0) return null;
-    return MarketDataModel(
-      assetCode: pureCode,
-      name: kdata?['name']?.toString() ?? pureCode,
-      price: close,
-      change: change,
-      changePercent: changePct,
-      updatedAt: date ?? _lastTradingDay(),
-      currency: _currencyForMarketId(marketId),
-      source: MarketDataModel.sourceClose,
-    );
+        final lastRaw = klines.last?.toString() ?? '';
+        final last = lastRaw.split(',');
+        // 约定: f51日期,f53收盘,f59涨跌幅,f60涨跌额
+        if (last.length < 10) continue;
+
+        final dateRaw = last[0].trim();
+        final date =
+            DateTime.tryParse(
+              dateRaw.length >= 10 ? dateRaw.substring(0, 10) : dateRaw,
+            ) ??
+            _lastTradingDay();
+        final close = double.tryParse(last[2]) ?? 0;
+        final changePct = double.tryParse(last[8]) ?? 0;
+        final change = double.tryParse(last[9]) ?? 0;
+
+        if (close <= 0) continue;
+        return MarketDataModel(
+          assetCode: pureCode,
+          name: kdata?['name']?.toString() ?? pureCode,
+          price: close,
+          change: change,
+          changePercent: changePct,
+          updatedAt: date,
+          currency: _currencyForMarketId(marketId),
+          source: MarketDataModel.sourceClose,
+        );
+      } catch (_) {
+        // 继续尝试下一个 host / secid
+      }
+    }
+    return null;
   }
 
   Future<List<MarketDataModel>> _fetchBatchWithRetry(
@@ -118,30 +168,44 @@ class EastMoneyApi implements MarketApiClient {
     if (secIds.isEmpty) return [];
 
     final url = ApiProxy.eastmoney('/api/qt/ulist.np/get');
-    final response = await _dio.get(url, queryParameters: {
-      'fltt': 2,
-      // f13 = 市场类型（0=深圳, 1=上海, 116=港股, 105=美股, 100=英股, 153=新加坡）
-      'fields': 'f2,f3,f4,f5,f12,f13,f14,f86',
-      'secids': secIds,
-    });
+    final response = await _dio.get(
+      url,
+      queryParameters: {
+        'fltt': 2,
+        // f13 = 市场类型（0=深圳, 1=上海, 116=港股, 105=美股, 100=英股, 153=新加坡）
+        'fields': 'f2,f3,f4,f5,f12,f13,f14,f86',
+        'secids': secIds,
+      },
+    );
 
     if (response.statusCode != 200) return [];
 
-    final data = response.data;
+    final data = _asMap(response.data);
     if (data == null || data['data'] == null || data['data']['diff'] == null) {
       return [];
     }
 
-    final List<dynamic> items = data['data']['diff'];
-    return items.map((item) {
+    final rawDiff = data['data']['diff'];
+    final List<dynamic> items;
+    if (rawDiff is List) {
+      items = rawDiff;
+    } else if (rawDiff is Map) {
+      items = rawDiff.values.toList();
+    } else {
+      return [];
+    }
+    final results = <MarketDataModel>[];
+    for (final item in items) {
+      if (item is! Map) continue;
       final ts = (item['f86'] as num?)?.toInt();
-      final updatedAt = ts != null && ts > 0
-          ? DateTime.fromMillisecondsSinceEpoch(ts * 1000)
-          : _lastTradingDay();
+      final updatedAt =
+          ts != null && ts > 0
+              ? DateTime.fromMillisecondsSinceEpoch(ts * 1000)
+              : _lastTradingDay();
       // 根据市场代码 f13 推断币种
       final marketId = (item['f13'] as num?)?.toInt() ?? 0;
       final currency = _currencyForMarketId(marketId);
-      return MarketDataModel(
+      final model = MarketDataModel(
         assetCode: item['f12']?.toString() ?? '',
         name: item['f14']?.toString() ?? '',
         price: (item['f2'] as num?)?.toDouble() ?? 0,
@@ -151,7 +215,11 @@ class EastMoneyApi implements MarketApiClient {
         updatedAt: updatedAt,
         currency: currency,
       );
-    }).toList();
+      if (model.assetCode.isNotEmpty && model.price > 0) {
+        results.add(model);
+      }
+    }
+    return results;
   }
 
   static String _currencyForMarketId(int marketId) {
@@ -212,5 +280,64 @@ class EastMoneyApi implements MarketApiClient {
     }
 
     return '';
+  }
+
+  List<String> _closeSecIds(String code) {
+    final secId = _toSecId(code);
+    if (secId.isEmpty) return const [];
+
+    final upperCode = code.toUpperCase().trim();
+    final pureCode = upperCode.replaceAll(
+      RegExp(r'\.(SH|SZ|HK|US|O|N)$', caseSensitive: false),
+      '',
+    );
+    final market = secId.split('.').first;
+
+    // 美股收盘价优先尝试 106(NYSE) + 105(NASDAQ)，并兼容 .N/.O 后缀映射。
+    if (RegExp(r'^[A-Z]{1,5}$').hasMatch(pureCode) ||
+        upperCode.endsWith('.US')) {
+      final candidates = <String>{};
+      final usCodes = <String>[pureCode, '$pureCode.N', '$pureCode.O'];
+      for (final symbol in usCodes) {
+        candidates.add('106.$symbol');
+        candidates.add('105.$symbol');
+      }
+      return candidates.toList();
+    }
+
+    return <String>['$market.$pureCode'];
+  }
+
+  Map<String, dynamic>? _asMap(dynamic raw) {
+    if (raw is Map<String, dynamic>) return raw;
+    if (raw is Map) return raw.map((k, v) => MapEntry(k.toString(), v));
+    if (raw is! String) return null;
+
+    final text = raw.trim();
+    if (text.isEmpty) return null;
+
+    try {
+      final decoded = jsonDecode(text);
+      if (decoded is Map<String, dynamic>) return decoded;
+      if (decoded is Map) {
+        return decoded.map((k, v) => MapEntry(k.toString(), v));
+      }
+    } catch (_) {
+      // 继续尝试从 callback 包裹中提取 JSON
+    }
+
+    final firstBrace = text.indexOf('{');
+    final lastBrace = text.lastIndexOf('}');
+    if (firstBrace >= 0 && lastBrace > firstBrace) {
+      final jsonPart = text.substring(firstBrace, lastBrace + 1);
+      try {
+        final decoded = jsonDecode(jsonPart);
+        if (decoded is Map<String, dynamic>) return decoded;
+        if (decoded is Map) {
+          return decoded.map((k, v) => MapEntry(k.toString(), v));
+        }
+      } catch (_) {}
+    }
+    return null;
   }
 }

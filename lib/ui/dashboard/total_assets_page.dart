@@ -12,7 +12,6 @@ import '../../providers/asset_summary_provider.dart';
 import '../../providers/liability_provider.dart';
 import '../../data/database/app_database.dart';
 import '../../data/models/market_data_model.dart';
-import '../../data/models/asset_summary_model.dart';
 
 class TotalAssetsPage extends ConsumerWidget {
   const TotalAssetsPage({super.key});
@@ -26,6 +25,7 @@ class TotalAssetsPage extends ConsumerWidget {
     final ratesAsync = ref.watch(exchangeRatesProvider);
     final rates = ratesAsync.valueOrNull ?? {};
     final currencyTotals = ref.watch(currencyTotalsProvider);
+    final netCurrencyTotals = ref.watch(netCurrencyTotalsProvider);
     double getRate(String currency) {
       if (currency.isEmpty || currency == 'CNY') return 1.0;
       return rates[currency] ?? ExchangeRateService.getFallbackRate(currency);
@@ -35,24 +35,30 @@ class TotalAssetsPage extends ConsumerWidget {
       appBar: AppBar(
         title: const Text('资产总览'),
         leading: IconButton(
-            icon: const Icon(Icons.arrow_back), onPressed: () => context.pop()),
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => context.pop(),
+        ),
       ),
       body: holdingsAsync.when(
         data: (holdings) {
           final grouped = _groupHoldings(holdings, marketData, getRate);
-          return CustomScrollView(slivers: [
-            SliverToBoxAdapter(
+          return CustomScrollView(
+            slivers: [
+              SliverToBoxAdapter(
                 child: _OverviewHeader(
-              totalAssets: overview.totalAssets,
-              totalLiability: totalLiability,
-              todayChange: overview.todayChange,
-              todayChangePct: overview.todayChangePercent,
-              currencyTotals: currencyTotals,
-            )),
-            ...grouped.entries.expand((entry) => [
+                  totalAssets: overview.totalAssets,
+                  totalLiability: totalLiability,
+                  todayChange: overview.todayChange,
+                  todayChangePct: overview.todayChangePercent,
+                  currencyTotals: currencyTotals,
+                  netCurrencyTotals: netCurrencyTotals,
+                ),
+              ),
+              ...grouped.entries.expand(
+                (entry) => [
                   SliverToBoxAdapter(
-                      child:
-                          _GroupHeader(group: entry.key, items: entry.value)),
+                    child: _GroupHeader(group: entry.key, items: entry.value),
+                  ),
                   SliverPadding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     sliver: SliverList(
@@ -62,9 +68,11 @@ class TotalAssetsPage extends ConsumerWidget {
                       ),
                     ),
                   ),
-                ]),
-            const SliverToBoxAdapter(child: SizedBox(height: 32)),
-          ]);
+                ],
+              ),
+              const SliverToBoxAdapter(child: SizedBox(height: 32)),
+            ],
+          );
         },
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text('加载失败: $e')),
@@ -88,15 +96,16 @@ class TotalAssetsPage extends ConsumerWidget {
       final mkt = marketData[h.assetCode];
       final price = mkt?.price ?? h.currentPrice;
       agg.putIfAbsent(
-          key,
-          () => _Acc(
-                name: h.assetName,
-                code: h.assetCode,
-                type: h.assetType,
-                currency: h.currency.isEmpty ? 'CNY' : h.currency,
-                price: price,
-                changePct: mkt?.changePercent ?? 0,
-              ));
+        key,
+        () => _Acc(
+          name: h.assetName,
+          code: h.assetCode,
+          type: h.assetType,
+          currency: h.currency.isEmpty ? 'CNY' : h.currency,
+          price: price,
+          changePct: mkt?.changePercent ?? 0,
+        ),
+      );
       final a = agg[key]!;
       a.qty += h.quantity;
       a.totalCost += h.quantity * h.costPrice;
@@ -106,32 +115,36 @@ class TotalAssetsPage extends ConsumerWidget {
 
     final map = <CategoryGroup, List<_AssetItem>>{};
     for (final a in agg.values) {
-      final type = AssetType.values
-          .firstWhere((e) => e.name == a.type, orElse: () => AssetType.other);
+      final type = AssetType.values.firstWhere(
+        (e) => e.name == a.type,
+        orElse: () => AssetType.other,
+      );
       final group = getGroupForAssetType(type) ?? CategoryGroup.otherAssets;
       final mv = a.qty * a.price;
       final cost = a.totalCost;
       final rate = getRate(a.currency);
       map.putIfAbsent(group, () => []);
-      map[group]!.add(_AssetItem(
-        name: a.name,
-        code: a.code,
-        assetType: type,
-        currency: a.currency,
-        quantity: a.qty,
-        costPrice: a.qty != 0 ? cost / a.qty : 0,
-        currentPrice: a.price,
-        marketValue: mv,
-        cost: cost,
-        profit: mv - cost,
-        profitPct: cost > 0 ? (mv - cost) / cost * 100 : 0,
-        todayChangePct: a.changePct,
-        todayChange: mv * a.changePct / 100,
-        marketValueCny: mv * rate,
-        costCny: cost * rate,
-        profitCny: (mv - cost) * rate,
-        todayChangeCny: mv * a.changePct / 100 * rate,
-      ));
+      map[group]!.add(
+        _AssetItem(
+          name: a.name,
+          code: a.code,
+          assetType: type,
+          currency: a.currency,
+          quantity: a.qty,
+          costPrice: a.qty != 0 ? cost / a.qty : 0,
+          currentPrice: a.price,
+          marketValue: mv,
+          cost: cost,
+          profit: mv - cost,
+          profitPct: cost > 0 ? (mv - cost) / cost * 100 : 0,
+          todayChangePct: a.changePct,
+          todayChange: mv * a.changePct / 100,
+          marketValueCny: mv * rate,
+          costCny: cost * rate,
+          profitCny: (mv - cost) * rate,
+          todayChangeCny: mv * a.changePct / 100 * rate,
+        ),
+      );
     }
 
     for (final list in map.values) {
@@ -139,12 +152,11 @@ class TotalAssetsPage extends ConsumerWidget {
     }
 
     final sorted = Map.fromEntries(
-      map.entries.toList()
-        ..sort((a, b) {
-          final aMv = a.value.fold(0.0, (s, v) => s + v.marketValueCny);
-          final bMv = b.value.fold(0.0, (s, v) => s + v.marketValueCny);
-          return bMv.compareTo(aMv);
-        }),
+      map.entries.toList()..sort((a, b) {
+        final aMv = a.value.fold(0.0, (s, v) => s + v.marketValueCny);
+        final bMv = b.value.fold(0.0, (s, v) => s + v.marketValueCny);
+        return bMv.compareTo(aMv);
+      }),
     );
     return sorted;
   }
@@ -204,19 +216,25 @@ class _AssetItem {
 class _OverviewHeader extends StatelessWidget {
   final double totalAssets, totalLiability, todayChange, todayChangePct;
   final List<CurrencyTotal> currencyTotals;
+  final List<CurrencyNetTotal> netCurrencyTotals;
   const _OverviewHeader({
     required this.totalAssets,
     required this.totalLiability,
     required this.todayChange,
     required this.todayChangePct,
     required this.currencyTotals,
+    required this.netCurrencyTotals,
   });
 
   @override
   Widget build(BuildContext context) {
     final netWorth = totalAssets - totalLiability;
-    final hasMultiCurrency = currencyTotals
-        .any((c) => c.currency != 'CNY' && c.amountInCurrency > 0);
+    final hasMultiCurrency = currencyTotals.any(
+      (c) => c.currency != 'CNY' && c.amountInCurrency > 0,
+    );
+    final hasNetBreakdown = netCurrencyTotals.any(
+      (c) => c.netInCurrency.abs() > 0.0001,
+    );
 
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 8, 16, 4),
@@ -226,22 +244,30 @@ class _OverviewHeader extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-              color: AppColors.primary.withValues(alpha: 0.25),
-              blurRadius: 12,
-              offset: const Offset(0, 4))
+            color: AppColors.primary.withValues(alpha: 0.25),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
         ],
       ),
       child: Column(
         children: [
-          Text('家庭总资产 (折合人民币)',
-              style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.8), fontSize: 13)),
+          Text(
+            '家庭总资产 (折合人民币)',
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.8),
+              fontSize: 13,
+            ),
+          ),
           const SizedBox(height: 6),
-          Text(FormatUtils.formatFullCurrency(totalAssets),
-              style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 28,
-                  fontWeight: FontWeight.w700)),
+          Text(
+            FormatUtils.formatFullCurrency(totalAssets),
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 28,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
           if (hasMultiCurrency) ...[
             const SizedBox(height: 10),
             Container(
@@ -254,11 +280,45 @@ class _OverviewHeader extends StatelessWidget {
               child: Wrap(
                 spacing: 12,
                 runSpacing: 6,
-                children: currencyTotals
-                    .where((c) => c.amountInCurrency > 0)
-                    .map((c) => _CurrencyChip(
-                        currency: c.currency, amount: c.amountInCurrency))
-                    .toList(),
+                children:
+                    currencyTotals
+                        .where((c) => c.amountInCurrency > 0)
+                        .map(
+                          (c) => _CurrencyChip(
+                            currency: c.currency,
+                            amount: c.amountInCurrency,
+                          ),
+                        )
+                        .toList(),
+              ),
+            ),
+          ],
+          if (hasNetBreakdown) ...[
+            const SizedBox(height: 8),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Wrap(
+                spacing: 12,
+                runSpacing: 6,
+                children:
+                    netCurrencyTotals
+                        .where((c) => c.netInCurrency.abs() > 0.0001)
+                        .map(
+                          (c) => Text(
+                            '${c.currency}净值 ${FormatUtils.formatCurrency(c.netInCurrency, currency: c.currency)}',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        )
+                        .toList(),
               ),
             ),
           ],
@@ -268,14 +328,16 @@ class _OverviewHeader extends StatelessWidget {
             children: [
               _col('净资产', FormatUtils.formatCurrency(netWorth)),
               Container(
-                  width: 1,
-                  height: 28,
-                  color: Colors.white.withValues(alpha: 0.3)),
+                width: 1,
+                height: 28,
+                color: Colors.white.withValues(alpha: 0.3),
+              ),
               _col('总负债', FormatUtils.formatCurrency(totalLiability)),
               Container(
-                  width: 1,
-                  height: 28,
-                  color: Colors.white.withValues(alpha: 0.3)),
+                width: 1,
+                height: 28,
+                color: Colors.white.withValues(alpha: 0.3),
+              ),
               _col('今日', FormatUtils.formatChange(todayChange)),
             ],
           ),
@@ -285,15 +347,26 @@ class _OverviewHeader extends StatelessWidget {
   }
 
   Widget _col(String label, String value) {
-    return Column(children: [
-      Text(label,
+    return Column(
+      children: [
+        Text(
+          label,
           style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.7), fontSize: 11)),
-      const SizedBox(height: 2),
-      Text(value,
+            color: Colors.white.withValues(alpha: 0.7),
+            fontSize: 11,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          value,
           style: const TextStyle(
-              color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600)),
-    ]);
+            color: Colors.white,
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
+    );
   }
 }
 
@@ -319,7 +392,10 @@ class _CurrencyChip extends StatelessWidget {
         Text(
           FormatUtils.formatCurrency(amount, currency: currency),
           style: const TextStyle(
-              color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
+            color: Colors.white,
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+          ),
         ),
       ],
     );
@@ -346,40 +422,67 @@ class _GroupHeader extends StatelessWidget {
         children: [
           Icon(group.icon, size: 18, color: group.color),
           const SizedBox(width: 6),
-          Text(group.label,
-              style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w700,
-                  color: group.color)),
+          Text(
+            group.label,
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+              color: group.color,
+            ),
+          ),
           const SizedBox(width: 8),
-          Text('${items.length}只',
-              style: const TextStyle(
-                  fontSize: 12, color: AppColors.textSecondary)),
+          Text(
+            '${items.length}只',
+            style: const TextStyle(
+              fontSize: 12,
+              color: AppColors.textSecondary,
+            ),
+          ),
           const Spacer(),
           Column(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              Text(FormatUtils.formatCurrency(totalMv),
-                  style: const TextStyle(
-                      fontSize: 14, fontWeight: FontWeight.w600)),
-              Row(children: [
-                Text('收益 ',
+              Text(
+                FormatUtils.formatCurrency(totalMv),
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              Row(
+                children: [
+                  Text(
+                    '收益 ',
                     style: TextStyle(
-                        fontSize: 10, color: AppColors.textSecondary)),
-                Text(FormatUtils.formatChange(totalProfit),
+                      fontSize: 10,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                  Text(
+                    FormatUtils.formatChange(totalProfit),
                     style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
-                        color: profitColor)),
-                Text(' · 今日 ',
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                      color: profitColor,
+                    ),
+                  ),
+                  Text(
+                    ' · 今日 ',
                     style: TextStyle(
-                        fontSize: 10, color: AppColors.textSecondary)),
-                Text(FormatUtils.formatChange(totalToday),
+                      fontSize: 10,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                  Text(
+                    FormatUtils.formatChange(totalToday),
                     style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
-                        color: todayColor)),
-              ]),
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                      color: todayColor,
+                    ),
+                  ),
+                ],
+              ),
             ],
           ),
         ],
@@ -394,14 +497,16 @@ class _AssetRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final profitColor = item.profit > 0
-        ? AppColors.gain
-        : item.profit < 0
+    final profitColor =
+        item.profit > 0
+            ? AppColors.gain
+            : item.profit < 0
             ? AppColors.loss
             : AppColors.textSecondary;
-    final todayColor = item.todayChangePct > 0
-        ? AppColors.gain
-        : item.todayChangePct < 0
+    final todayColor =
+        item.todayChangePct > 0
+            ? AppColors.gain
+            : item.todayChangePct < 0
             ? AppColors.loss
             : AppColors.textSecondary;
 
@@ -420,15 +525,23 @@ class _AssetRow extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(item.name,
-                    style: const TextStyle(
-                        fontSize: 13, fontWeight: FontWeight.w600),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis),
+                Text(
+                  item.name,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
                 const SizedBox(height: 2),
-                Text(item.code,
-                    style: const TextStyle(
-                        fontSize: 11, color: AppColors.textSecondary)),
+                Text(
+                  item.code,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
               ],
             ),
           ),
@@ -438,15 +551,23 @@ class _AssetRow extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Text(
-                    FormatUtils.formatCurrency(item.marketValue,
-                        currency: item.currency),
-                    style: const TextStyle(
-                        fontSize: 13, fontWeight: FontWeight.w600)),
+                  FormatUtils.formatCurrency(
+                    item.marketValue,
+                    currency: item.currency,
+                  ),
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
                 const SizedBox(height: 2),
                 Text(
-                    '成本 ${FormatUtils.formatCurrency(item.cost, currency: item.currency)}',
-                    style: const TextStyle(
-                        fontSize: 10, color: AppColors.textSecondary)),
+                  '成本 ${FormatUtils.formatCurrency(item.cost, currency: item.currency)}',
+                  style: const TextStyle(
+                    fontSize: 10,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
               ],
             ),
           ),
@@ -456,14 +577,19 @@ class _AssetRow extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                Text(FormatUtils.formatPercent(item.todayChangePct),
-                    style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        color: todayColor)),
+                Text(
+                  FormatUtils.formatPercent(item.todayChangePct),
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: todayColor,
+                  ),
+                ),
                 const SizedBox(height: 2),
-                Text(FormatUtils.formatPercent(item.profitPct),
-                    style: TextStyle(fontSize: 10, color: profitColor)),
+                Text(
+                  FormatUtils.formatPercent(item.profitPct),
+                  style: TextStyle(fontSize: 10, color: profitColor),
+                ),
               ],
             ),
           ),

@@ -10,6 +10,9 @@ class Holdings extends Table {
   RealColumn get quantity => real().withDefault(const Constant(0))();
   RealColumn get costPrice => real().withDefault(const Constant(0))();
   RealColumn get currentPrice => real().withDefault(const Constant(0))();
+  RealColumn get initialPrice => real().withDefault(const Constant(0))();
+  DateTimeColumn get initialValuationDate =>
+      dateTime().withDefault(currentDateAndTime)();
   TextColumn get tags => text().withDefault(const Constant(''))(); // JSON array string
   TextColumn get notes => text().withDefault(const Constant(''))();
   TextColumn get currency => text().withDefault(const Constant('CNY'))(); // 币种: CNY/HKD/USD/EUR/GBP

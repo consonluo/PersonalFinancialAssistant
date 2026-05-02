@@ -187,13 +187,23 @@ class AccountDetailPage extends ConsumerWidget {
                                           value: FormatUtils.formatQuantity(
                                               h.quantity)),
                                       _DetailChip(
-                                          label: '现价',
-                                          value:
-                                              FormatUtils.formatPrice(price)),
+                                        label: '现价',
+                                        value: FormatUtils.formatPrice(
+                                          price,
+                                          currency: (h.currency.isNotEmpty)
+                                              ? h.currency
+                                              : 'CNY',
+                                        ),
+                                      ),
                                       _DetailChip(
-                                          label: '成本',
-                                          value: FormatUtils.formatPrice(
-                                              h.costPrice)),
+                                        label: '成本',
+                                        value: FormatUtils.formatPrice(
+                                          h.costPrice,
+                                          currency: (h.currency.isNotEmpty)
+                                              ? h.currency
+                                              : 'CNY',
+                                        ),
+                                      ),
                                       _DetailChip(
                                         label: '今日',
                                         value:
@@ -245,7 +255,9 @@ class AccountDetailPage extends ConsumerWidget {
                               mainAxisAlignment: MainAxisAlignment.center,
                               crossAxisAlignment: CrossAxisAlignment.end,
                               children: [
-                                Text(FormatUtils.formatFullCurrency(p.amount),
+                                Text(
+                                    FormatUtils.formatFullCurrency(p.amount,
+                                        currency: 'CNY'),
                                     style: const TextStyle(
                                         fontWeight: FontWeight.w600)),
                                 Text(p.isActive ? '执行中' : '已暂停',
@@ -291,12 +303,13 @@ class AccountDetailPage extends ConsumerWidget {
                               children: [
                                 Text(
                                     FormatUtils.formatFullCurrency(
-                                        l.remainingAmount),
+                                        l.remainingAmount,
+                                        currency: 'CNY'),
                                     style: const TextStyle(
                                         fontWeight: FontWeight.w600,
                                         color: AppColors.error)),
                                 Text(
-                                    '月供 ${FormatUtils.formatFullCurrency(l.monthlyPayment)}',
+                                    '月供 ${FormatUtils.formatFullCurrency(l.monthlyPayment, currency: 'CNY')}',
                                     style: const TextStyle(
                                         fontSize: 11,
                                         color: AppColors.textSecondary)),
@@ -370,16 +383,17 @@ class _AccountSummaryCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('总市值',
+            const Text('总市值（折合人民币）',
                 style: TextStyle(color: AppColors.textSecondary, fontSize: 13)),
             const SizedBox(height: 4),
-            Text(FormatUtils.formatFullCurrency(totalMv),
+            Text(
+                FormatUtils.formatFullCurrency(totalMv, currency: 'CNY'),
                 style:
                     const TextStyle(fontSize: 28, fontWeight: FontWeight.w700)),
             if (financingAmount > 0) ...[
               const SizedBox(height: 6),
               Text(
-                '融资负债 ${FormatUtils.formatFullCurrency(financingAmount, currency: financingCurrency)} · 净值 ${FormatUtils.formatFullCurrency(netAccountValue)}',
+                '融资负债 ${FormatUtils.formatFullCurrency(financingAmount, currency: financingCurrency)} · 净值 ${FormatUtils.formatFullCurrency(netAccountValue, currency: 'CNY')}',
                 style: const TextStyle(
                     fontSize: 12, color: AppColors.textSecondary),
               ),
@@ -389,13 +403,13 @@ class _AccountSummaryCard extends StatelessWidget {
               children: [
                 _MiniStat(
                   label: '盈亏',
-                  value: FormatUtils.formatChange(totalPnl),
+                  value: FormatUtils.formatChange(totalPnl, currency: 'CNY'),
                   color: totalPnl >= 0 ? AppColors.gain : AppColors.loss,
                 ),
                 const SizedBox(width: 20),
                 _MiniStat(
                   label: '今日涨跌',
-                  value: FormatUtils.formatChange(todayChg),
+                  value: FormatUtils.formatChange(todayChg, currency: 'CNY'),
                   color: todayChg >= 0 ? AppColors.gain : AppColors.loss,
                 ),
                 const SizedBox(width: 20),

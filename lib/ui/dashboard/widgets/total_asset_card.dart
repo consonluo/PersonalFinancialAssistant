@@ -10,8 +10,12 @@ class TotalAssetCard extends StatelessWidget {
   final double todayChangePercent;
   final VoidCallback? onTapTotal;
   final VoidCallback? onTapToday;
+
   /// 分币种细分（可选）。如果提供且包含多个非 CNY 币种，则显示原币明细
   final List<CurrencyTotal>? currencyBreakdown;
+
+  /// 净资产分币种细分（可选）
+  final List<String>? netCurrencyBreakdown;
 
   const TotalAssetCard({
     super.key,
@@ -22,6 +26,7 @@ class TotalAssetCard extends StatelessWidget {
     this.onTapTotal,
     this.onTapToday,
     this.currencyBreakdown,
+    this.netCurrencyBreakdown,
   });
 
   @override
@@ -51,23 +56,55 @@ class TotalAssetCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(children: [
-                  Text('家庭总资产', style: TextStyle(color: Colors.white.withValues(alpha: 0.7), fontSize: 14)),
-                  if (onTapTotal != null) ...[
-                    const SizedBox(width: 4),
-                    Icon(Icons.chevron_right, size: 16, color: Colors.white.withValues(alpha: 0.5)),
+                Row(
+                  children: [
+                    Text(
+                      '家庭总资产',
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.7),
+                        fontSize: 14,
+                      ),
+                    ),
+                    if (onTapTotal != null) ...[
+                      const SizedBox(width: 4),
+                      Icon(
+                        Icons.chevron_right,
+                        size: 16,
+                        color: Colors.white.withValues(alpha: 0.5),
+                      ),
+                    ],
                   ],
-                ]),
+                ),
                 const SizedBox(height: 8),
                 Text(
                   FormatUtils.formatFullCurrency(totalAssets),
-                  style: const TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.w700, letterSpacing: 1),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 32,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 1,
+                  ),
                 ),
                 if (_shouldShowBreakdown()) ...[
                   const SizedBox(height: 6),
                   Text(
                     _formatBreakdownLine(),
-                    style: TextStyle(color: Colors.white.withValues(alpha: 0.75), fontSize: 12),
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.75),
+                      fontSize: 12,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+                if (_shouldShowNetBreakdown()) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    '净资产 ${netCurrencyBreakdown!.join(' · ')}',
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.72),
+                      fontSize: 11,
+                    ),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -81,13 +118,19 @@ class TotalAssetCard extends StatelessWidget {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
-                color: (isUp ? Colors.red : Colors.green).withValues(alpha: 0.2),
+                color: (isUp ? Colors.red : Colors.green).withValues(
+                  alpha: 0.2,
+                ),
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(isUp ? Icons.trending_up : Icons.trending_down, color: Colors.white, size: 18),
+                  Icon(
+                    isUp ? Icons.trending_up : Icons.trending_down,
+                    color: Colors.white,
+                    size: 18,
+                  ),
                   const SizedBox(width: 6),
                   Flexible(
                     child: Text(
@@ -98,7 +141,11 @@ class TotalAssetCard extends StatelessWidget {
                   ),
                   if (onTapToday != null) ...[
                     const SizedBox(width: 4),
-                    Icon(Icons.chevron_right, size: 14, color: Colors.white.withValues(alpha: 0.6)),
+                    Icon(
+                      Icons.chevron_right,
+                      size: 14,
+                      color: Colors.white.withValues(alpha: 0.6),
+                    ),
                   ],
                 ],
               ),
@@ -118,10 +165,21 @@ class TotalAssetCard extends StatelessWidget {
 
   String _formatBreakdownLine() {
     final cb = currencyBreakdown!;
-    final parts = cb
-        .where((c) => c.amountInCurrency > 0)
-        .map((c) => FormatUtils.formatCurrency(c.amountInCurrency, currency: c.currency))
-        .toList();
+    final parts =
+        cb
+            .where((c) => c.amountInCurrency > 0)
+            .map(
+              (c) => FormatUtils.formatCurrency(
+                c.amountInCurrency,
+                currency: c.currency,
+              ),
+            )
+            .toList();
     return parts.join(' · ');
+  }
+
+  bool _shouldShowNetBreakdown() {
+    final list = netCurrencyBreakdown;
+    return list != null && list.isNotEmpty;
   }
 }

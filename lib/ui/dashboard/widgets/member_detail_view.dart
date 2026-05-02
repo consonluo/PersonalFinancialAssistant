@@ -124,13 +124,16 @@ class _HoldingsSection extends ConsumerWidget {
                     (e) => e.name == h.assetType,
                     orElse: () => AssetType.other);
                 final dm = getDisplayModeForAssetType(type);
+                final holdingCur =
+                    h.currency.isNotEmpty ? h.currency : 'CNY';
 
                 String subtitle;
                 switch (dm) {
                   case HoldingDisplayMode.deposit:
                     subtitle = type.label;
                   case HoldingDisplayMode.wealth:
-                    subtitle = '成本 ${FormatUtils.formatCurrency(cost)}  收益 ${pnl >= 0 ? "+" : ""}${FormatUtils.formatCurrency(pnl)}';
+                    subtitle =
+                        '成本 ${FormatUtils.formatCurrency(cost, currency: holdingCur)}  收益 ${pnl >= 0 ? "+" : ""}${FormatUtils.formatCurrency(pnl, currency: holdingCur)}';
                   case HoldingDisplayMode.fixedIncome:
                     subtitle = h.quantity > 1
                         ? '${h.assetCode} · ${FormatUtils.formatNumber(h.quantity)}份 × ${price.toStringAsFixed(4)}'
@@ -139,7 +142,8 @@ class _HoldingsSection extends ConsumerWidget {
                     final qtyStr = h.quantity == h.quantity.roundToDouble()
                         ? h.quantity.toStringAsFixed(0)
                         : h.quantity.toStringAsFixed(2);
-                    subtitle = '${h.assetCode} · ${qtyStr}股 × ¥${price.toStringAsFixed(2)}';
+                    subtitle =
+                        '${h.assetCode} · $qtyStr股 × ${FormatUtils.formatPrice(price, currency: holdingCur)}';
                 }
 
                 return Padding(
@@ -185,13 +189,15 @@ class _HoldingsSection extends ConsumerWidget {
                           Column(
                             crossAxisAlignment: CrossAxisAlignment.end,
                             children: [
-                              Text(FormatUtils.formatCurrency(mv),
+                              Text(
+                                  FormatUtils.formatCurrency(mv,
+                                      currency: holdingCur),
                                   style: const TextStyle(
                                       fontWeight: FontWeight.w600,
                                       fontSize: 14)),
                               if (dm != HoldingDisplayMode.deposit)
                                 Text(
-                                  '${pnl >= 0 ? "+" : ""}${FormatUtils.formatCurrency(pnl)} (${pnlPct.toStringAsFixed(1)}%)',
+                                  '${pnl >= 0 ? "+" : ""}${FormatUtils.formatCurrency(pnl, currency: holdingCur)} (${pnlPct.toStringAsFixed(1)}%)',
                                   style: TextStyle(
                                       fontSize: 11,
                                       color: pnl >= 0
@@ -276,7 +282,7 @@ class _LiabilitiesSection extends ConsumerWidget {
                                         fontWeight: FontWeight.w600,
                                         fontSize: 14)),
                                 Text(
-                                  '月供 ${FormatUtils.formatCurrency(l.monthlyPayment)} · 利率 ${l.interestRate.toStringAsFixed(2)}%',
+                                  '月供 ${FormatUtils.formatCurrency(l.monthlyPayment, currency: 'CNY')} · 利率 ${l.interestRate.toStringAsFixed(2)}%',
                                   style: const TextStyle(
                                       fontSize: 11,
                                       color: AppColors.textSecondary),
@@ -287,13 +293,15 @@ class _LiabilitiesSection extends ConsumerWidget {
                           Column(
                             crossAxisAlignment: CrossAxisAlignment.end,
                             children: [
-                              Text(FormatUtils.formatCurrency(l.remainingAmount),
+                              Text(
+                                  FormatUtils.formatCurrency(l.remainingAmount,
+                                      currency: 'CNY'),
                                   style: const TextStyle(
                                       fontWeight: FontWeight.w600,
                                       fontSize: 14,
                                       color: AppColors.error)),
                               Text(
-                                '总额 ${FormatUtils.formatCurrency(l.totalAmount)}',
+                                '总额 ${FormatUtils.formatCurrency(l.totalAmount, currency: 'CNY')}',
                                 style: const TextStyle(
                                     fontSize: 11,
                                     color: AppColors.textSecondary),
@@ -376,7 +384,7 @@ class _InvestmentPlansSection extends ConsumerWidget {
                                         fontWeight: FontWeight.w600,
                                         fontSize: 14)),
                                 Text(
-                                  '${p.assetCode} · ${freq.label} · ${FormatUtils.formatFullCurrency(p.amount)}',
+                                  '${p.assetCode} · ${freq.label} · ${FormatUtils.formatFullCurrency(p.amount, currency: 'CNY')}',
                                   style: const TextStyle(
                                       fontSize: 11,
                                       color: AppColors.textSecondary),

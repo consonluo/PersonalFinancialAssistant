@@ -32,12 +32,16 @@ class CategoryDetailPage extends ConsumerWidget {
             final market = marketData[h.assetCode];
             final price = market?.price ?? h.currentPrice;
             final key =
-                h.assetCode.isNotEmpty ? h.assetCode : '__name:${h.assetName}';
+                '${h.assetCode.isNotEmpty ? h.assetCode : '__name:${h.assetName}'}_${(market?.currency.isNotEmpty == true) ? market!.currency : (h.currency.isEmpty ? 'CNY' : h.currency)}';
             final m = merged.putIfAbsent(
               key,
               () => _MergedTypeHolding(
                 assetName: h.assetName,
                 assetCode: h.assetCode,
+                currency:
+                    (market?.currency.isNotEmpty == true)
+                        ? market!.currency
+                        : (h.currency.isEmpty ? 'CNY' : h.currency),
                 quantity: 0,
                 totalCost: 0,
                 currentPrice: price,
@@ -87,12 +91,16 @@ class CategoryDetailPage extends ConsumerWidget {
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
-                          Text(FormatUtils.formatFullCurrency(mv),
+                          Text(
+                              FormatUtils.formatFullCurrency(
+                                mv,
+                                currency: h.currency,
+                              ),
                               style:
                                   const TextStyle(fontWeight: FontWeight.w600)),
                           if (dm != HoldingDisplayMode.deposit)
                             Text(
-                              '${FormatUtils.formatChange(pnl)} (${FormatUtils.formatPercent(pnlPct)})',
+                              '${FormatUtils.formatChange(pnl, currency: h.currency)} (${FormatUtils.formatPercent(pnlPct)})',
                               style: TextStyle(
                                   fontSize: 12,
                                   color: pnl >= 0
@@ -118,12 +126,14 @@ class CategoryDetailPage extends ConsumerWidget {
 class _MergedTypeHolding {
   String assetName;
   String assetCode;
+  String currency;
   double quantity;
   double totalCost;
   double currentPrice;
   _MergedTypeHolding({
     required this.assetName,
     required this.assetCode,
+    required this.currency,
     required this.quantity,
     required this.totalCost,
     required this.currentPrice,

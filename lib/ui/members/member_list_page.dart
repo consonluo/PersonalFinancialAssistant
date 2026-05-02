@@ -4,7 +4,6 @@ import 'package:go_router/go_router.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/format_utils.dart';
 import '../../providers/family_provider.dart';
-import '../../providers/account_provider.dart';
 import '../../providers/asset_summary_provider.dart';
 
 class MemberListPage extends ConsumerWidget {
@@ -52,7 +51,11 @@ class MemberListPage extends ConsumerWidget {
                         ),
                         Consumer(builder: (_, ref, __) {
                           final asset = ref.watch(memberAssetProvider(m.id));
-                          return Text(FormatUtils.formatCurrency(asset), style: const TextStyle(fontWeight: FontWeight.w600));
+                          return Text(
+                              FormatUtils.formatCurrency(asset,
+                                  currency: 'CNY'),
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.w600));
                         }),
                         const SizedBox(width: 8),
                         const Icon(Icons.chevron_right, color: AppColors.textHint),

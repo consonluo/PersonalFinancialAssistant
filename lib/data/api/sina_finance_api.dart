@@ -8,14 +8,15 @@ class SinaFinanceApi implements MarketApiClient {
   final Dio _dio;
 
   SinaFinanceApi({Dio? dio})
-      : _dio = dio ??
-            Dio(BaseOptions(
+    : _dio =
+          dio ??
+          Dio(
+            BaseOptions(
               connectTimeout: const Duration(seconds: 10),
               receiveTimeout: const Duration(seconds: 10),
-              headers: {
-                'Referer': 'https://finance.sina.com.cn',
-              },
-            ));
+              headers: {'Referer': 'https://finance.sina.com.cn'},
+            ),
+          );
 
   @override
   Future<List<MarketDataModel>> getQuotes(List<String> codes) async {
@@ -43,10 +44,10 @@ class SinaFinanceApi implements MarketApiClient {
     if (symbol.isEmpty) return null;
 
     final url = ApiProxy.sina('/list=$symbol');
-    final response = await _dio.get(url,
-        options: Options(
-          responseType: ResponseType.plain,
-        ));
+    final response = await _dio.get(
+      url,
+      options: Options(responseType: ResponseType.plain),
+    );
 
     if (response.statusCode != 200) return null;
 
@@ -85,13 +86,13 @@ class SinaFinanceApi implements MarketApiClient {
 
     // 纯字母代码（美股）
     if (preferUs && RegExp(r'^[A-Z]{1,5}$').hasMatch(upper)) {
-      return 'gb_\$${upper.toLowerCase()}';
+      return 'gb_${upper.toLowerCase()}';
     }
 
     // .US 后缀
     if (preferUs && upper.endsWith('.US')) {
       final symbol = upper.replaceAll('.US', '');
-      return 'gb_\$${symbol.toLowerCase()}';
+      return 'gb_${symbol.toLowerCase()}';
     }
 
     return '';
@@ -124,11 +125,15 @@ class SinaFinanceApi implements MarketApiClient {
 
   MarketDataModel? _parseContentToModel(String code, String content) {
     final parts = content.split(',');
-    if (parts.length < 4) return null;
+    if (parts.length < 5) return null;
     final name = parts[0];
     final price = double.tryParse(parts[1]) ?? 0;
-    final change = double.tryParse(parts[2]) ?? 0;
-    final changePercent = double.tryParse(parts[3]) ?? 0;
+    // gb_xxx 字段顺序: [0]名称 [1]现价 [2]涨跌幅% [3]日期时间 [4]涨跌额
+    final changePercent = double.tryParse(parts[2]) ?? 0;
+    final dateStr = parts[3].trim(); // e.g. "2026-05-01 23:55:45"
+    final updatedAt =
+        DateTime.tryParse(dateStr.replaceFirst(' ', 'T')) ?? DateTime.now();
+    final change = double.tryParse(parts[4]) ?? 0;
     if (price <= 0) return null;
     return MarketDataModel(
       assetCode: code.toUpperCase().replaceAll('.US', ''),
@@ -136,7 +141,7 @@ class SinaFinanceApi implements MarketApiClient {
       price: price,
       change: change,
       changePercent: changePercent,
-      updatedAt: DateTime.now(),
+      updatedAt: updatedAt,
       currency: 'USD',
     );
   }

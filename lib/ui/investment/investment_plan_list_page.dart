@@ -83,7 +83,13 @@ class InvestmentPlanListPage extends ConsumerWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             const Text('预计月投入', style: TextStyle(fontSize: 13, color: AppColors.textSecondary)),
-                            Text(FormatUtils.formatCurrency(totalMonthly), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: AppColors.info)),
+                            Text(
+                                FormatUtils.formatCurrency(totalMonthly,
+                                    currency: 'CNY'),
+                                style: const TextStyle(
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.w700,
+                                    color: AppColors.info)),
                           ],
                         ),
                       ),
@@ -130,7 +136,7 @@ class InvestmentPlanListPage extends ConsumerWidget {
                                   Text(p.assetName, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
                                   const SizedBox(height: 2),
                                   Text(
-                                    '${p.assetCode} · ${freq.label} · ${FormatUtils.formatFullCurrency(p.amount)}',
+                                    '${p.assetCode} · ${freq.label} · ${FormatUtils.formatFullCurrency(p.amount, currency: 'CNY')}',
                                     style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
                                   ),
                                 ],
