@@ -4,6 +4,9 @@ import 'package:intl/intl.dart';
 class FormatUtils {
   FormatUtils._();
 
+  /// 避免 NaN/Infinity 传入 NumberFormat 导致异常或脏 UI。
+  static double _finiteOrZero(double value) => value.isFinite ? value : 0.0;
+
   static final _currencyFormat = NumberFormat('#,##0.00');
   static final _intFormat = NumberFormat('#,##0');
   static final _percentFormat = NumberFormat('0.00');
@@ -37,14 +40,15 @@ class FormatUtils {
     String prefix = '¥',
     String? currency,
   }) {
+    final a = _finiteOrZero(amount);
     final p = currency != null ? currencySymbol(currency) : prefix;
-    if (amount.abs() >= 100000000) {
-      return '$p${_percentFormat.format(amount / 100000000)}亿';
+    if (a.abs() >= 100000000) {
+      return '$p${_percentFormat.format(a / 100000000)}亿';
     }
-    if (amount.abs() >= 10000) {
-      return '$p${_percentFormat.format(amount / 10000)}万';
+    if (a.abs() >= 10000) {
+      return '$p${_percentFormat.format(a / 10000)}万';
     }
-    return '$p${_currencyFormat.format(amount)}';
+    return '$p${_currencyFormat.format(a)}';
   }
 
   /// 格式化完整金额（不缩略）
@@ -53,8 +57,9 @@ class FormatUtils {
     String prefix = '¥',
     String? currency,
   }) {
+    final a = _finiteOrZero(amount);
     final p = currency != null ? currencySymbol(currency) : prefix;
-    return '$p${_currencyFormat.format(amount)}';
+    return '$p${_currencyFormat.format(a)}';
   }
 
   /// 格式化整数金额
@@ -63,14 +68,16 @@ class FormatUtils {
     String prefix = '¥',
     String? currency,
   }) {
+    final a = _finiteOrZero(amount);
     final p = currency != null ? currencySymbol(currency) : prefix;
-    return '$p${_intFormat.format(amount)}';
+    return '$p${_intFormat.format(a)}';
   }
 
   /// 格式化百分比
   static String formatPercent(double value) {
-    final sign = value >= 0 ? '+' : '';
-    return '$sign${_percentFormat.format(value)}%';
+    final v = _finiteOrZero(value);
+    final sign = v >= 0 ? '+' : '';
+    return '$sign${_percentFormat.format(v)}%';
   }
 
   /// 格式化涨跌额
@@ -79,9 +86,10 @@ class FormatUtils {
     String prefix = '¥',
     String? currency,
   }) {
+    final v = _finiteOrZero(value);
     final p = currency != null ? currencySymbol(currency) : prefix;
-    final sign = value >= 0 ? '+' : '';
-    return '$sign$p${_currencyFormat.format(value)}';
+    final sign = v >= 0 ? '+' : '';
+    return '$sign$p${_currencyFormat.format(v)}';
   }
 
   /// 格式化日期
@@ -108,22 +116,24 @@ class FormatUtils {
 
   /// 格式化数量
   static String formatQuantity(double qty) {
-    if (qty == qty.toInt().toDouble()) {
-      return qty.toInt().toString();
+    final q = _finiteOrZero(qty);
+    if (q == q.toInt().toDouble()) {
+      return q.toInt().toString();
     }
-    return _currencyFormat.format(qty);
+    return _currencyFormat.format(q);
   }
 
   /// 格式化数字（千分位，不带前缀）
   static String formatNumber(double value) {
-    return _currencyFormat.format(value);
+    return _currencyFormat.format(_finiteOrZero(value));
   }
 
   /// 格式化价格（不带前缀）
   static String formatPrice(double value, {String? currency}) {
+    final v = _finiteOrZero(value);
     if (currency == null || currency.isEmpty) {
-      return _currencyFormat.format(value);
+      return _currencyFormat.format(v);
     }
-    return '${currencySymbol(currency)}${_currencyFormat.format(value)}';
+    return '${currencySymbol(currency)}${_currencyFormat.format(v)}';
   }
 }

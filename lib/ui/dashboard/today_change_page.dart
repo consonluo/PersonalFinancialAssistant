@@ -109,6 +109,7 @@ class _TodayChangePageState extends ConsumerState<TodayChangePage> {
     for (final h in holdings) {
       if (h.quantity == 0) continue;
       final market = marketData[h.assetCode];
+      final hasQuoteFromFeed = market != null;
       final entryPrice = h.initialPrice > 0 ? h.initialPrice : h.currentPrice;
       final effectiveMarket =
           market ??
@@ -127,34 +128,42 @@ class _TodayChangePageState extends ConsumerState<TodayChangePage> {
                 source: MarketDataModel.sourceEntry,
               )
               : null);
-      final currentPrice = effectiveMarket?.price ?? h.currentPrice;
-      final mv = h.quantity * currentPrice;
+      final valuationPrice = effectiveMarket?.price ?? h.currentPrice;
+      final safeValuation =
+          valuationPrice.isFinite ? valuationPrice : 0.0;
+      final mv = h.quantity * safeValuation;
       final cost = h.quantity * h.costPrice;
       final totalProfit = mv - cost;
-      final totalProfitPct =
+      final rawTotalProfitPct =
           h.costPrice > 0
-              ? (currentPrice - h.costPrice) / h.costPrice * 100
+              ? (safeValuation - h.costPrice) / h.costPrice * 100
               : 0.0;
-      final todayChangePct = effectiveMarket?.changePercent ?? 0.0;
-      final todayChange =
-          effectiveMarket != null ? mv * todayChangePct / 100 : 0.0;
+      final totalProfitPct =
+          rawTotalProfitPct.isFinite ? rawTotalProfitPct : 0.0;
+      final rawFeedPct = market?.changePercent ?? 0.0;
+      final todayChangePct =
+          hasQuoteFromFeed && rawFeedPct.isFinite ? rawFeedPct : 0.0;
+      final rawTodayChg =
+          hasQuoteFromFeed ? mv * todayChangePct / 100 : 0.0;
+      final todayChange = rawTodayChg.isFinite ? rawTodayChg : 0.0;
       final type = AssetType.values.firstWhere(
         (e) => e.name == h.assetType,
         orElse: () => AssetType.other,
       );
+      final displayPrice = safeValuation > 0 ? safeValuation : null;
 
       items.add(
         _HoldingItem(
           name: h.assetName,
           code: h.assetCode,
           assetType: type,
-          marketValue: mv,
+          marketValue: mv.isFinite ? mv : 0.0,
           todayChange: todayChange,
           todayChangePct: todayChangePct,
-          totalProfit: totalProfit,
+          totalProfit: totalProfit.isFinite ? totalProfit : 0.0,
           totalProfitPct: totalProfitPct,
-          hasMarketData: effectiveMarket != null,
-          currentPrice: effectiveMarket?.price,
+          hasQuoteFromFeed: hasQuoteFromFeed,
+          displayPrice: displayPrice,
           costPrice: h.costPrice,
           currency: () {
             final m = effectiveMarket;
@@ -167,15 +176,14 @@ class _TodayChangePageState extends ConsumerState<TodayChangePage> {
       );
     }
 
-    switch (_sortMode) {
-      case _SortMode.changeDesc:
-        items.sort((a, b) => b.todayChangePct.compareTo(a.todayChangePct));
-      case _SortMode.changeAsc:
-        items.sort((a, b) => a.todayChangePct.compareTo(b.todayChangePct));
-      case _SortMode.profitDesc:
-        items.sort((a, b) => b.todayChange.compareTo(a.todayChange));
-      case _SortMode.profitAsc:
-        items.sort((a, b) => a.todayChange.compareTo(b.todayChange));
+    if (_sortMode == _SortMode.changeDesc) {
+      items.sort((a, b) => b.todayChangePct.compareTo(a.todayChangePct));
+    } else if (_sortMode == _SortMode.changeAsc) {
+      items.sort((a, b) => a.todayChangePct.compareTo(b.todayChangePct));
+    } else if (_sortMode == _SortMode.profitDesc) {
+      items.sort((a, b) => b.todayChange.compareTo(a.todayChange));
+    } else if (_sortMode == _SortMode.profitAsc) {
+      items.sort((a, b) => a.todayChange.compareTo(b.todayChange));
     }
     return items;
   }
@@ -190,8 +198,10 @@ class _HoldingItem {
   final double todayChangePct;
   final double totalProfit;
   final double totalProfitPct;
-  final bool hasMarketData;
-  final double? currentPrice;
+  /// 是否来自行情接口/缓存（live/close/cache）；录入价合成不算。
+  final bool hasQuoteFromFeed;
+  /// 用于展示的单价（>0）；无则不在卡片右上角展示现价。
+  final double? displayPrice;
   final double costPrice;
   final String currency;
   final DateTime? updatedAt;
@@ -206,8 +216,8 @@ class _HoldingItem {
     required this.todayChangePct,
     required this.totalProfit,
     required this.totalProfitPct,
-    required this.hasMarketData,
-    this.currentPrice,
+    required this.hasQuoteFromFeed,
+    this.displayPrice,
     this.costPrice = 0,
     this.currency = 'CNY',
     this.updatedAt,
@@ -319,6 +329,8 @@ class _HoldingTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final updatedAt = item.updatedAt;
+    final showPrice = item.displayPrice;
     final group = getGroupForAssetType(item.assetType);
     final groupColor = group?.color ?? AppColors.textSecondary;
     final changeColor =
@@ -397,12 +409,10 @@ class _HoldingTile extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    if (item.hasMarketData &&
-                        item.currentPrice != null &&
-                        item.currentPrice! > 0) ...[
+                    if (showPrice != null && showPrice > 0) ...[
                       Text(
                         FormatUtils.formatPrice(
-                          item.currentPrice!,
+                          showPrice,
                           currency: item.currency,
                         ),
                         style: const TextStyle(
@@ -424,12 +434,12 @@ class _HoldingTile extends StatelessWidget {
                         ),
                     ],
                     Text(
-                      item.hasMarketData
+                      item.hasQuoteFromFeed
                           ? FormatUtils.formatPercent(item.todayChangePct)
                           : '--',
                       style: TextStyle(
                         fontSize:
-                            item.hasMarketData && item.currentPrice != null
+                            item.hasQuoteFromFeed && item.displayPrice != null
                                 ? 13
                                 : 16,
                         fontWeight: FontWeight.w700,
@@ -438,7 +448,7 @@ class _HoldingTile extends StatelessWidget {
                       textAlign: TextAlign.end,
                     ),
                     Text(
-                      item.hasMarketData
+                      item.hasQuoteFromFeed
                           ? FormatUtils.formatChange(
                             item.todayChange,
                             currency: item.currency,
@@ -483,7 +493,47 @@ class _HoldingTile extends StatelessWidget {
                   FormatUtils.formatPercent(item.totalProfitPct),
                   profitColor,
                 ),
-                if (!item.hasMarketData)
+                if (item.hasQuoteFromFeed && updatedAt != null)
+                  Expanded(
+                    child: Align(
+                      alignment: Alignment.centerRight,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          ..._sourceLabelWidgets(item.quoteSource),
+                          Text(
+                            _formatDataTimeSafe(
+                              updatedAt,
+                              item.quoteSource,
+                            ),
+                            style: const TextStyle(
+                              fontSize: 10,
+                              color: AppColors.textHint,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  )
+                else if (!item.hasQuoteFromFeed &&
+                    item.quoteSource == MarketDataModel.sourceEntry &&
+                    updatedAt != null)
+                  Expanded(
+                    child: Align(
+                      alignment: Alignment.centerRight,
+                      child: Text(
+                        _formatDataTimeSafe(
+                          updatedAt,
+                          item.quoteSource,
+                        ),
+                        style: const TextStyle(
+                          fontSize: 10,
+                          color: AppColors.textHint,
+                        ),
+                      ),
+                    ),
+                  )
+                else
                   Expanded(
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.end,
@@ -502,44 +552,6 @@ class _HoldingTile extends StatelessWidget {
                           ),
                         ),
                       ],
-                    ),
-                  )
-                else if (item.updatedAt != null)
-                  Expanded(
-                    child: Align(
-                      alignment: Alignment.centerRight,
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          if (_sourceLabel(item.quoteSource) != null) ...[
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 4,
-                                vertical: 1,
-                              ),
-                              decoration: BoxDecoration(
-                                color: AppColors.backgroundCard,
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: Text(
-                                _sourceLabel(item.quoteSource)!,
-                                style: const TextStyle(
-                                  fontSize: 9,
-                                  color: AppColors.textSecondary,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 4),
-                          ],
-                          Text(
-                            _formatDataTime(item.updatedAt!, item.quoteSource),
-                            style: const TextStyle(
-                              fontSize: 10,
-                              color: AppColors.textHint,
-                            ),
-                          ),
-                        ],
-                      ),
                     ),
                   ),
               ],
@@ -575,6 +587,37 @@ class _HoldingTile extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  /// 行情来源角标（live 无角标）
+  List<Widget> _sourceLabelWidgets(String? quoteSource) {
+    final label = _sourceLabel(quoteSource);
+    if (label == null) return const [];
+    return [
+      Container(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+        decoration: BoxDecoration(
+          color: AppColors.backgroundCard,
+          borderRadius: BorderRadius.circular(4),
+        ),
+        child: Text(
+          label,
+          style: const TextStyle(
+            fontSize: 9,
+            color: AppColors.textSecondary,
+          ),
+        ),
+      ),
+      const SizedBox(width: 4),
+    ];
+  }
+
+  String _formatDataTimeSafe(DateTime dt, String? source) {
+    try {
+      return _formatDataTime(dt, source);
+    } catch (_) {
+      return '未知';
+    }
   }
 
   String _formatDataTime(DateTime dt, String? source) {
