@@ -1,4 +1,6 @@
 import 'dart:convert';
+
+import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -33,68 +35,74 @@ class _WelcomePageState extends ConsumerState<WelcomePage> {
   }
 
   Future<void> _tryAutoLogin() async {
-    final prefs = await SharedPreferences.getInstance();
-    final familyId = prefs.getString('family_id');
-    final roleId = prefs.getString('current_role_id');
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final familyId = prefs.getString('family_id');
+      final roleId = prefs.getString('current_role_id');
 
-    if (familyId != null && familyId.isNotEmpty) {
-      final db = ref.read(databaseProvider);
+      if (familyId != null && familyId.isNotEmpty) {
+        final db = ref.read(databaseProvider);
 
-      // Web 端 WASM 数据库初始化可能较慢，最多等 8 秒
-      List members = [];
-      for (int i = 0; i < 16; i++) {
-        members = await db.getAllMembers();
-        if (members.isNotEmpty) break;
-        await Future.delayed(const Duration(milliseconds: 500));
-      }
-
-      // 有 familyId 时，始终尝试从云端拉取最新数据（IndexedDB 是浏览器隔离的，
-      // 不同设备/浏览器的本地数据可能不同步）
-      if (familyId.isNotEmpty) {
-        try {
-          final sync = ref.read(autoSyncProvider);
-          await sync.syncDown(familyId);
-          // syncDown 后重新查询，确保获取最新导入的数据
-          members = await db.getAllMembers();
-        } catch (_) {}
-      }
-
-      // 如果本地没有成员但 syncDown 成功，说明是新用户或首次登录
-      if (members.isEmpty) {
-        // 检查云端是否有数据
-        try {
-          final sync = ref.read(autoSyncProvider);
-          final success = await sync.syncDown(familyId);
-          if (success) {
+        // Web 端 WASM 数据库初始化可能较慢，最多约 8 秒；桌面端本地 DB 即开即用。
+        var members = await db.getAllMembers();
+        if (members.isEmpty && kIsWeb) {
+          for (var i = 0; i < 15; i++) {
+            await Future<void>.delayed(const Duration(milliseconds: 500));
             members = await db.getAllMembers();
+            if (members.isNotEmpty) break;
           }
-        } catch (_) {}
-      }
-
-      if (members.isNotEmpty) {
-        ref.read(familyNameProvider.notifier).state =
-            prefs.getString('family_name') ?? '我的家庭';
-        ref.read(isDemoModeProvider.notifier).state = false;
-
-        // 确保 familyIdProvider 内存状态与 SharedPreferences 一致
-        // (它的异步 _load 可能还没完成)
-        await ref.read(familyIdProvider.notifier).setFamilyId(familyId);
-        await ref.read(syncConfigProvider.notifier).setFamilyId(familyId);
-
-        if (roleId != null && members.any((m) => m.id == roleId)) {
-          await ref.read(currentRoleProvider.notifier).setRole(roleId);
-        } else {
-          await ref.read(currentRoleProvider.notifier).setRole(members.first.id);
         }
 
-        if (mounted) {
-          context.go('/dashboard');
-          return;
+        // 有 familyId 时尝试拉云端（sync_provider 内已带超时，避免 WebDAV 卡死）
+        if (familyId.isNotEmpty) {
+          try {
+            final sync = ref.read(autoSyncProvider);
+            await sync.syncDown(familyId);
+            members = await db.getAllMembers();
+          } catch (e, st) {
+            debugPrint('[Welcome] syncDown: $e\n$st');
+          }
+        }
+
+        if (members.isEmpty) {
+          try {
+            final sync = ref.read(autoSyncProvider);
+            final success = await sync.syncDown(familyId);
+            if (success) {
+              members = await db.getAllMembers();
+            }
+          } catch (e, st) {
+            debugPrint('[Welcome] syncDown (retry): $e\n$st');
+          }
+        }
+
+        if (members.isNotEmpty) {
+          ref.read(familyNameProvider.notifier).state =
+              prefs.getString('family_name') ?? '我的家庭';
+          ref.read(isDemoModeProvider.notifier).state = false;
+
+          await ref.read(familyIdProvider.notifier).setFamilyId(familyId);
+          await ref.read(syncConfigProvider.notifier).setFamilyId(familyId);
+
+          if (roleId != null && members.any((m) => m.id == roleId)) {
+            await ref.read(currentRoleProvider.notifier).setRole(roleId);
+          } else {
+            await ref
+                .read(currentRoleProvider.notifier)
+                .setRole(members.first.id);
+          }
+
+          if (mounted) {
+            context.go('/dashboard');
+            return;
+          }
         }
       }
+    } catch (e, st) {
+      debugPrint('[Welcome] _tryAutoLogin error: $e\n$st');
+    } finally {
+      if (mounted) setState(() => _checking = false);
     }
-
-    if (mounted) setState(() => _checking = false);
   }
 
   @override

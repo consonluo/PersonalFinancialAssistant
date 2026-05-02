@@ -110,6 +110,10 @@ class AutoSyncManager {
   Timer? _debounceTimer;
   DateTime? _lastSyncDownTime;
 
+  /// 原生 WebDAV 无内置超时，网络异常时会长时间阻塞；用于避免启动页/界面卡死。
+  static const Duration _syncUpTimeout = Duration(seconds: 60);
+  static const Duration _syncDownTimeout = Duration(seconds: 45);
+
   /// 持久化在 SharedPreferences 中的标记，表示有未上传的本地变更。
   /// 防止 syncDown 在本地变更上传前覆盖本地数据库导致数据丢失。
   static const _kPendingSyncKey = 'pending_sync';
@@ -189,8 +193,13 @@ class AutoSyncManager {
       final passwordHash = _ref.read(passwordHashProvider);
       final accountName = _ref.read(accountNameProvider);
       final service = WebDavSyncService(db: db, familyId: familyId);
-      await service.syncUp(familyName,
-          passwordHash: passwordHash, accountName: accountName);
+      await service
+          .syncUp(
+            familyName,
+            passwordHash: passwordHash,
+            accountName: accountName,
+          )
+          .timeout(_syncUpTimeout);
 
       final now = DateTime.now();
       _ref.read(syncStatusProvider.notifier).state = SyncStatus.success;
@@ -202,6 +211,10 @@ class AutoSyncManager {
       // 上传成功后清除 pending 标记
       await clearPendingSync();
       return true;
+    } on TimeoutException catch (e) {
+      debugPrint('[Sync] syncUp timeout: $e');
+      _ref.read(syncStatusProvider.notifier).state = SyncStatus.error;
+      return false;
     } catch (e) {
       debugPrint('[Sync] syncUp error: $e');
       _ref.read(syncStatusProvider.notifier).state = SyncStatus.error;
@@ -241,7 +254,7 @@ class AutoSyncManager {
     try {
       final db = _ref.read(databaseProvider);
       final service = WebDavSyncService(db: db, familyId: familyId);
-      final success = await service.syncDown();
+      final success = await service.syncDown().timeout(_syncDownTimeout);
 
       if (success) {
         _lastSyncDownTime = DateTime.now();
@@ -252,6 +265,10 @@ class AutoSyncManager {
         _ref.read(syncStatusProvider.notifier).state = SyncStatus.error;
       }
       return success;
+    } on TimeoutException catch (e) {
+      debugPrint('[Sync] syncDown timeout: $e');
+      _ref.read(syncStatusProvider.notifier).state = SyncStatus.error;
+      return false;
     } catch (e) {
       debugPrint('[Sync] syncDown error: $e');
       _ref.read(syncStatusProvider.notifier).state = SyncStatus.error;
