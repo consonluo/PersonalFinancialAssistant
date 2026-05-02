@@ -213,14 +213,23 @@ class _LoginFamilyPageState extends ConsumerState<LoginFamilyPage> {
         if (meta == null) {
           // FAM-ID 不存在，尝试作为自定义账号名查找（带超时）
           setState(() => _loadingMessage = '正在查找账号名...');
-          final lookupId = await ref.read(autoSyncProvider)
+          // 与 WebDAV 同步超时一致：坚果云较慢时 5 秒会误判「未找到」
+          final lookupId = await ref
+              .read(autoSyncProvider)
               .lookupAccountName(rawInput)
-              .timeout(const Duration(seconds: 5), onTimeout: () => null);
+              .timeout(
+                const Duration(seconds: 45),
+                onTimeout: () => null,
+              );
           if (lookupId != null && lookupId.isNotEmpty) {
             familyId = lookupId;
             await ref.read(accountNameProvider.notifier).setAccountName(rawInput);
           } else {
-            setState(() { _isLoading = false; _error = '未找到该账号，请检查输入是否正确'; });
+            setState(() {
+              _isLoading = false;
+              _error =
+                  '未找到该账号或连接超时。请确认 6 位账号名正确，或改用「FAM-」开头的完整家庭 ID；网络较慢时请重试。';
+            });
             return;
           }
         }
@@ -233,7 +242,11 @@ class _LoginFamilyPageState extends ConsumerState<LoginFamilyPage> {
       final meta = await ref.read(autoSyncProvider).getRemoteMeta(familyId);
 
       if (meta == null) {
-        setState(() { _isLoading = false; _error = '未找到该账号的数据，请检查输入是否正确'; });
+        setState(() {
+          _isLoading = false;
+          _error =
+              '未找到该家庭的数据，或拉取元信息超时。请检查家庭 ID / 密码，或稍后重试。';
+        });
         return;
       }
 

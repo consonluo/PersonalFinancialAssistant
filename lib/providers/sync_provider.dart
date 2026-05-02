@@ -113,6 +113,7 @@ class AutoSyncManager {
   /// 原生 WebDAV 无内置超时，网络异常时会长时间阻塞；用于避免启动页/界面卡死。
   static const Duration _syncUpTimeout = Duration(seconds: 60);
   static const Duration _syncDownTimeout = Duration(seconds: 45);
+  static const Duration _remoteMetaTimeout = Duration(seconds: 40);
 
   /// 持久化在 SharedPreferences 中的标记，表示有未上传的本地变更。
   /// 防止 syncDown 在本地变更上传前覆盖本地数据库导致数据丢失。
@@ -294,7 +295,10 @@ class AutoSyncManager {
     try {
       final db = _ref.read(databaseProvider);
       final service = WebDavSyncService(db: db, familyId: familyId);
-      return await service.downloadMeta();
+      return await service.downloadMeta().timeout(_remoteMetaTimeout);
+    } on TimeoutException catch (e) {
+      debugPrint('[Sync] getRemoteMeta timeout: $e');
+      return null;
     } catch (_) {
       return null;
     }
