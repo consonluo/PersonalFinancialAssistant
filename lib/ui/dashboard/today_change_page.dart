@@ -108,7 +108,10 @@ class _TodayChangePageState extends ConsumerState<TodayChangePage> {
     final items = <_HoldingItem>[];
     for (final h in holdings) {
       if (h.quantity == 0) continue;
-      final market = marketData[h.assetCode];
+      // 安全检查：确保 assetCode 不为空
+      final code = h.assetCode;
+      if (code.isEmpty) continue;
+      final market = marketData[code];
       final hasQuoteFromFeed = market != null;
       final entryPrice = h.initialPrice > 0 ? h.initialPrice : h.currentPrice;
       final effectiveMarket =
@@ -290,7 +293,7 @@ class _SummaryHeader extends StatelessWidget {
               ),
               _miniStat(
                 '持仓数',
-                '${overview.categories.fold(0, (s, c) => s + c.holdingCount)}',
+                '${overview.categories.fold<int>(0, (s, c) => s + c.holdingCount)}',
               ),
             ],
           ),
